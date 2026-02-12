@@ -1,0 +1,159 @@
+:root {
+  --bg-a: #180f1f;
+  --bg-b: #2f2736;
+  --panel: #111;
+  --accent: #d83f3f;
+  --text: #f0ebd9;
+  --line: #40354a;
+  --btn: #35293a;
+  --btn-active: #564060;
+  --danger: #8b1e1e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 20% 20%, #4d2f4b 0 22%, transparent 23%),
+    radial-gradient(circle at 80% 0%, #2f4a5c 0 20%, transparent 21%),
+    linear-gradient(160deg, var(--bg-a), var(--bg-b));
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  padding: 12px 12px 18px;
+}
+
+.game-shell {
+  width: min(980px, 100%);
+  display: grid;
+  gap: 10px;
+}
+
+.title-bar {
+  background: color-mix(in srgb, var(--panel), #241a30 35%);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.title-bar h1 {
+  margin: 0;
+  letter-spacing: 1px;
+  font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+}
+
+.title-bar p {
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+  opacity: 0.9;
+}
+
+.screen-wrap {
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #08080b;
+  box-shadow:
+    0 0 0 3px #000 inset,
+    0 18px 28px rgba(0, 0, 0, 0.35);
+}
+
+#game {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none;
+  background: #000;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  touch-action: none;
+}
+
+.cluster {
+  display: flex;
+  gap: 8px;
+}
+
+.ctrl {
+  border: 2px solid #68536f;
+  background: linear-gradient(180deg, #4b3951, var(--btn));
+  color: #fff;
+  border-radius: 14px;
+  font-weight: 700;
+  min-width: 74px;
+  min-height: 56px;
+  font-size: 1rem;
+  padding: 0 14px;
+  touch-action: none;
+  user-select: none;
+}
+
+.ctrl.action {
+  min-width: 96px;
+}
+
+.ctrl.attack {
+  background: linear-gradient(180deg, #8b2a2a, var(--danger));
+  border-color: #be6c6c;
+}
+
+.ctrl:active,
+.ctrl.is-down {
+  transform: translateY(1px) scale(0.98);
+  background: linear-gradient(180deg, #6c5072, var(--btn-active));
+}
+
+.ctrl.attack:active,
+.ctrl.attack.is-down {
+  background: linear-gradient(180deg, #aa3f3f, #6f1717);
+}
+
+.help {
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, #111, #261a2a 20%);
+  padding: 8px 10px;
+}
+
+.help p {
+  margin: 0;
+  font-size: 0.84rem;
+  opacity: 0.9;
+}
+
+@media (max-width: 720px) {
+  .title-bar p {
+    font-size: 0.8rem;
+  }
+
+  .ctrl {
+    min-width: 64px;
+    min-height: 52px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+  }
+
+  .ctrl.action {
+    min-width: 86px;
+  }
+
+  .help p {
+    font-size: 0.74rem;
+  }
+}
