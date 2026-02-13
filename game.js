@@ -141,6 +141,9 @@
   const DASH_JUMP_ASSIST_FRAMES = 20;
   const DASH_JUMP_SPEED_CAP_MULT = 1.45;
   const DASH_JUMP_GRAVITY_MULT = 0.84;
+  const STOMP_VERTICAL_GRACE = 16;
+  const STOMP_SIDE_GRACE = 6;
+  const STOMP_DESCEND_MIN = -0.25;
 
   function proteinLevel() {
     return collectedProteinIds.size;
@@ -1743,33 +1746,61 @@
   function resolveEnemyContactDamage() {
     for (const enemy of stage.enemies) {
       if (!enemy.alive) continue;
-      if (!overlap(player, enemy)) continue;
+      const touchingBody = overlap(player, enemy);
+      const feetBox = {
+        x: player.x - STOMP_SIDE_GRACE,
+        y: player.y + player.h - 6,
+        w: player.w + STOMP_SIDE_GRACE * 2,
+        h: 10 + STOMP_VERTICAL_GRACE,
+      };
+      const stompTarget = {
+        x: enemy.x - STOMP_SIDE_GRACE,
+        y: enemy.y - 2,
+        w: enemy.w + STOMP_SIDE_GRACE * 2,
+        h: enemy.h + STOMP_VERTICAL_GRACE + 4,
+      };
+      const stompTouch = overlap(feetBox, stompTarget);
+      if (!touchingBody && !stompTouch) continue;
 
       const playerBottom = player.y + player.h;
       const enemyTop = enemy.y;
-      const fromAbove = playerBottom - enemyTop <= 8 && player.y < enemy.y;
-      const descending = player.vy > 0.7;
+      const enemyMidY = enemy.y + enemy.h * 0.5;
+      const verticalWindow = playerBottom >= enemyTop - 4 && playerBottom <= enemyTop + STOMP_VERTICAL_GRACE;
+      const centerAbove = player.y + player.h * 0.42 <= enemyMidY + 5;
+      const descending = player.vy > STOMP_DESCEND_MIN;
+      const stompable = stompTouch && verticalWindow && centerAbove && descending;
 
-      if (fromAbove && descending) {
+      if (stompable) {
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
         const pLv = proteinLevel();
-        const stompPower = 1.2 + pLv * 0.04;
-        kickEnemy(enemy, dir, stompPower);
-        player.vy = -5.25;
+        const stompPower = 1.45 + pLv * 0.045;
+        kickEnemy(enemy, dir, stompPower + 0.35);
+        player.vy = -6.35 - Math.min(0.45, Math.abs(player.vx) * 0.08);
+        player.vx += dir * 0.12;
         player.onGround = false;
+        hitStopTimer = Math.max(hitStopTimer, 4.6);
 
         if (kickComboTimer > 0) {
           kickCombo = Math.min(99, kickCombo + 1);
         } else {
           kickCombo = 1;
         }
-        kickComboTimer = 44;
-        triggerKickBurst(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 1.35 + stompPower * 0.4);
-        playKickSfx(1.32 + stompPower * 0.1);
-        hudMessage = kickCombo > 1 ? `踏みつけ x${kickCombo}!` : "踏みつけ!";
-        hudTimer = 26;
+        kickComboTimer = 58;
+
+        const hitX = enemy.x + enemy.w * 0.5;
+        const hitY = enemy.y + enemy.h * 0.4;
+        const burstPower = 2.1 + stompPower * 0.55 + Math.min(0.7, kickCombo * 0.03);
+        triggerKickBurst(hitX, hitY, burstPower);
+        triggerImpact(2.7, hitX, hitY, 4.2);
+        spawnHitSparks(hitX, hitY, "#fff2bc", "#ffb26a");
+        spawnHitSparks(hitX, hitY, "#ffe6b0", "#ff6e55");
+        playKickSfx(1.58 + stompPower * 0.12);
+        hudMessage = kickCombo > 1 ? `踏みつけクラッシュ x${kickCombo}!` : "踏みつけクラッシュ!";
+        hudTimer = 32;
         return;
       }
+
+      if (!touchingBody) continue;
 
       if (enemy.kind === "peacock") {
         killPlayer("孔雀に接触");
