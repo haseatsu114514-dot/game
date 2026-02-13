@@ -3474,7 +3474,60 @@
     ctx.fillStyle = "#c04f62";
     ctx.fillRect(x + 11, y + 7, 5, 1);
 
-    drawHero(x + 10, y - 17, dir, player.anim * 1.15, 1);
+    // Rider-only invincible sprite so it clearly looks like Rila is riding the bike.
+    const riderBounce = Math.sin(player.anim * 0.44) * 0.5;
+    ctx.save();
+    ctx.translate(Math.floor(x + 8), Math.floor(y - 11 + riderBounce));
+    if (dir < 0) {
+      ctx.translate(14, 0);
+      ctx.scale(-1, 1);
+    }
+    const paint = (color, dx, dy, w = 1, h = 1) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(dx, dy, w, h);
+    };
+
+    // Hair bob + bangs.
+    paint("#06080c", 1, 0, 10, 1);
+    paint("#090d15", 0, 1, 12, 3);
+    paint("#121b2d", 1, 3, 10, 2);
+    paint("#1d2740", 2, 4, 8, 1);
+    paint("#111725", 0, 5, 3, 2);
+    paint("#111725", 9, 5, 3, 2);
+    paint("#0b0f18", 5, 2, 3, 3);
+
+    // Face.
+    paint("#f8e9e1", 3, 5, 6, 4);
+    paint("#2a1c1d", 4, 6, 1, 1);
+    paint("#2a1c1d", 7, 6, 1, 1);
+    paint("#6f4838", 4, 7, 1, 1);
+    paint("#6f4838", 7, 7, 1, 1);
+    paint("#fff8f4", 4, 6, 1, 1);
+    paint("#fff8f4", 7, 6, 1, 1);
+    paint("#c48a83", 5, 8, 2, 1);
+
+    // Neck + rider jacket torso.
+    paint("#f3ddd1", 5, 9, 2, 1);
+    paint("#0f131d", 1, 10, 10, 4);
+    paint("#1a2233", 2, 10, 8, 3);
+    paint("#f5f2ef", 4, 11, 3, 2);
+    paint("#2b3447", 2, 10, 2, 2);
+    paint("#2b3447", 8, 10, 2, 2);
+
+    // Arms reaching handle.
+    paint("#0d111a", 0, 10, 2, 3);
+    paint("#0d111a", 10, 10, 2, 3);
+    paint("#f4e0d3", 0, 13, 1, 1);
+    paint("#f4e0d3", 11, 13, 1, 1);
+    paint("#101626", 11, 9, 3, 1);
+    paint("#8ee4ff", 13, 8, 1, 1);
+
+    // Seated legs + boots on the bike.
+    paint("#24345a", 4, 14, 5, 2);
+    paint("#324975", 5, 14, 3, 1);
+    paint("#171b24", 7, 16, 3, 1);
+    paint("#2b1f27", 8, 15, 3, 1);
+    ctx.restore();
 
     ctx.save();
     ctx.globalCompositeOperation = "screen";
