@@ -321,11 +321,12 @@
   }
 
   function startInvincibleMode(duration = INVINCIBLE_DURATION) {
-    invincibleTimer = Math.max(invincibleTimer, duration);
+    if (invincibleTimer > 0) return false;
+    invincibleTimer = duration;
     openingThemeActive = false;
     stopStageMusic(false);
     ensureInvincibleMusic();
-    if (!invincibleMusic) return;
+    if (!invincibleMusic) return true;
     invincibleMusicFadeTimer = 0;
     invincibleMusicFadeDuration = 0;
     try {
@@ -337,6 +338,7 @@
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
+    return true;
   }
 
   function endInvincibleMode() {
@@ -1746,10 +1748,10 @@
       if (!overlap(player, hit)) continue;
 
       bike.collected = true;
-      startInvincibleMode(INVINCIBLE_DURATION);
+      const started = startInvincibleMode(INVINCIBLE_DURATION);
       playPowerupSfx();
       triggerImpact(1.25, bike.x + bike.w * 0.5, floatY + bike.h * 0.5, 2.2);
-      hudMessage = "バイク搭乗! 15秒 無敵";
+      hudMessage = started ? "バイク搭乗! 15秒 無敵" : "無敵中! 時間は延長されない";
       hudTimer = 90;
     }
   }
