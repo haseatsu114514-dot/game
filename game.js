@@ -2081,10 +2081,16 @@
       h: player.h - Math.floor(player.h * 0.26),
     };
     const stompTouch = overlap(stompHit, b);
-    const descending = player.vy > -0.08;
-    const verticalWindow = playerBottom >= bossTop - 8 && playerBottom <= bossTop + 14;
-    const centerAbove = player.y + player.h * 0.62 <= bossMidY + 3;
+    const descending = player.vy > -0.26;
+    const verticalWindow = playerBottom >= bossTop - 10 && playerBottom <= bossTop + 16;
+    const centerAbove = player.y + player.h * 0.66 <= bossMidY + 5;
     const stompable = stompTouch && descending && verticalWindow && centerAbove;
+    const nearStompSafe =
+      stompTouch &&
+      playerBottom >= bossTop - 14 &&
+      playerBottom <= bossTop + 22 &&
+      player.y + player.h * 0.72 <= bossMidY + 7 &&
+      player.vy > -0.42;
 
     if (stompable) {
       const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
@@ -2111,6 +2117,12 @@
         player.vy = -5.2;
         player.onGround = false;
       }
+      return;
+    }
+
+    if (nearStompSafe) {
+      player.vy = -5.0;
+      player.onGround = false;
       return;
     }
 
@@ -4021,6 +4033,7 @@
   }
 
   function drawGoal() {
+    if (gameState === STATE.BOSS) return;
     const g = stage.goal;
     const x = Math.floor(g.x - cameraX);
     const y = Math.floor(g.y);
@@ -4328,7 +4341,7 @@
 
       if (t < 470) {
         drawTextPanel([
-          "悪の組織が彼氏に甘い儲け話とラクな稼ぎ話を持ちかけた。",
+          "悪の組織が彼氏に甘い話を持ちかけた。",
           "断った彼氏はホームパーティー会場へ連行された。",
         ]);
       } else if (t < 650) {
