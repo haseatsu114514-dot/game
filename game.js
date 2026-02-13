@@ -3394,40 +3394,58 @@
   function drawBoyfriend(x, y) {
     const px = Math.floor(x - cameraX);
     const py = Math.floor(y);
+    const bob = Math.floor(Math.sin(player.anim * 0.14 + x * 0.02) * 0.6);
     const paint = (color, dx, dy, w = 1, h = 1) => {
       ctx.fillStyle = color;
-      ctx.fillRect(px + dx, py + dy, w, h);
+      ctx.fillRect(px + dx, py + dy + bob, w, h);
     };
 
-    // Red cap + side shadowed face.
-    paint("#151a24", 1, 0, 10, 1);
-    paint("#da3f3f", 2, 1, 8, 3);
-    paint("#b72e2e", 2, 3, 9, 1);
-    paint("#8e2020", 8, 2, 3, 3);
-    paint("#f2d8c7", 4, 4, 6, 5);
-    paint("#dfbea9", 4, 8, 6, 1);
-    paint("#1d2332", 4, 4, 3, 2);
-    paint("#2f3748", 7, 5, 3, 2);
-    paint("#f9eee6", 8, 5, 1, 1);
-    paint("#7d5445", 6, 8, 2, 1);
+    // Red cap silhouette.
+    paint("#151a24", 2, 0, 11, 1);
+    paint("#d64343", 3, 1, 9, 3);
+    paint("#ba3333", 3, 4, 10, 1);
+    paint("#922326", 10, 2, 3, 3);
+    paint("#df5353", 4, 2, 4, 1);
+    paint("#7d2025", 9, 5, 5, 1);
+    paint("#2a1f29", 12, 5, 2, 2);
 
-    // Hoodie + jacket.
-    paint("#212939", 3, 9, 8, 2);
-    paint("#3d5f8e", 3, 11, 8, 8);
-    paint("#5c80b1", 4, 12, 6, 3);
-    paint("#2a3d5a", 6, 12, 1, 7);
-    paint("#17202f", 1, 10, 2, 6);
-    paint("#17202f", 11, 10, 2, 6);
-    paint("#f2d8c7", 2, 15, 1, 2);
-    paint("#f2d8c7", 11, 15, 1, 2);
+    // Face with under-cap shadow for a more human look while keeping details subtle.
+    paint("#f2d7c4", 4, 5, 7, 6);
+    paint("#e6c1ad", 5, 10, 5, 1);
+    paint("#2a2e3a", 4, 5, 3, 2);
+    paint("#2a2e3a", 9, 6, 2, 2);
+    paint("#1d2432", 6, 7, 1, 1);
+    paint("#1d2432", 8, 7, 1, 1);
+    paint("#f8ece4", 7, 7, 1, 1);
+    paint("#7f5746", 6, 9, 2, 1);
+    paint("#ddb9a4", 10, 8, 1, 2);
+    paint("#f0d5c2", 6, 11, 2, 1);
 
-    // Pants + shoes.
-    paint("#2b3549", 3, 19, 3, 4);
-    paint("#2b3549", 8, 19, 3, 4);
-    paint("#202736", 4, 19, 1, 3);
-    paint("#202736", 9, 19, 1, 3);
-    paint("#191b24", 3, 23, 3, 1);
-    paint("#191b24", 8, 23, 3, 1);
+    // Hoodie + jacket torso.
+    paint("#1e2737", 4, 12, 6, 2);
+    paint("#d9dfea", 6, 12, 2, 1);
+    paint("#2f4f7a", 3, 14, 10, 8);
+    paint("#466d9e", 4, 14, 8, 4);
+    paint("#2a405f", 7, 14, 1, 8);
+    paint("#f1f4f8", 6, 15, 3, 4);
+    paint("#d8dde4", 6, 19, 3, 1);
+
+    // Arms and hands.
+    paint("#20293a", 1, 14, 2, 6);
+    paint("#20293a", 13, 14, 2, 6);
+    paint("#f0d5c2", 1, 19, 1, 2);
+    paint("#f0d5c2", 14, 19, 1, 2);
+
+    // Pants + sneakers.
+    paint("#324457", 4, 22, 8, 1);
+    paint("#2b3446", 4, 23, 3, 4);
+    paint("#2b3446", 9, 23, 3, 4);
+    paint("#1e2431", 5, 23, 1, 3);
+    paint("#1e2431", 10, 23, 1, 3);
+    paint("#171a22", 3, 27, 4, 1);
+    paint("#171a22", 9, 27, 4, 1);
+    paint("#f3f4f8", 6, 27, 1, 1);
+    paint("#f3f4f8", 12, 27, 1, 1);
   }
 
   function drawEnemy(enemy) {
