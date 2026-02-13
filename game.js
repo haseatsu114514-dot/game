@@ -26,7 +26,7 @@
     maxX: 7180,
   };
   const MAX_HEARTS = 3;
-  const START_LIVES = 3;
+  const START_LIVES = 5;
 
   const input = {
     left: false,
@@ -1050,7 +1050,9 @@
       7: { x: 6760, y: 88 },
     };
 
-    for (let i = 1; i < checkpoints.length; i += 1) {
+    const checkpointTokenIds = [1, 3, 5, 7];
+    for (const i of checkpointTokenIds) {
+      if (i >= checkpoints.length) continue;
       const cp = checkpoints[i];
       const anchor = checkpointTokenAnchors[i] || { x: cp.x + 2, y: cp.y - 18 };
       checkpointTokens.push({
@@ -1060,7 +1062,7 @@
         w: 12,
         h: 12,
         bob: (i * 1.29) % (Math.PI * 2),
-        collected: i <= checkpointIndex,
+        collected: checkpointIndex >= i,
       });
     }
 
@@ -2071,10 +2073,18 @@
     const playerBottom = player.y + player.h;
     const bossTop = b.y;
     const bossMidY = b.y + b.h * 0.5;
-    const descending = player.vy > 0.22;
-    const verticalWindow = playerBottom >= bossTop - 5 && playerBottom <= bossTop + 10;
-    const centerAbove = player.y + player.h * 0.54 <= bossMidY + 1;
-    const stompable = descending && verticalWindow && centerAbove;
+    const sideGrace = 8;
+    const stompHit = {
+      x: player.x - sideGrace,
+      y: player.y + Math.floor(player.h * 0.26),
+      w: player.w + sideGrace * 2,
+      h: player.h - Math.floor(player.h * 0.26),
+    };
+    const stompTouch = overlap(stompHit, b);
+    const descending = player.vy > -0.08;
+    const verticalWindow = playerBottom >= bossTop - 8 && playerBottom <= bossTop + 14;
+    const centerAbove = player.y + player.h * 0.62 <= bossMidY + 3;
+    const stompable = stompTouch && descending && verticalWindow && centerAbove;
 
     if (stompable) {
       const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
