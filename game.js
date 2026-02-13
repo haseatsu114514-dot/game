@@ -130,6 +130,9 @@
   const WEAPON_DURATION = 600;
   const OPENING_CUTSCENE_DURATION = 760;
   const PRE_BOSS_CUTSCENE_DURATION = 460;
+  const CANNON_BULLET_SPEED = 1.3;
+  const CANNON_WARN_WINDOW = 24;
+  const CANNON_EXTRA_COOLDOWN = 26;
 
   function proteinLevel() {
     return collectedProteinIds.size;
@@ -1332,6 +1335,7 @@
 
   function updateCannons(dt) {
     for (const cannon of stage.cannons) {
+      cannon.muzzleFlash = Math.max(0, (cannon.muzzleFlash || 0) - dt);
       if (!cannon.active && player.x + player.w > cannon.triggerX) {
         cannon.active = true;
       }
@@ -1339,18 +1343,21 @@
       if (!cannon.active) continue;
 
       cannon.cool -= dt;
+      cannon.warning = cannon.cool > 0 && cannon.cool <= CANNON_WARN_WINDOW;
       if (cannon.cool <= 0) {
-        const bx = cannon.dir < 0 ? cannon.x - 7 : cannon.x + 7;
+        const bx = cannon.dir < 0 ? cannon.x - 9 : cannon.x + 7;
         stage.hazardBullets.push({
           x: bx,
-          y: cannon.y + 2,
-          w: 7,
-          h: 5,
-          vx: cannon.dir * 1.7,
+          y: cannon.y + 1,
+          w: 9,
+          h: 7,
+          vx: cannon.dir * CANNON_BULLET_SPEED,
           kind: "cannon",
           reason: "砲台の弾に被弾",
         });
-        cannon.cool = cannon.interval + Math.random() * 16;
+        cannon.muzzleFlash = 10;
+        cannon.warning = false;
+        cannon.cool = cannon.interval + CANNON_EXTRA_COOLDOWN + Math.random() * 24;
       }
     }
   }
@@ -1360,7 +1367,10 @@
       if (bullet.dead) continue;
       bullet.x += bullet.vx * dt;
 
-      if (overlap(player, bullet)) {
+      const hit = bullet.kind === "cannon"
+        ? { x: bullet.x + 1.5, y: bullet.y + 1.5, w: Math.max(2, bullet.w - 3), h: Math.max(2, bullet.h - 3) }
+        : bullet;
+      if (overlap(player, hit)) {
         killPlayer(bullet.reason || "飛び道具に被弾");
       }
 
@@ -3138,6 +3148,11 @@
   function drawCannon(c) {
     const x = Math.floor(c.x - cameraX);
     const y = Math.floor(c.y);
+    const warning = c.active && c.warning;
+    const warnBlink = warning && Math.floor((c.cool || 0) / 2) % 2 === 0;
+    const flash = (c.muzzleFlash || 0) > 0;
+    const muzzleX = c.dir < 0 ? x - 10 : x + 11;
+    const muzzleY = y + 1;
 
     ctx.fillStyle = "#20242f";
     ctx.fillRect(x - 6, y - 4, 14, 11);
@@ -3146,7 +3161,7 @@
     ctx.fillStyle = "#667388";
     ctx.fillRect(x - 4, y - 2, 10, 2);
 
-    ctx.fillStyle = "#4e596d";
+    ctx.fillStyle = warnBlink ? "#786168" : "#4e596d";
     if (c.dir < 0) {
       ctx.fillRect(x - 10, y - 1, 6, 5);
       ctx.fillStyle = "#7b889e";
@@ -3159,6 +3174,25 @@
 
     ctx.fillStyle = "#6e7d92";
     ctx.fillRect(x - 3, y + 6, 8, 2);
+
+    if (warnBlink) {
+      ctx.fillStyle = "rgba(255, 146, 110, 0.68)";
+      for (let i = 0; i < 6; i += 1) {
+        const wx = muzzleX + c.dir * (i * 6 + 1);
+        ctx.fillRect(wx, muzzleY + (i % 2), 3, 1);
+      }
+    }
+
+    if (warning || flash) {
+      ctx.fillStyle = flash ? "#ffe0b2" : "#ffb18a";
+      ctx.fillRect(muzzleX, muzzleY, 2, 2);
+      ctx.fillStyle = flash ? "#ff8a54" : "#ff6d5a";
+      ctx.fillRect(muzzleX + c.dir, muzzleY, 2, 2);
+    }
+    if (flash) {
+      ctx.fillStyle = "rgba(255, 180, 120, 0.5)";
+      ctx.fillRect(muzzleX + c.dir * 2, muzzleY - 1, 4, 4);
+    }
   }
 
   function drawFallingBlock(block) {
@@ -3269,11 +3303,31 @@
 
     for (const b of stage.hazardBullets) {
       if (b.dead) continue;
+      const bx = Math.floor(b.x - cameraX);
+      const by = Math.floor(b.y);
+      if (b.kind === "cannon") {
+        const pulse = Math.floor((player.anim + b.x * 0.04) * 0.26) % 2 === 0;
+        ctx.fillStyle = "rgba(255, 98, 98, 0.42)";
+        ctx.fillRect(bx - 2, by - 2, b.w + 4, b.h + 4);
+        ctx.fillStyle = "#181d2b";
+        ctx.fillRect(bx, by, b.w, b.h);
+        ctx.fillStyle = pulse ? "#fff0b8" : "#ffd790";
+        ctx.fillRect(bx + 2, by + 2, b.w - 4, b.h - 4);
+        ctx.fillStyle = "#ff7f52";
+        ctx.fillRect(bx + 1, by + 1, 1, b.h - 2);
+        const trailDir = b.vx > 0 ? -1 : 1;
+        for (let i = 0; i < 3; i += 1) {
+          ctx.fillStyle = `rgba(255, 173, 122, ${0.36 - i * 0.1})`;
+          ctx.fillRect(bx + trailDir * (3 + i * 3), by + 2, 2, 2);
+        }
+        continue;
+      }
+
       const enemyShot = b.kind === "enemy";
       ctx.fillStyle = enemyShot ? "#d4c2ff" : "#ffcb67";
-      ctx.fillRect(Math.floor(b.x - cameraX), Math.floor(b.y), b.w, b.h);
+      ctx.fillRect(bx, by, b.w, b.h);
       ctx.fillStyle = enemyShot ? "#9f7dff" : "#ffa934";
-      ctx.fillRect(Math.floor(b.x - cameraX + 1), Math.floor(b.y + 1), b.w - 2, b.h - 2);
+      ctx.fillRect(bx + 1, by + 1, b.w - 2, b.h - 2);
     }
 
     drawHitSparks();
