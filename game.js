@@ -350,11 +350,10 @@
   }
 
   function startOpeningTheme() {
-    if (openingThemeActive) return;
     if (gameState !== STATE.CUTSCENE && gameState !== STATE.PRE_BOSS) return;
-    if (!audioCtx || audioCtx.state !== "running") return;
     ensureInvincibleMusic();
     if (!invincibleMusic) return;
+    if (openingThemeActive && !invincibleMusic.paused) return;
 
     openingThemeActive = true;
     invincibleMusicFadeTimer = 0;
@@ -490,7 +489,7 @@
       }
     }
 
-    if (gameState === STATE.CUTSCENE) {
+    if (gameState === STATE.CUTSCENE || gameState === STATE.PRE_BOSS) {
       startOpeningTheme();
     }
   }
@@ -2267,6 +2266,7 @@
     player.vy = 0;
     hudMessage = "";
     hudTimer = 0;
+    startOpeningTheme();
   }
 
   function sampleActions() {
@@ -2453,6 +2453,7 @@
     stopInvincibleMusic();
     stopStageMusic(true);
     gameState = STATE.CUTSCENE;
+    startOpeningTheme();
   }
 
   function updateDead(dt) {
