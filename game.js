@@ -152,10 +152,10 @@
   const DASH_JUMP_ASSIST_FRAMES = 20;
   const DASH_JUMP_SPEED_CAP_MULT = 1.45;
   const DASH_JUMP_GRAVITY_MULT = 0.84;
-  const ATTACK_CHARGE_MAX = 84;
-  const ATTACK_WAVE_CHARGE_MIN = 28;
+  const ATTACK_CHARGE_MAX = 132;
+  const ATTACK_WAVE_CHARGE_MIN = ATTACK_CHARGE_MAX;
   const ATTACK_PUNCH_COOLDOWN = 10;
-  const ATTACK_WAVE_COOLDOWN = 18;
+  const ATTACK_WAVE_COOLDOWN = 28;
   const STOMP_VERTICAL_GRACE = 16;
   const STOMP_SIDE_GRACE = 6;
   const STOMP_DESCEND_MIN = -0.25;
@@ -294,7 +294,7 @@
   }
 
   function resumeStageMusicAfterInvincible() {
-    if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
+    if (gameState !== STATE.PLAY) return;
 
     ensureStageMusic();
     if (!stageMusic) return;
@@ -999,7 +999,7 @@
 
   function scheduleBGM() {
     if (!bgmStarted || !stageMusic) return;
-    const stageActive = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    const stageActive = gameState === STATE.PLAY;
     if (!stageActive) return;
     if (invincibleTimer > 0 || openingThemeActive) return;
     if (!stageMusic.paused) return;
@@ -2042,7 +2042,7 @@
 
   function releaseChargeAttack(chargeFrames) {
     const chargeRatio = clamp(chargeFrames / ATTACK_CHARGE_MAX, 0, 1);
-    const strongWave = chargeFrames >= ATTACK_WAVE_CHARGE_MIN;
+    const strongWave = chargeFrames >= ATTACK_WAVE_CHARGE_MIN - 0.01;
     const pLv = proteinLevel();
     const dir = player.facing;
     const px = player.x + player.w * 0.5;
@@ -2058,14 +2058,14 @@
     let parryHits = 0;
     let hitX = px + dir * (12 + reach * 0.48);
     let hitY = player.y + 10;
-    const hitPower = 1.42 + chargeRatio * 1.38 + pLv * 0.02;
+    const hitPower = 0.98 + chargeRatio * 0.72 + pLv * 0.01;
 
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlap(hitBox, enemy)) continue;
-      kickEnemy(enemy, dir, hitPower + 0.42, { immediateRemove: false, flyLifetime: 34 + Math.round(chargeRatio * 20) });
-      enemy.vx = dir * (5.2 + hitPower * 1.25);
-      enemy.vy = Math.min(enemy.vy, -(4.2 + chargeRatio * 2.1));
+      kickEnemy(enemy, dir, hitPower + 0.2, { immediateRemove: false, flyLifetime: 32 + Math.round(chargeRatio * 16) });
+      enemy.vx = dir * (4.0 + hitPower * 0.95);
+      enemy.vy = Math.min(enemy.vy, -(3.5 + chargeRatio * 1.4));
       enemy.flash = 12;
       hitX = enemy.x + enemy.w * 0.5;
       hitY = enemy.y + enemy.h * 0.42;
@@ -2087,11 +2087,11 @@
     }
 
     if (stage.boss.active && stage.boss.hp > 0 && overlap(hitBox, stage.boss) && stage.boss.invuln <= 0) {
-      const bossDamage = chargeRatio >= 0.8 ? 2 : 1;
+      const bossDamage = 1;
       stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
       stage.boss.invuln = 15;
-      stage.boss.vx += dir * (0.94 + chargeRatio * 0.74);
-      stage.boss.vy = Math.min(stage.boss.vy, -(2.4 + chargeRatio * 0.7));
+      stage.boss.vx += dir * (0.62 + chargeRatio * 0.38);
+      stage.boss.vy = Math.min(stage.boss.vy, -(1.9 + chargeRatio * 0.36));
       hitX = stage.boss.x + stage.boss.w * 0.5;
       hitY = stage.boss.y + stage.boss.h * 0.45;
       hits += 1;
@@ -2101,18 +2101,18 @@
     }
 
     if (strongWave) {
-      const waveW = 14 + Math.floor(chargeRatio * 6);
+      const waveW = 13 + Math.floor(chargeRatio * 4);
       const waveH = 6 + Math.floor(chargeRatio * 2);
-      const waveSpeed = (2.7 + chargeRatio * 1.8) * dir;
+      const waveSpeed = (2.25 + chargeRatio * 1.2) * dir;
       stage.playerWaves.push({
         x: dir > 0 ? player.x + player.w + 2 : player.x - waveW - 2,
         y: player.y + 8,
         w: waveW,
         h: waveH,
         vx: waveSpeed,
-        ttl: 116 + Math.floor(chargeRatio * 34),
+        ttl: 100 + Math.floor(chargeRatio * 26),
         phase: 0,
-        hitsLeft: 2 + Math.floor(chargeRatio * 4),
+        hitsLeft: 2,
         power: chargeRatio,
       });
     }
@@ -2171,9 +2171,9 @@
         if (!enemy.alive || enemy.kicked) continue;
         if (!overlap(wave, enemy)) continue;
         const dir = wave.vx >= 0 ? 1 : -1;
-        kickEnemy(enemy, dir, 1.7 + (wave.power || 0) * 1.4, { immediateRemove: false, flyLifetime: 42 });
-        enemy.vx = dir * (6.2 + (wave.power || 0) * 2.2);
-        enemy.vy = -(4.1 + (wave.power || 0) * 1.1);
+        kickEnemy(enemy, dir, 1.2 + (wave.power || 0) * 0.7, { immediateRemove: false, flyLifetime: 38 });
+        enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3);
+        enemy.vy = -(3.5 + (wave.power || 0) * 0.7);
         enemy.flash = 12;
         wave.hitsLeft -= 1;
         triggerImpact(1.5 + (wave.power || 0), enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 2.6);
@@ -2182,11 +2182,11 @@
 
       if (!wave.dead && stage.boss.active && stage.boss.hp > 0 && overlap(wave, stage.boss) && stage.boss.invuln <= 0) {
         const dir = wave.vx >= 0 ? 1 : -1;
-        const bossDamage = (wave.power || 0) >= 0.7 ? 2 : 1;
+        const bossDamage = 1;
         stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
         stage.boss.invuln = 13;
-        stage.boss.vx += dir * (0.86 + (wave.power || 0) * 0.48);
-        stage.boss.vy = Math.min(stage.boss.vy, -(2.2 + (wave.power || 0) * 0.4));
+        stage.boss.vx += dir * (0.62 + (wave.power || 0) * 0.28);
+        stage.boss.vy = Math.min(stage.boss.vy, -(1.85 + (wave.power || 0) * 0.24));
         wave.hitsLeft -= 1;
         triggerImpact(2.0 + (wave.power || 0), stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.4, 3.0);
         playKickSfx(1.52 + (wave.power || 0) * 0.28);
