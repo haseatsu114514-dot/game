@@ -777,8 +777,8 @@
         id,
         x,
         y,
-        w: 12,
-        h: 10,
+        w: 18,
+        h: 14,
         bob: (id * 1.57) % (Math.PI * 2),
         collected: false,
       });
@@ -854,8 +854,7 @@
     addSolid(5610, 96, 22, 64);
     addSolid(6480, 92, 24, 68);
 
-    breakWalls.push({ x: 3570, y: 96, w: 22, h: 64, hp: 3, maxHp: 3, isWall: true, hitCooldown: 0 });
-    breakWalls.push({ x: 6210, y: 98, w: 22, h: 62, hp: 3, maxHp: 3, isWall: true, hitCooldown: 0 });
+    // Break walls removed with hammer/glove abolition.
 
     enemies.push(
       { x: 420, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.46, minX: 340, maxX: 520, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
@@ -953,17 +952,7 @@
     addBike(3, 5660, 106);
     addBike(4, 6840, 102);
 
-    addWeaponItem(1, "hammer", 690, 108);
-    addWeaponItem(2, "glove", 1710, 106);
-    addWeaponItem(3, "hammer", 2760, 108);
-    addWeaponItem(4, "glove", 3620, 102);
-    addWeaponItem(5, "hammer", 4380, 104);
-    addWeaponItem(6, "glove", 5030, 116);
-    addWeaponItem(7, "hammer", 1530, 134);
-    addWeaponItem(8, "glove", 3240, 100);
-    addWeaponItem(9, "hammer", 5540, 102);
-    addWeaponItem(10, "glove", 6120, 104);
-    addWeaponItem(11, "hammer", 6690, 98);
+    // Weapon items removed.
 
     const checkpointTokenAnchors = {
       1: { x: 1020, y: 104 },
@@ -1767,28 +1756,8 @@
   }
 
   function updateWeaponItems(dt) {
-    for (const item of stage.weaponItems) {
-      item.bob += 0.1 * dt;
-      if (item.collected) continue;
-
-      const floatY = item.y + Math.sin(item.bob) * 1.6;
-      const hit = { x: item.x, y: floatY, w: item.w, h: item.h };
-      if (!overlap(player, hit)) continue;
-
-      item.collected = true;
-      playPowerupSfx();
-      triggerImpact(1.15, item.x + item.w * 0.5, floatY + item.h * 0.5, 1.9);
-      weaponHudTimer = WEAPON_DURATION;
-
-      if (item.type === "hammer") {
-        hammerTimer = Math.max(hammerTimer, WEAPON_DURATION);
-        hudMessage = "ハンマー獲得! 10秒 叩き強化";
-      } else {
-        gloveTimer = Math.max(gloveTimer, WEAPON_DURATION);
-        hudMessage = "グローブ獲得! 10秒 百裂拳";
-      }
-      hudTimer = 84;
-    }
+    // Hammer/Glove abolished.
+    return;
   }
 
   function currentAttackMode() {
@@ -1911,18 +1880,8 @@
   }
 
   function updatePlayerAttack(dt, actions) {
-    const hasWeapon = hammerTimer > 0 || gloveTimer > 0;
-    const wantRepeat = hasWeapon && input.attack;
-    if (attackCooldown > 0) return;
-    if (!hasWeapon) {
-      if (actions.attackPressed) {
-        hudMessage = "武器アイテム中のみ攻撃できる";
-        hudTimer = 24;
-      }
-      return;
-    }
-    if (!actions.attackPressed && !wantRepeat) return;
-    executePlayerAttack(currentAttackMode());
+    // Attack inputs are disabled after weapon removal.
+    return;
   }
 
   function resolveEnemyContactDamage() {
@@ -2385,9 +2344,7 @@
     updateHazardBullets(dt, solidsAfter);
     updateProteins(dt);
     updateBikes(dt);
-    updateWeaponItems(dt);
     updateCheckpointTokens(dt);
-    updatePlayerAttack(dt, actions);
     resolveEnemyContactDamage();
     resolveBreakWalls(dt);
     resolveHazards();
@@ -2448,12 +2405,10 @@
 
     updateProteins(dt);
     updateBikes(dt);
-    updateWeaponItems(dt);
     updateBoss(dt, solids);
     updateBossShots(dt, solids);
     updateEnemies(dt, solids);
     updateHazardBullets(dt, solids);
-    updatePlayerAttack(dt, actions);
     resolveEnemyContactDamage();
     resolveBossContactDamage();
     resolveBreakWalls(dt);
@@ -3269,33 +3224,33 @@
     const blink = Math.floor(player.anim * 0.18) % 2 === 0;
 
     ctx.fillStyle = "#0f1220";
-    ctx.fillRect(x + 1, y + 8, 3, 3);
-    ctx.fillRect(x + 8, y + 8, 3, 3);
+    ctx.fillRect(x + 2, y + 9, 5, 5);
+    ctx.fillRect(x + 11, y + 9, 5, 5);
     ctx.fillStyle = "#7e97cd";
-    ctx.fillRect(x + 2, y + 9, 1, 1);
-    ctx.fillRect(x + 9, y + 9, 1, 1);
+    ctx.fillRect(x + 3, y + 10, 2, 2);
+    ctx.fillRect(x + 12, y + 10, 2, 2);
 
     ctx.fillStyle = "#ff5f84";
-    ctx.fillRect(x + 3, y + 7, 5, 1);
-    ctx.fillRect(x + 6, y + 6, 3, 1);
+    ctx.fillRect(x + 5, y + 8, 7, 2);
+    ctx.fillRect(x + 8, y + 6, 5, 2);
     ctx.fillStyle = "#6ddfff";
-    ctx.fillRect(x + 4, y + 6, 2, 1);
-    ctx.fillRect(x + 8, y + 5, 2, 1);
-    ctx.fillRect(x + 9, y + 4, 1, 1);
+    ctx.fillRect(x + 6, y + 6, 3, 2);
+    ctx.fillRect(x + 11, y + 5, 3, 2);
+    ctx.fillRect(x + 13, y + 4, 2, 1);
     ctx.fillStyle = "#d7f6ff";
-    ctx.fillRect(x + 5, y + 5, 2, 1);
+    ctx.fillRect(x + 8, y + 5, 3, 1);
     ctx.fillStyle = "#ffd983";
-    ctx.fillRect(x + 7, y + 4, 2, 1);
+    ctx.fillRect(x + 10, y + 4, 3, 1);
     ctx.fillStyle = "#101626";
-    ctx.fillRect(x + 5, y + 7, 1, 2);
+    ctx.fillRect(x + 8, y + 8, 2, 2);
 
     if (blink) {
       ctx.fillStyle = "#ffd97d";
-      ctx.fillRect(x + 5, y + 1, 2, 1);
-      ctx.fillRect(x + 6, y + 0, 1, 3);
+      ctx.fillRect(x + 8, y + 1, 3, 1);
+      ctx.fillRect(x + 9, y + 0, 1, 3);
       ctx.fillStyle = "#ff82c5";
-      ctx.fillRect(x - 1, y + 3, 1, 1);
-      ctx.fillRect(x + 12, y + 4, 1, 1);
+      ctx.fillRect(x - 2, y + 4, 1, 1);
+      ctx.fillRect(x + 19, y + 5, 1, 1);
     }
   }
 
@@ -3387,88 +3342,62 @@
 
   function drawInvincibleBikeRide() {
     if (invincibleTimer <= 0) return;
-    const x = Math.floor(player.x - cameraX - 4);
-    const y = Math.floor(player.y + 11 + Math.sin(player.anim * 0.24) * 0.5);
+    const x = Math.floor(player.x - cameraX - 8);
+    const y = Math.floor(player.y + 12 + Math.sin(player.anim * 0.24) * 0.5);
     const dir = player.facing;
     const pulse = Math.sin(player.anim * 0.34);
     const shimmer = Math.sin(player.anim * 0.28) * 0.5 + 0.5;
     const rainbow = ["#ff5f8a", "#ffb66d", "#ffe46f", "#80e79a", "#78bcff", "#bf91ff"];
 
     for (let i = 0; i < rainbow.length; i += 1) {
-      const tail = 5 + i * 3 + pulse * 1.6;
-      const tx = dir > 0 ? Math.floor(x - tail) : Math.floor(x + 22 + tail);
+      const tail = 8 + i * 4 + pulse * 2.1;
+      const tx = dir > 0 ? Math.floor(x - tail) : Math.floor(x + 30 + tail);
       ctx.fillStyle = rainbow[i];
-      ctx.fillRect(tx, y - 2 + (i % 2), 3, 1);
+      ctx.fillRect(tx, y - 3 + (i % 2), 5, 2);
     }
 
     ctx.save();
     ctx.globalAlpha = 0.23 + shimmer * 0.18;
     for (let i = 0; i < rainbow.length; i += 1) {
       ctx.fillStyle = rainbow[i];
-      ctx.fillRect(x - 4 + i, y - 14 + i * 2, 30 - i * 2, 2);
+      ctx.fillRect(x - 6 + i, y - 18 + i * 2, 40 - i * 3, 2);
     }
     ctx.restore();
 
     const wheelSpin = Math.floor(player.anim * 0.5) % 2;
     ctx.fillStyle = "#0d111a";
-    ctx.fillRect(x + 2, y + 7, 5, 5);
-    ctx.fillRect(x + 14, y + 7, 5, 5);
+    ctx.fillRect(x + 2, y + 8, 7, 7);
+    ctx.fillRect(x + 21, y + 8, 7, 7);
     ctx.fillStyle = "#7089b9";
-    ctx.fillRect(x + 3 + wheelSpin, y + 9, 1, 1);
-    ctx.fillRect(x + 5 - wheelSpin, y + 8, 1, 1);
-    ctx.fillRect(x + 15 + wheelSpin, y + 9, 1, 1);
-    ctx.fillRect(x + 17 - wheelSpin, y + 8, 1, 1);
+    ctx.fillRect(x + 4 + wheelSpin, y + 10, 2, 2);
+    ctx.fillRect(x + 6 - wheelSpin, y + 9, 1, 1);
+    ctx.fillRect(x + 23 + wheelSpin, y + 10, 2, 2);
+    ctx.fillRect(x + 25 - wheelSpin, y + 9, 1, 1);
     ctx.fillStyle = "#39435a";
-    ctx.fillRect(x + 4, y + 8, 1, 3);
-    ctx.fillRect(x + 16, y + 8, 1, 3);
+    ctx.fillRect(x + 5, y + 9, 1, 4);
+    ctx.fillRect(x + 24, y + 9, 1, 4);
 
     ctx.fillStyle = "#2a3247";
-    ctx.fillRect(x + 5, y + 5, 10, 2);
+    ctx.fillRect(x + 7, y + 5, 15, 3);
     ctx.fillStyle = "#8ee4ff";
-    ctx.fillRect(x + 6, y + 4, 6, 1);
+    ctx.fillRect(x + 8, y + 4, 9, 1);
     ctx.fillStyle = "#ffd995";
-    ctx.fillRect(x + 12, y + 4, 2, 1);
+    ctx.fillRect(x + 17, y + 4, 3, 1);
     ctx.fillStyle = "#87a2d9";
-    ctx.fillRect(x + 9, y + 3, 1, 2);
+    ctx.fillRect(x + 12, y + 3, 2, 2);
     ctx.fillStyle = "#d6f3ff";
-    ctx.fillRect(x + 9, y + 2, 2, 1);
+    ctx.fillRect(x + 12, y + 2, 4, 1);
     ctx.fillStyle = "#c04f62";
-    ctx.fillRect(x + 8, y + 6, 3, 1);
+    ctx.fillRect(x + 11, y + 7, 5, 1);
+
+    drawHero(x + 10, y - 17, dir, player.anim * 1.15, 1);
 
     ctx.save();
-    ctx.translate(x + 6, y - 11);
-    if (dir < 0) {
-      ctx.translate(12, 0);
-      ctx.scale(-1, 1);
-    }
-    const paint = (color, dx, dy, w = 1, h = 1) => {
-      ctx.fillStyle = color;
-      ctx.fillRect(dx, dy, w, h);
-    };
-
-    paint("#06070c", 1, 0, 9, 1);
-    paint("#0c1020", 0, 1, 11, 3);
-    paint("#161f36", 1, 3, 9, 2);
-    paint("#f8e9e1", 3, 4, 5, 4);
-    paint("#6f4838", 4, 5, 2, 2);
-    paint("#6f4838", 6, 5, 1, 2);
-    paint("#fff8f4", 4, 5, 1, 1);
-    paint("#fff8f4", 6, 5, 1, 1);
-    paint("#10141f", 1, 8, 10, 4);
-    paint("#1d273c", 2, 8, 8, 3);
-    paint("#f4f1ee", 4, 9, 3, 2);
-    paint("#24345a", 4, 11, 6, 2);
-    paint("#141821", 4, 12, 6, 1);
-    paint("#f4e0d3", 1, 9, 1, 2);
-    paint("#f4e0d3", 10, 9, 1, 2);
-    paint("#0e121d", 0, 8, 1, 3);
-    paint("#0e121d", 10, 8, 1, 3);
-
     ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = 0.38 + shimmer * 0.2;
+    ctx.globalAlpha = 0.18 + shimmer * 0.18;
     for (let i = 0; i < rainbow.length; i += 1) {
       ctx.fillStyle = rainbow[(i + Math.floor(player.anim * 0.04)) % rainbow.length];
-      ctx.fillRect(0, i * 2, 11, 2);
+      ctx.fillRect(x + 6, y - 20 + i * 3, 20, 2);
     }
     ctx.restore();
   }
@@ -3694,10 +3623,6 @@
       drawBikePickup(bike);
     }
 
-    for (const item of stage.weaponItems) {
-      drawWeaponItem(item);
-    }
-
     for (const token of stage.checkpointTokens) {
       drawCheckpointToken(token);
     }
@@ -3748,7 +3673,6 @@
     drawBoss();
     drawGoal();
     drawRushAura();
-    drawAutoWeaponEffects();
     const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (!hurtBlink) {
       if (invincibleTimer > 0) {
@@ -4068,12 +3992,6 @@
       ctx.fillStyle = "#f7f1ff";
     }
 
-    if (hammerTimer > 0) {
-      ctx.fillText(`HAM ${Math.ceil(hammerTimer / 60)}`, 208, 4);
-    } else if (gloveTimer > 0) {
-      ctx.fillText(`GLV ${Math.ceil(gloveTimer / 60)}`, 208, 4);
-    }
-
     if (invincibleTimer > 0) {
       ctx.fillStyle = "#ffe7a8";
       ctx.fillText(`INV ${Math.ceil(invincibleTimer / 60)}`, 266, 4);
@@ -4347,7 +4265,6 @@
   bindHoldButton("btn-left", "left");
   bindHoldButton("btn-right", "right");
   bindHoldButton("btn-jump", "jump");
-  bindHoldButton("btn-attack", "attack");
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -4385,8 +4302,6 @@
     ArrowUp: "jump",
     KeyW: "jump",
     Space: "jump",
-    KeyJ: "attack",
-    KeyF: "attack",
     Enter: "start",
   };
 
