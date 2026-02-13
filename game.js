@@ -81,6 +81,7 @@
   let weaponHudTimer = 0;
   let dashJumpAssistTimer = 0;
   let attackCooldown = 0;
+  let attackChargeTimer = 0;
   let attackEffectTimer = 0;
   let attackEffectMode = "none";
   let attackEffectPhase = 0;
@@ -146,6 +147,10 @@
   const DASH_JUMP_ASSIST_FRAMES = 20;
   const DASH_JUMP_SPEED_CAP_MULT = 1.45;
   const DASH_JUMP_GRAVITY_MULT = 0.84;
+  const ATTACK_CHARGE_MAX = 84;
+  const ATTACK_WAVE_CHARGE_MIN = 28;
+  const ATTACK_PUNCH_COOLDOWN = 10;
+  const ATTACK_WAVE_COOLDOWN = 18;
   const STOMP_VERTICAL_GRACE = 16;
   const STOMP_SIDE_GRACE = 6;
   const STOMP_DESCEND_MIN = -0.25;
@@ -1082,6 +1087,7 @@
       breakWalls,
       hazardBullets: [],
       bossShots: [],
+      playerWaves: [],
       checkpoints,
       goal: { x: 7044, y: 112, w: 24, h: 48 },
       boss: {
@@ -1402,9 +1408,11 @@
     weaponHudTimer = 0;
     dashJumpAssistTimer = 0;
     attackCooldown = 0;
+    attackChargeTimer = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
+    stage.playerWaves = [];
     deaths += 1;
     hudMessage = playerLives > 0 ? `${reason} / 残機 x${playerLives}` : `${reason} / 残機 0`;
     hudTimer = 80;
@@ -1444,9 +1452,11 @@
     weaponHudTimer = 0;
     dashJumpAssistTimer = 0;
     attackCooldown = 0;
+    attackChargeTimer = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
+    stage.playerWaves = [];
     hitSparks = [];
     deathFlashTimer = 0;
     deathShakeTimer = 0;
@@ -1491,9 +1501,11 @@
     weaponHudTimer = 0;
     dashJumpAssistTimer = 0;
     attackCooldown = 0;
+    attackChargeTimer = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
+    stage.playerWaves = [];
     hitSparks = [];
     deathFlashTimer = 0;
     deathShakeTimer = 0;
@@ -1849,66 +1861,34 @@
     return;
   }
 
-  function currentAttackMode() {
-    if (hammerTimer > 0 && gloveTimer > 0) {
-      return hammerTimer >= gloveTimer ? "hammer" : "glove";
-    }
-    if (hammerTimer > 0) return "hammer";
-    if (gloveTimer > 0) return "glove";
-    return null;
-  }
-
-  function executePlayerAttack(mode) {
-    if (mode !== "hammer" && mode !== "glove") return;
+  function releaseChargeAttack(chargeFrames) {
+    const chargeRatio = clamp(chargeFrames / ATTACK_CHARGE_MAX, 0, 1);
+    const strongWave = chargeFrames >= ATTACK_WAVE_CHARGE_MIN;
     const pLv = proteinLevel();
-    const gf = powerFactor();
-    const px = player.x + player.w * 0.5;
     const dir = player.facing;
-
-    let hitBox = { x: px - 6, y: player.y + 8, w: 12, h: 12 };
-    let power = 1.06 + pLv * 0.05;
-    let burstPower = 1.3 + pLv * 0.04;
-    let cooldown = 10;
-    let hitLabel = "アタック!";
-
-    if (mode === "hammer") {
-      const hitX = dir > 0 ? player.x + player.w - 2 : player.x - 14;
-      hitBox = { x: hitX, y: player.y - 10, w: 14, h: 36 };
-      power = 1.45 + pLv * 0.06;
-      burstPower = 1.8 + pLv * 0.05;
-      cooldown = 6;
-      hitLabel = "ハンマー連打!";
-    } else if (mode === "glove") {
-      const range = 23 + pLv * 0.4;
-      const hitX = dir > 0 ? player.x + player.w - 1 : player.x - range;
-      hitBox = { x: hitX, y: player.y + 4, w: range, h: 16 };
-      power = 1.12 + pLv * 0.04;
-      burstPower = 1.45 + pLv * 0.04;
-      cooldown = 3.4;
-      hitLabel = "百裂拳!";
-    }
-
-    attackCooldown = cooldown;
-    attackEffectTimer = mode === "hammer" ? 12 : 9;
-    attackEffectMode = mode;
-    attackEffectPhase = 0;
-    if (mode === "hammer") {
-      hammerHitCooldown = cooldown;
-    } else if (mode === "glove") {
-      gloveHitCooldown = cooldown;
-    }
+    const px = player.x + player.w * 0.5;
+    const reach = 24 + Math.floor(chargeRatio * 22);
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 1 : player.x - reach + 1,
+      y: player.y + 4,
+      w: reach,
+      h: 15 + Math.floor(chargeRatio * 5),
+    };
 
     let hits = 0;
-    let hitX = player.x + player.w * 0.5 + dir * 8;
-    let hitY = player.y + 11;
+    let hitX = px + dir * (12 + reach * 0.48);
+    let hitY = player.y + 10;
+    const hitPower = 1.42 + chargeRatio * 1.38 + pLv * 0.02;
 
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlap(hitBox, enemy)) continue;
-      const knockDir = enemy.x + enemy.w * 0.5 >= px ? 1 : -1;
-      kickEnemy(enemy, knockDir, power * gf);
+      kickEnemy(enemy, dir, hitPower + 0.42, { immediateRemove: false, flyLifetime: 34 + Math.round(chargeRatio * 20) });
+      enemy.vx = dir * (5.2 + hitPower * 1.25);
+      enemy.vy = Math.min(enemy.vy, -(4.2 + chargeRatio * 2.1));
+      enemy.flash = 12;
       hitX = enemy.x + enemy.w * 0.5;
-      hitY = enemy.y + enemy.h * 0.5;
+      hitY = enemy.y + enemy.h * 0.42;
       hits += 1;
     }
 
@@ -1924,32 +1904,35 @@
       hits += 1;
     }
 
-    for (const wall of stage.breakWalls) {
-      if (wall.hp <= 0) continue;
-      if (wall.hitCooldown > 0) continue;
-      if (!overlap(hitBox, wall)) continue;
-      const wallDamage = mode === "hammer" ? 3 : 1;
-      wall.hp = Math.max(0, wall.hp - wallDamage);
-      wall.hitCooldown = mode === "hammer" ? 12 : 16;
-      hitX = wall.x + wall.w * 0.5;
-      hitY = wall.y + wall.h * 0.4;
-      hits += 1;
-      hudMessage = wall.hp <= 0 ? "壁を破壊! 先へ進め!" : `壁にヒット! 残り耐久 ${wall.hp}`;
-      hudTimer = wall.hp <= 0 ? 90 : 46;
-    }
-
     if (stage.boss.active && stage.boss.hp > 0 && overlap(hitBox, stage.boss) && stage.boss.invuln <= 0) {
-      const bossDamage = mode === "hammer" ? 2 : 1;
+      const bossDamage = chargeRatio >= 0.8 ? 2 : 1;
       stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
-      stage.boss.invuln = 16;
-      stage.boss.vx += dir * (0.8 + bossDamage * 0.2);
-      stage.boss.vy = Math.min(stage.boss.vy, -2.4);
+      stage.boss.invuln = 15;
+      stage.boss.vx += dir * (0.94 + chargeRatio * 0.74);
+      stage.boss.vy = Math.min(stage.boss.vy, -(2.4 + chargeRatio * 0.7));
       hitX = stage.boss.x + stage.boss.w * 0.5;
-      hitY = stage.boss.y + stage.boss.h * 0.5;
+      hitY = stage.boss.y + stage.boss.h * 0.45;
       hits += 1;
       if (stage.boss.hp <= 0) {
         defeatBoss();
       }
+    }
+
+    if (strongWave) {
+      const waveW = 14 + Math.floor(chargeRatio * 6);
+      const waveH = 6 + Math.floor(chargeRatio * 2);
+      const waveSpeed = (2.7 + chargeRatio * 1.8) * dir;
+      stage.playerWaves.push({
+        x: dir > 0 ? player.x + player.w + 2 : player.x - waveW - 2,
+        y: player.y + 8,
+        w: waveW,
+        h: waveH,
+        vx: waveSpeed,
+        ttl: 116 + Math.floor(chargeRatio * 34),
+        phase: 0,
+        hitsLeft: 2 + Math.floor(chargeRatio * 4),
+        power: chargeRatio,
+      });
     }
 
     if (hits > 0) {
@@ -1958,19 +1941,105 @@
       } else {
         kickCombo = hits;
       }
-      kickComboTimer = mode === "glove" ? 38 : 48;
-      triggerKickBurst(hitX, hitY, burstPower + hits * 0.08);
-      playKickSfx(mode === "hammer" ? 1.78 : mode === "glove" ? 1.35 : 1.52);
-      if (mode !== "hammer" || hits <= 1) {
-        hudMessage = kickCombo > 1 ? `${hitLabel} x${kickCombo}` : hitLabel;
-        hudTimer = 28;
-      }
+      kickComboTimer = 44;
     }
+
+    triggerKickBurst(hitX, hitY, 1.8 + chargeRatio * 1.35 + hits * 0.08);
+    triggerImpact(2.2 + chargeRatio * 1.6, hitX, hitY, 3.4 + chargeRatio * 1.2);
+    playKickSfx(1.28 + chargeRatio * 0.52);
+    playRilaRobotVoice("attack");
+
+    attackCooldown = strongWave ? ATTACK_WAVE_COOLDOWN : ATTACK_PUNCH_COOLDOWN;
+    attackEffectTimer = strongWave ? 16 : 11;
+    attackEffectMode = strongWave ? "wave" : "punch";
+    attackEffectPhase = chargeRatio * 2.6;
   }
 
   function updatePlayerAttack(dt, actions) {
-    // Attack inputs are disabled after weapon removal.
-    return;
+    if ((gameState !== STATE.PLAY && gameState !== STATE.BOSS) || attackCooldown > 0) {
+      if (!input.attack) attackChargeTimer = 0;
+      return;
+    }
+
+    if (input.attack) {
+      attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt);
+      return;
+    }
+
+    if (actions.attackReleased && attackChargeTimer > 0) {
+      releaseChargeAttack(attackChargeTimer);
+    }
+    attackChargeTimer = 0;
+  }
+
+  function updatePlayerWaves(dt, solids) {
+    if (!stage.playerWaves || stage.playerWaves.length === 0) return;
+
+    for (const wave of stage.playerWaves) {
+      if (wave.dead) continue;
+      wave.phase += dt;
+      wave.x += wave.vx * dt;
+      wave.y += Math.sin(wave.phase * 0.2) * 0.22;
+      wave.ttl -= dt;
+
+      for (const enemy of stage.enemies) {
+        if (wave.dead || wave.hitsLeft <= 0) break;
+        if (!enemy.alive || enemy.kicked) continue;
+        if (!overlap(wave, enemy)) continue;
+        const dir = wave.vx >= 0 ? 1 : -1;
+        kickEnemy(enemy, dir, 1.7 + (wave.power || 0) * 1.4, { immediateRemove: false, flyLifetime: 42 });
+        enemy.vx = dir * (6.2 + (wave.power || 0) * 2.2);
+        enemy.vy = -(4.1 + (wave.power || 0) * 1.1);
+        enemy.flash = 12;
+        wave.hitsLeft -= 1;
+        triggerImpact(1.5 + (wave.power || 0), enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 2.6);
+        playKickSfx(1.32 + (wave.power || 0) * 0.34);
+      }
+
+      if (!wave.dead && stage.boss.active && stage.boss.hp > 0 && overlap(wave, stage.boss) && stage.boss.invuln <= 0) {
+        const dir = wave.vx >= 0 ? 1 : -1;
+        const bossDamage = (wave.power || 0) >= 0.7 ? 2 : 1;
+        stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
+        stage.boss.invuln = 13;
+        stage.boss.vx += dir * (0.86 + (wave.power || 0) * 0.48);
+        stage.boss.vy = Math.min(stage.boss.vy, -(2.2 + (wave.power || 0) * 0.4));
+        wave.hitsLeft -= 1;
+        triggerImpact(2.0 + (wave.power || 0), stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.4, 3.0);
+        playKickSfx(1.52 + (wave.power || 0) * 0.28);
+        if (stage.boss.hp <= 0) {
+          defeatBoss();
+        }
+      }
+
+      for (const bullet of stage.hazardBullets) {
+        if (wave.dead || wave.hitsLeft <= 0) break;
+        if (bullet.dead) continue;
+        if (!overlap(wave, bullet)) continue;
+        bullet.dead = true;
+        wave.hitsLeft -= 1;
+      }
+
+      for (const shot of stage.bossShots) {
+        if (wave.dead || wave.hitsLeft <= 0) break;
+        if (shot.dead) continue;
+        if (!overlap(wave, shot)) continue;
+        shot.dead = true;
+        wave.hitsLeft -= 1;
+      }
+
+      if (wave.ttl <= 0 || wave.hitsLeft <= 0 || wave.x + wave.w < -24 || wave.x > stage.width + 24) {
+        wave.dead = true;
+        continue;
+      }
+
+      for (const s of solids) {
+        if (!overlap(wave, s)) continue;
+        wave.dead = true;
+        break;
+      }
+    }
+
+    stage.playerWaves = stage.playerWaves.filter((w) => !w.dead);
   }
 
   function resolveEnemyContactDamage() {
@@ -2168,6 +2237,7 @@
     stage.boss.spiralAngle = 0;
     stage.boss.invuln = 24;
     stage.bossShots = [];
+    stage.playerWaves = [];
     stage.hazardBullets = [];
     stage.enemies = [];
     stage.enemies.push(
@@ -2178,6 +2248,11 @@
     openingThemeActive = false;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
+    attackCooldown = 0;
+    attackChargeTimer = 0;
+    attackEffectTimer = 0;
+    attackEffectMode = "none";
+    attackEffectPhase = 0;
     stopInvincibleMusic();
 
     gameState = STATE.BOSS;
@@ -2200,6 +2275,11 @@
     stage.boss.vx = 0;
     stage.boss.vy = 0;
     stage.bossShots = [];
+    stage.playerWaves = [];
+    attackChargeTimer = 0;
+    attackEffectTimer = 0;
+    attackEffectMode = "none";
+    attackEffectPhase = 0;
     hitStopTimer = Math.max(hitStopTimer, 4);
     triggerImpact(3.1, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.5, 4.4);
     playKickSfx(2.2);
@@ -2660,6 +2740,7 @@
     const actions = {
       jumpPressed: input.jump && !prevInput.jump,
       attackPressed: input.attack && !prevInput.attack,
+      attackReleased: !input.attack && prevInput.attack,
       startPressed: input.start && !prevInput.start,
     };
 
@@ -2732,6 +2813,8 @@
     updateProteins(dt);
     updateBikes(dt);
     updateCheckpointTokens(dt);
+    updatePlayerAttack(dt, actions);
+    updatePlayerWaves(dt, solidsAfter);
     resolveEnemyContactDamage();
     resolveBreakWalls(dt);
     resolveHazards();
@@ -2796,6 +2879,8 @@
     updateBossShots(dt, solids);
     updateEnemies(dt, solids);
     updateHazardBullets(dt, solids);
+    updatePlayerAttack(dt, actions);
+    updatePlayerWaves(dt, solids);
     resolveEnemyContactDamage();
     resolveBossContactDamage();
     resolveBreakWalls(dt);
@@ -2859,6 +2944,12 @@
     cutsceneTime = 0;
     preBossCutsceneTimer = 0;
     cameraX = 0;
+    attackCooldown = 0;
+    attackChargeTimer = 0;
+    attackEffectTimer = 0;
+    attackEffectMode = "none";
+    attackEffectPhase = 0;
+    stage.playerWaves = [];
     stopInvincibleMusic();
     stopStageMusic(true);
     gameState = STATE.CUTSCENE;
@@ -3880,80 +3971,97 @@
     ctx.restore();
   }
 
+  function drawPlayerWave(wave) {
+    const x = Math.floor(wave.x - cameraX);
+    const y = Math.floor(wave.y);
+    const power = clamp(wave.power || 0, 0, 1);
+    const shift = Math.floor(wave.phase * 0.7) % 6;
+    const coreColors = ["#78f8ff", "#90d6ff", "#a4b7ff", "#ca97ff", "#ff9acb", "#ffb39a"];
+
+    ctx.fillStyle = `rgba(120, 240, 255, ${0.22 + power * 0.24})`;
+    ctx.fillRect(x - 3, y - 3, wave.w + 6, wave.h + 6);
+
+    for (let i = 0; i < 3; i += 1) {
+      const c = coreColors[(shift + i * 2) % coreColors.length];
+      const inset = i + 1;
+      const alpha = 0.86 - i * 0.24;
+      ctx.fillStyle = c;
+      ctx.globalAlpha = alpha;
+      ctx.fillRect(x + inset, y + inset, Math.max(1, wave.w - inset * 2), Math.max(1, wave.h - inset * 2));
+      ctx.globalAlpha = 1;
+    }
+
+    const trailDir = wave.vx >= 0 ? -1 : 1;
+    for (let i = 0; i < 3; i += 1) {
+      const len = 5 + i * 3 + power * 4;
+      const tx = x + (trailDir > 0 ? wave.w : -len);
+      const ty = y + 1 + i;
+      ctx.fillStyle = `rgba(255, 230, 170, ${0.32 - i * 0.08})`;
+      ctx.fillRect(Math.floor(tx + trailDir * i * 2), ty, Math.floor(len), 1);
+    }
+  }
+
   function drawAutoWeaponEffects() {
-    if (attackEffectTimer <= 0) return;
+    const inPlayableState = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    if (!inPlayableState) return;
 
     const cx = Math.floor(player.x - cameraX + player.w * 0.5);
     const cy = Math.floor(player.y + 11);
-    const mode = attackEffectMode;
+    const dir = player.facing;
 
-    if (mode === "hammer") {
-      const dir = player.facing;
-      const hx = Math.floor(cx + dir * 8);
-      const topY = cy - 15;
-      const bottomY = cy + 11;
-      const cycle = (Math.sin(attackEffectPhase * 1.9) + 1) * 0.5;
-      const hy = Math.floor(topY + (bottomY - topY) * cycle);
+    if (input.attack && attackCooldown <= 0 && attackChargeTimer > 0) {
+      const chargeRatio = clamp(attackChargeTimer / ATTACK_CHARGE_MAX, 0, 1);
+      const auraA = 0.12 + chargeRatio * 0.2;
+      const auraB = 0.1 + chargeRatio * 0.18;
+      const pulse = 0.5 + Math.sin(player.anim * 0.3) * 0.5;
+      const auraW = 20 + Math.floor(chargeRatio * 12);
+      const auraH = 18 + Math.floor(chargeRatio * 8);
 
-      ctx.fillStyle = "rgba(255,220,160,0.28)";
-      ctx.fillRect(hx - 2, topY - 2, 4, bottomY - topY + 6);
+      ctx.fillStyle = `rgba(120, 225, 255, ${auraA + pulse * 0.08})`;
+      ctx.fillRect(cx - Math.floor(auraW * 0.5), cy - Math.floor(auraH * 0.6), auraW, auraH);
+      ctx.fillStyle = `rgba(255, 198, 130, ${auraB})`;
+      ctx.fillRect(cx - Math.floor((auraW - 6) * 0.5), cy - Math.floor((auraH - 6) * 0.6), auraW - 6, auraH - 6);
 
-      ctx.fillStyle = "#c8d3ea";
-      ctx.fillRect(hx - 4, hy - 3, 8, 4);
-      ctx.fillStyle = "#98a8c4";
-      ctx.fillRect(hx - 3, hy - 2, 6, 2);
-      ctx.fillStyle = "#6b4a32";
-      ctx.fillRect(hx - 1, hy + 1, 2, 8);
-      ctx.fillStyle = "#4d331f";
-      ctx.fillRect(hx - 1, hy + 8, 2, 2);
-
-      ctx.fillStyle = "rgba(255, 240, 188, 0.5)";
-      for (let i = 0; i < 3; i += 1) {
-        ctx.fillRect(hx - 6 + i * 6, hy + 7 + i, 4, 1);
-      }
-      return;
+      const barW = 28;
+      const barX = cx - Math.floor(barW * 0.5);
+      const barY = Math.floor(player.y - 7);
+      ctx.fillStyle = "rgba(8, 14, 25, 0.84)";
+      ctx.fillRect(barX, barY, barW, 4);
+      ctx.fillStyle = chargeRatio >= ATTACK_WAVE_CHARGE_MIN / ATTACK_CHARGE_MAX ? "#ffcf72" : "#89e4ff";
+      ctx.fillRect(barX + 1, barY + 1, Math.max(1, Math.floor((barW - 2) * chargeRatio)), 2);
     }
 
-    if (mode === "glove") {
-      const dir = player.facing;
-      const startX = dir > 0 ? cx + 7 : cx - 7;
-      const gy = cy - 1;
-      const phase = player.anim * 0.95;
-      const fists = 7;
+    if (attackEffectTimer <= 0) return;
 
-      for (let i = 0; i < fists; i += 1) {
-        const wave = phase * 3.4 + i * 0.9;
-        const reach = 5 + i * 3 + Math.sin(wave) * 1.6;
-        const fx = startX + dir * reach;
-        const fy = gy + (i % 2 === 0 ? -2 : 1) + Math.floor(Math.cos(wave * 1.4) * 1.2);
-        const fistX = Math.floor(dir > 0 ? fx : fx - 6);
-        const alpha = clamp(0.95 - i * 0.11, 0.2, 0.95);
-        const g = clamp(232 - i * 12, 140, 232);
-        const b = clamp(232 - i * 8, 150, 232);
+    const mode = attackEffectMode;
+    const ratio = clamp(attackEffectTimer / (mode === "wave" ? 16 : 11), 0, 1);
+    const reach = mode === "wave" ? 30 : 22;
+    const frontX = dir > 0 ? cx + 7 : cx - 7;
+    const baseY = cy - 1;
 
-        ctx.fillStyle = `rgba(255, ${g}, ${b}, ${alpha})`;
-        ctx.fillRect(fistX, fy, 6, 3);
-        ctx.fillStyle = `rgba(244, ${clamp(g - 36, 110, 200)}, ${clamp(b - 30, 110, 200)}, ${alpha})`;
-        ctx.fillRect(fistX + 1, fy + 1, 4, 1);
+    for (let i = 0; i < 4; i += 1) {
+      const spread = i * 2 + Math.floor((1 - ratio) * 5);
+      const len = reach - i * 4 + Math.sin((attackEffectPhase + i) * 0.8) * 2;
+      const alpha = 0.55 - i * 0.1;
+      const sx = dir > 0 ? frontX + spread : frontX - len - spread;
+      const sy = baseY - 3 + i * 2;
+      ctx.fillStyle = mode === "wave"
+        ? `rgba(140, 215, 255, ${alpha})`
+        : `rgba(255, 235, 176, ${alpha})`;
+      ctx.fillRect(Math.floor(sx), sy, Math.max(2, Math.floor(len)), 1);
+    }
 
-        ctx.fillStyle = `rgba(255, 236, 175, ${0.32 - i * 0.03})`;
-        if (dir > 0) {
-          ctx.fillRect(fistX - 6, fy + 1, 6, 1);
-          ctx.fillRect(fistX + 5, fy + 1, 2, 1);
-        } else {
-          ctx.fillRect(fistX + 6, fy + 1, 6, 1);
-          ctx.fillRect(fistX - 1, fy + 1, 2, 1);
-        }
-      }
+    const fistX = dir > 0 ? frontX + 2 : frontX - 8;
+    ctx.fillStyle = "#f5ddcf";
+    ctx.fillRect(fistX, baseY - 1, 6, 3);
+    ctx.fillStyle = "#2a3348";
+    ctx.fillRect(fistX + 1, baseY - 2, 4, 1);
 
-      const flashX = Math.floor(startX + dir * (25 + Math.sin(phase * 2.6) * 2));
-      ctx.fillStyle = "rgba(255, 245, 188, 0.6)";
-      for (let i = 0; i < 4; i += 1) {
-        const sx = dir > 0 ? flashX + i * 2 : flashX - i * 2;
-        const sy = gy - 2 + i;
-        ctx.fillRect(sx, sy, 2, 1);
-      }
-      return;
+    if (mode === "wave") {
+      const flareX = dir > 0 ? frontX + 15 : frontX - 15;
+      ctx.fillStyle = "rgba(255, 246, 203, 0.7)";
+      ctx.fillRect(flareX - 2, baseY - 4, 4, 8);
+      ctx.fillRect(flareX - 6, baseY - 1, 12, 2);
     }
   }
 
@@ -4227,6 +4335,11 @@
       ctx.fillRect(bx + 1, by + 1, b.w - 2, b.h - 2);
     }
 
+    for (const wave of stage.playerWaves) {
+      if (wave.dead) continue;
+      drawPlayerWave(wave);
+    }
+
     drawHitSparks();
     drawBoss();
     drawGoal();
@@ -4238,6 +4351,7 @@
       } else {
         drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
       }
+      drawAutoWeaponEffects();
     }
 
     ctx.restore();
@@ -4843,6 +4957,7 @@
   bindHoldButton("btn-left", "left");
   bindHoldButton("btn-right", "right");
   bindHoldButton("btn-jump", "jump");
+  bindHoldButton("btn-attack", "attack");
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -4880,6 +4995,8 @@
     ArrowUp: "jump",
     KeyW: "jump",
     Space: "jump",
+    KeyJ: "attack",
+    KeyF: "attack",
     Enter: "start",
   };
 
