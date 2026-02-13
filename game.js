@@ -13,6 +13,7 @@
   const MAX_FALL = 8.2;
 
   const STATE = {
+    TITLE: "title",
     CUTSCENE: "cutscene",
     PRE_BOSS: "pre_boss",
     PLAY: "play",
@@ -42,7 +43,8 @@
     start: false,
   };
 
-  let gameState = STATE.CUTSCENE;
+  let gameState = STATE.TITLE;
+  let titleTimer = 0;
   let cutsceneTime = 0;
   let preBossCutsceneTimer = 0;
   let deadTimer = 0;
@@ -398,7 +400,7 @@
   }
 
   function startOpeningTheme() {
-    if (gameState !== STATE.CUTSCENE && gameState !== STATE.PRE_BOSS) return;
+    if (gameState !== STATE.TITLE && gameState !== STATE.CUTSCENE && gameState !== STATE.PRE_BOSS) return;
     ensureInvincibleMusic();
     if (!invincibleMusic) return;
     if (!audioUnlockedByUser && openingThemeMutedAutoplayTried && invincibleMusic.paused) return;
@@ -601,7 +603,7 @@
       }
     }
 
-    if (gameState === STATE.CUTSCENE || gameState === STATE.PRE_BOSS) {
+    if (gameState === STATE.TITLE || gameState === STATE.CUTSCENE || gameState === STATE.PRE_BOSS) {
       startOpeningTheme();
     }
   }
@@ -2907,6 +2909,26 @@
     cameraX = clamp(player.x + player.w * 0.5 - W * 0.45, BOSS_ARENA.minX - 120, stage.width - W);
   }
 
+  function beginOpeningCutscene() {
+    titleTimer = 0;
+    cutsceneTime = 0;
+    preBossCutsceneTimer = 0;
+    cameraX = 0;
+    gameState = STATE.CUTSCENE;
+    startOpeningTheme();
+  }
+
+  function updateTitle(dt, actions) {
+    cameraX = 0;
+    titleTimer += dt;
+    player.anim += dt * 0.45;
+    startOpeningTheme();
+
+    if (actions.startPressed || actions.jumpPressed || actions.attackPressed) {
+      beginOpeningCutscene();
+    }
+  }
+
   function updateCutscene(dt, actions) {
     cameraX = 0;
     cutsceneTime += dt;
@@ -2954,6 +2976,7 @@
 
   function returnToTitle() {
     deadReason = "";
+    titleTimer = 0;
     deathPauseTimer = 0;
     deathAnimActive = false;
     deathJumpVy = 0;
@@ -2970,7 +2993,7 @@
     stage.playerWaves = [];
     stopInvincibleMusic();
     stopStageMusic(true);
-    gameState = STATE.CUTSCENE;
+    gameState = STATE.TITLE;
     startOpeningTheme();
   }
 
@@ -3018,14 +3041,17 @@
     }
 
     if (clearTimer > 180 && (actions.startPressed || actions.jumpPressed)) {
-      cutsceneTime = 0;
-      cameraX = 0;
-      gameState = STATE.CUTSCENE;
+      returnToTitle();
     }
   }
 
   function update(dt, actions) {
     updateStageMusicFade(dt);
+
+    if (gameState === STATE.TITLE) {
+      updateTitle(dt, actions);
+      return;
+    }
 
     if (gameState === STATE.CUTSCENE) {
       updateCutscene(dt, actions);
@@ -4427,6 +4453,55 @@
     }
   }
 
+  function drawTitle() {
+    const t = titleTimer;
+    const savedCamera = cameraX;
+    cameraX = Math.floor((Math.sin(t * 0.012) * 0.5 + 0.5) * 220);
+    drawSkyGradient();
+    drawParallax();
+    cameraX = savedCamera;
+
+    ctx.fillStyle = "rgba(6, 8, 14, 0.48)";
+    ctx.fillRect(0, 0, W, H);
+
+    const titleY = 36 + Math.sin(t * 0.07) * 1.5;
+    ctx.fillStyle = "rgba(34, 18, 28, 0.9)";
+    ctx.fillRect(66, 20, 188, 52);
+    ctx.fillStyle = "rgba(92, 46, 66, 0.8)";
+    ctx.fillRect(68, 22, 184, 7);
+    ctx.fillStyle = "rgba(255, 190, 160, 0.16)";
+    ctx.fillRect(68, 29, 184, 2);
+
+    ctx.fillStyle = "#2a1020";
+    ctx.font = "34px monospace";
+    ctx.fillText("RRR", 108, titleY + 1);
+    ctx.fillStyle = "#ffe0cf";
+    ctx.fillText("RRR", 106, titleY - 1);
+    ctx.fillStyle = "#ff6f8c";
+    ctx.font = "10px monospace";
+    ctx.fillText("Rila Riders Rescue", 112, 58);
+
+    const heroBob = Math.sin(t * 0.12) * 1.2;
+    drawHero(68, 108 + heroBob, 1, t * 1.08, 1.4);
+    drawBoyfriend(228, 104 + heroBob * 0.4);
+
+    ctx.fillStyle = "rgba(12, 10, 16, 0.82)";
+    ctx.fillRect(45, 126, 230, 34);
+    ctx.strokeStyle = "rgba(223, 177, 181, 0.7)";
+    ctx.strokeRect(45, 126, 230, 34);
+    ctx.fillStyle = "#f5ebf1";
+    ctx.font = "10px monospace";
+    ctx.fillText("彼氏救出アクション / 都会ステージ", 66, 134);
+    ctx.fillText("バイクで15秒無敵・踏みつけ&チャージ攻撃", 52, 146);
+
+    const blink = Math.floor(t / 24) % 2 === 0;
+    if (blink) {
+      ctx.fillStyle = "#ffe7b0";
+      ctx.font = "11px monospace";
+      ctx.fillText("Tap / Enter でスタート", 86, 168);
+    }
+  }
+
   function drawCutscene() {
     const t = cutsceneTime;
 
@@ -4869,7 +4944,9 @@
   }
 
   function drawPs1Overlay() {
-    ctx.fillStyle = "rgba(10,12,18,0.08)";
+    const filmTick = Math.floor((player.anim + titleTimer) * 0.8);
+
+    ctx.fillStyle = "rgba(10,12,18,0.1)";
     for (let y = 0; y < H; y += 2) {
       ctx.fillRect(0, y, W, 1);
     }
@@ -4883,11 +4960,23 @@
       214
     );
     vignette.addColorStop(0, "rgba(0,0,0,0)");
-    vignette.addColorStop(1, "rgba(0,0,0,0.22)");
+    vignette.addColorStop(1, "rgba(0,0,0,0.28)");
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = "rgba(170,205,255,0.04)";
+    for (let y = 0; y < H; y += 4) {
+      for (let x = 0; x < W; x += 4) {
+        const p = (x + y + filmTick) % 8;
+        if (p < 2) continue;
+        ctx.fillStyle = p < 5 ? "rgba(220, 190, 160, 0.028)" : "rgba(150, 190, 255, 0.022)";
+        ctx.fillRect(x, y, 2, 2);
+      }
+    }
+
+    ctx.fillStyle = "rgba(170,205,255,0.05)";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "rgba(255, 166, 140, 0.03)";
     ctx.fillRect(0, 0, W, H);
   }
 
@@ -4919,6 +5008,12 @@
 
   function render() {
     ctx.clearRect(0, 0, W, H);
+
+    if (gameState === STATE.TITLE) {
+      drawTitle();
+      drawPs1Overlay();
+      return;
+    }
 
     if (gameState === STATE.CUTSCENE) {
       drawCutscene();
@@ -4999,6 +5094,11 @@
     e.preventDefault();
     unlockAudio();
 
+    if (gameState === STATE.TITLE) {
+      beginOpeningCutscene();
+      return;
+    }
+
     if (gameState === STATE.CUTSCENE) {
       startOpeningTheme();
       return;
@@ -5011,9 +5111,7 @@
 
     if (gameState === STATE.CLEAR) {
       if (clearTimer > 180) {
-        cutsceneTime = 0;
-        cameraX = 0;
-        gameState = STATE.CUTSCENE;
+        returnToTitle();
       }
       return;
     }
