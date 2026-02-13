@@ -3746,7 +3746,7 @@
       ctx.fillRect(dx, dy, w, h);
     };
 
-    // Hair: round bob silhouette with clear center bangs.
+    // Hair: round bob silhouette.
     paint("#05070b", 2, 0, 8, 1);
     paint("#070a10", 1, 1, 10, 2);
     paint("#0b1020", 0, 3, 12, 2);
@@ -3767,6 +3767,12 @@
     paint("#fff8f4", 4, 6, 1, 1);
     paint("#fff8f4", 7, 6, 1, 1);
     paint("#c48a83", 5, 8, 2, 1);
+
+    // Front bangs overlay while riding.
+    paint("#0a0f1b", 3, 5, 1, 2);
+    paint("#05070b", 5, 5, 2, 2);
+    paint("#0a0f1b", 8, 5, 1, 2);
+    paint("#162038", 6, 5, 1, 1);
 
     // Neck + rider jacket torso.
     paint("#f3ddd1", 5, 9, 2, 1);
