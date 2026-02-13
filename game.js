@@ -112,6 +112,9 @@
   let audioUnlockedByUser = false;
   let openingThemeMutedAutoplayTried = false;
   let rilaVoiceNextAt = 0;
+  let enemyDefeatSeNextAt = 0;
+  let uiSeNextAt = 0;
+  let parrySeNextAt = 0;
   let robotVoiceCurve = null;
   let bgmStarted = false;
 
@@ -731,6 +734,159 @@
     tone.stop(now + 0.1);
   }
 
+  function playEnemyDefeatSfx(power = 1) {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+    if (now < enemyDefeatSeNextAt) return;
+    enemyDefeatSeNextAt = now + 0.045;
+    const p = clamp(power, 0.8, 5.2);
+
+    const lead = audioCtx.createOscillator();
+    const leadGain = audioCtx.createGain();
+    lead.type = "square";
+    lead.frequency.setValueAtTime(390 + p * 70, now);
+    lead.frequency.exponentialRampToValueAtTime(150 + p * 26, now + 0.11);
+    leadGain.gain.setValueAtTime(0.0001, now);
+    leadGain.gain.exponentialRampToValueAtTime(0.075, now + 0.006);
+    leadGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+    lead.connect(leadGain);
+    leadGain.connect(audioCtx.destination);
+    lead.start(now);
+    lead.stop(now + 0.13);
+
+    const bass = audioCtx.createOscillator();
+    const bassGain = audioCtx.createGain();
+    bass.type = "triangle";
+    bass.frequency.setValueAtTime(180 + p * 24, now);
+    bass.frequency.exponentialRampToValueAtTime(84, now + 0.13);
+    bassGain.gain.setValueAtTime(0.0001, now);
+    bassGain.gain.exponentialRampToValueAtTime(0.04, now + 0.01);
+    bassGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    bass.connect(bassGain);
+    bassGain.connect(audioCtx.destination);
+    bass.start(now);
+    bass.stop(now + 0.15);
+
+    if (bgmNoiseBuffer) {
+      const src = audioCtx.createBufferSource();
+      const hp = audioCtx.createBiquadFilter();
+      const ng = audioCtx.createGain();
+      src.buffer = bgmNoiseBuffer;
+      hp.type = "highpass";
+      hp.frequency.setValueAtTime(1200, now);
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(0.03, now + 0.004);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+      src.connect(hp);
+      hp.connect(ng);
+      ng.connect(audioCtx.destination);
+      src.start(now);
+      src.stop(now + 0.07);
+    }
+  }
+
+  function playParrySfx() {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+    if (now < parrySeNextAt) return;
+    parrySeNextAt = now + 0.055;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(1200, now);
+    osc.frequency.exponentialRampToValueAtTime(760, now + 0.07);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.055, now + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.09);
+  }
+
+  function playCheckpointSfx() {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+    if (now < uiSeNextAt) return;
+    uiSeNextAt = now + 0.1;
+
+    const notes = [660, 880, 1040];
+    for (let i = 0; i < notes.length; i += 1) {
+      const t = now + i * 0.045;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(notes[i], t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.045, t + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.07);
+    }
+  }
+
+  function playUiStartSfx() {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+    if (now < uiSeNextAt) return;
+    uiSeNextAt = now + 0.11;
+
+    const notes = [520, 700, 920];
+    for (let i = 0; i < notes.length; i += 1) {
+      const t = now + i * 0.03;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(notes[i], t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.05, t + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.065);
+    }
+  }
+
+  function playBossStartSfx() {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(130, now);
+    osc.frequency.exponentialRampToValueAtTime(250, now + 0.2);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.25);
+
+    if (bgmNoiseBuffer) {
+      const src = audioCtx.createBufferSource();
+      const bp = audioCtx.createBiquadFilter();
+      const ng = audioCtx.createGain();
+      src.buffer = bgmNoiseBuffer;
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(420, now);
+      bp.Q.setValueAtTime(0.7, now);
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(0.04, now + 0.01);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+      src.connect(bp);
+      bp.connect(ng);
+      ng.connect(audioCtx.destination);
+      src.start(now);
+      src.stop(now + 0.17);
+    }
+  }
+
   function getRobotVoiceCurve() {
     if (robotVoiceCurve) return robotVoiceCurve;
     const size = 257;
@@ -1341,6 +1497,7 @@
     if (immediateRemove) {
       enemy.alive = false;
     }
+    playEnemyDefeatSfx(power);
   }
 
   function triggerKickBurst(x, y, power = 1) {
@@ -1558,6 +1715,7 @@
       hudMessage = `${cp.label} セーブ`;
       hudTimer = 90;
       playPowerupSfx();
+      playCheckpointSfx();
       triggerImpact(1.2, token.x + token.w * 0.5, floatY + token.h * 0.5, 2.0);
     }
   }
@@ -1849,6 +2007,7 @@
         playerLives = Math.min(99, playerLives + 1);
         hudMessage = `PROTEIN ${pLv}! 1UP`;
         hudTimer = 90;
+        playCheckpointSfx();
       } else {
         hudMessage = `PROTEIN BOOST! SPD +${speedPct}%`;
         hudTimer = 64;
@@ -1896,6 +2055,7 @@
     };
 
     let hits = 0;
+    let parryHits = 0;
     let hitX = px + dir * (12 + reach * 0.48);
     let hitY = player.y + 10;
     const hitPower = 1.42 + chargeRatio * 1.38 + pLv * 0.02;
@@ -1916,12 +2076,14 @@
       if (!overlap(hitBox, b)) continue;
       b.dead = true;
       hits += 1;
+      parryHits += 1;
     }
 
     for (const bs of stage.bossShots) {
       if (!overlap(hitBox, bs)) continue;
       bs.dead = true;
       hits += 1;
+      parryHits += 1;
     }
 
     if (stage.boss.active && stage.boss.hp > 0 && overlap(hitBox, stage.boss) && stage.boss.invuln <= 0) {
@@ -1967,6 +2129,7 @@
     triggerKickBurst(hitX, hitY, 1.8 + chargeRatio * 1.35 + hits * 0.08);
     triggerImpact(2.2 + chargeRatio * 1.6, hitX, hitY, 3.4 + chargeRatio * 1.2);
     playKickSfx(1.28 + chargeRatio * 0.52);
+    if (parryHits > 0) playParrySfx();
     playRilaRobotVoice("attack");
 
     attackCooldown = strongWave ? ATTACK_WAVE_COOLDOWN : ATTACK_PUNCH_COOLDOWN;
@@ -1997,6 +2160,7 @@
 
     for (const wave of stage.playerWaves) {
       if (wave.dead) continue;
+      let parryHits = 0;
       wave.phase += dt;
       wave.x += wave.vx * dt;
       wave.y += Math.sin(wave.phase * 0.2) * 0.22;
@@ -2037,6 +2201,7 @@
         if (!overlap(wave, bullet)) continue;
         bullet.dead = true;
         wave.hitsLeft -= 1;
+        parryHits += 1;
       }
 
       for (const shot of stage.bossShots) {
@@ -2045,7 +2210,10 @@
         if (!overlap(wave, shot)) continue;
         shot.dead = true;
         wave.hitsLeft -= 1;
+        parryHits += 1;
       }
+
+      if (parryHits > 0) playParrySfx();
 
       if (wave.ttl <= 0 || wave.hitsLeft <= 0 || wave.x + wave.w < -24 || wave.x > stage.width + 24) {
         wave.dead = true;
@@ -2225,6 +2393,7 @@
 
   function startBossBattle() {
     if (stage.boss.started) return;
+    playBossStartSfx();
 
     // Boss arena should be a flat duel zone.
     stage.solids = stage.solids.filter((s) => {
@@ -2910,6 +3079,7 @@
   }
 
   function beginOpeningCutscene() {
+    playUiStartSfx();
     titleTimer = 0;
     cutsceneTime = 0;
     preBossCutsceneTimer = 0;
