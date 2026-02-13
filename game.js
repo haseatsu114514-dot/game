@@ -2056,7 +2056,7 @@
       const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
       if (b.invuln <= 0 && b.hp > 0) {
         b.hp = Math.max(0, b.hp - 1);
-        b.invuln = 22;
+        b.invuln = 20;
         b.vx += dir * 0.72;
         b.vy = Math.min(b.vy, -2.2);
         player.vy = -6.4;
@@ -2108,7 +2108,7 @@
 
     stage.boss.started = true;
     stage.boss.active = true;
-    stage.boss.maxHp = 10;
+    stage.boss.maxHp = 9;
     stage.boss.hp = stage.boss.maxHp;
     stage.boss.x = 7100;
     stage.boss.y = 124;
@@ -2365,7 +2365,7 @@
         } else if (pattern === 1) {
           boss.mode = "shoot";
           boss.modeTimer = rage ? 78 : 66;
-          boss.shotCooldown = rage ? 10 : 14;
+          boss.shotCooldown = rage ? 11 : 15;
         } else if (pattern === 2) {
           boss.mode = "leap_prep";
           boss.modeTimer = rage ? 20 : 26;
@@ -2373,17 +2373,17 @@
         } else if (pattern === 3) {
           boss.mode = "ring";
           boss.modeTimer = rage ? 82 : 68;
-          boss.shotCooldown = rage ? 13 : 17;
+          boss.shotCooldown = rage ? 14 : 18;
           boss.vx *= 0.42;
         } else if (pattern === 4) {
           boss.mode = "rain";
           boss.modeTimer = rage ? 94 : 80;
-          boss.shotCooldown = rage ? 12 : 16;
+          boss.shotCooldown = rage ? 13 : 17;
           boss.vx *= 0.4;
         } else {
           boss.mode = "spiral";
           boss.modeTimer = rage ? 88 : 74;
-          boss.shotCooldown = rage ? 11 : 15;
+          boss.shotCooldown = rage ? 12 : 16;
           boss.spiralAngle = (boss.spiralAngle + (rage ? 22 : 16)) % 360;
           boss.vx *= 0.35;
         }
@@ -2429,7 +2429,7 @@
             ttl: rage ? 148 : 136,
           });
         }
-        boss.shotCooldown = rage ? 11 : 16;
+        boss.shotCooldown = rage ? 12 : 17;
       }
 
       if (boss.modeTimer <= 0) {
@@ -2468,7 +2468,7 @@
       boss.vx *= Math.pow(rage ? 0.76 : 0.82, dt);
       if (boss.shotCooldown <= 0) {
         emitBossRingShots(boss, rage);
-        boss.shotCooldown = rage ? 16 : 22;
+        boss.shotCooldown = rage ? 17 : 23;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -2481,7 +2481,7 @@
       boss.vx = clamp(boss.vx, -0.72, 0.72);
       if (boss.shotCooldown <= 0) {
         emitBossRainBurst(boss, rage);
-        boss.shotCooldown = rage ? 15 : 21;
+        boss.shotCooldown = rage ? 16 : 22;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -2495,7 +2495,7 @@
       if (boss.shotCooldown <= 0) {
         emitBossSpiralShots(boss, rage);
         boss.spiralAngle = (boss.spiralAngle + (rage ? 36 : 27)) % 360;
-        boss.shotCooldown = rage ? 10 : 14;
+        boss.shotCooldown = rage ? 11 : 15;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
