@@ -46,6 +46,7 @@
   let cutsceneTime = 0;
   let preBossCutsceneTimer = 0;
   let deadTimer = 0;
+  let deadTimerMax = 0;
   let clearTimer = 0;
   let deaths = 0;
   let cameraX = 0;
@@ -80,7 +81,7 @@
   let weaponHudTimer = 0;
   let attackCooldown = 0;
   let attackEffectTimer = 0;
-  let attackEffectMode = "kick";
+  let attackEffectMode = "none";
   let attackEffectPhase = 0;
   let hitSparks = [];
   let deathFlashTimer = 0;
@@ -1080,25 +1081,6 @@
     spawnHitSparks(x, y, "#ffe8a0", "#ff5d53");
   }
 
-  function repositionPlayerAfterDamage() {
-    if (gameState === STATE.BOSS) {
-      player.x = BOSS_ARENA.minX + 26;
-      player.y = 132;
-      player.vx = 0;
-      player.vy = -1.8;
-      cameraX = clamp(BOSS_ARENA.minX - 120, 0, stage.width - W);
-      return;
-    }
-
-    const cp = stage.checkpoints[checkpointIndex];
-    player.x = cp.x;
-    player.y = cp.y;
-    player.vx = 0;
-    player.vy = -1.2;
-    player.onGround = false;
-    cameraX = clamp(player.x - 120, 0, stage.width - W);
-  }
-
   function killPlayer(reason, options = {}) {
     const ignoreInvincible = options.ignoreInvincible === true;
     const instantGameOver = options.instantGameOver === true;
@@ -1124,9 +1106,13 @@
       triggerImpact(1.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.8);
 
       if (playerHearts > 0) {
-        repositionPlayerAfterDamage();
+        const knockDir = player.facing > 0 ? -1 : 1;
+        player.vx = knockDir * 2.1;
+        player.vy = -3.0;
+        player.onGround = false;
+        hitStopTimer = Math.max(hitStopTimer, 5.0);
         hudMessage = `${reason} -1ハート`;
-        hudTimer = 80;
+        hudTimer = 66;
         return;
       }
     } else {
@@ -1139,10 +1125,11 @@
 
     playerLives = Math.max(0, playerLives - 1);
     gameState = STATE.DEAD;
-    deadTimer = playerLives > 0 ? 132 : 152;
-    deathFlashTimer = 26;
-    deathShakeTimer = 22;
-    deathPauseTimer = 20;
+    deadTimer = playerLives > 0 ? 188 : 228;
+    deadTimerMax = deadTimer;
+    deathFlashTimer = 34;
+    deathShakeTimer = 26;
+    deathPauseTimer = 34;
     deathAnimActive = false;
     deathJumpVy = 0;
     player.vx = 0;
@@ -1168,7 +1155,7 @@
     attackCooldown = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
-    attackEffectMode = "kick";
+    attackEffectMode = "none";
     deaths += 1;
     hudMessage = playerLives > 0 ? `${reason} / 残機 x${playerLives}` : `${reason} / 残機 0`;
     hudTimer = 80;
@@ -1209,7 +1196,7 @@
     attackCooldown = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
-    attackEffectMode = "kick";
+    attackEffectMode = "none";
     hitSparks = [];
     deathFlashTimer = 0;
     deathShakeTimer = 0;
@@ -1222,6 +1209,7 @@
     gameState = STATE.PLAY;
     hudMessage = "りら: ホームパーティー会場へ殴り込み、彼氏を救出せよ";
     hudTimer = 170;
+    deadTimerMax = 0;
     startStageMusic(true);
     setBgmVolume(0, 0);
     setBgmVolume(BGM_NORMAL_VOL, 0.08);
@@ -1254,7 +1242,7 @@
     attackCooldown = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
-    attackEffectMode = "kick";
+    attackEffectMode = "none";
     hitSparks = [];
     deathFlashTimer = 0;
     deathShakeTimer = 0;
@@ -1266,6 +1254,7 @@
     gameState = STATE.PLAY;
     hudMessage = `${cp.label} から再開`;
     hudTimer = 70;
+    deadTimerMax = 0;
     startStageMusic(true);
     setBgmVolume(0, 0);
     setBgmVolume(BGM_NORMAL_VOL, 0.08);
@@ -1613,20 +1602,21 @@
     }
     if (hammerTimer > 0) return "hammer";
     if (gloveTimer > 0) return "glove";
-    return "kick";
+    return null;
   }
 
   function executePlayerAttack(mode) {
+    if (mode !== "hammer" && mode !== "glove") return;
     const pLv = proteinLevel();
     const gf = powerFactor();
     const px = player.x + player.w * 0.5;
     const dir = player.facing;
 
-    let hitBox = { x: px - 6, y: player.y + 10, w: 12, h: 10 };
+    let hitBox = { x: px - 6, y: player.y + 8, w: 12, h: 12 };
     let power = 1.06 + pLv * 0.05;
     let burstPower = 1.3 + pLv * 0.04;
     let cooldown = 10;
-    let hitLabel = "キック!";
+    let hitLabel = "アタック!";
 
     if (mode === "hammer") {
       const hitX = dir > 0 ? player.x + player.w - 2 : player.x - 14;
@@ -1643,10 +1633,6 @@
       burstPower = 1.45 + pLv * 0.04;
       cooldown = 3.4;
       hitLabel = "百裂拳!";
-    } else {
-      const range = 19 + pLv * 0.25;
-      const hitX = dir > 0 ? player.x + player.w - 1 : player.x - range;
-      hitBox = { x: hitX, y: player.y + 10, w: range, h: 10 };
     }
 
     attackCooldown = cooldown;
@@ -1689,7 +1675,7 @@
       if (wall.hp <= 0) continue;
       if (wall.hitCooldown > 0) continue;
       if (!overlap(hitBox, wall)) continue;
-      const wallDamage = mode === "hammer" ? 3 : mode === "glove" ? 1 : 2;
+      const wallDamage = mode === "hammer" ? 3 : 1;
       wall.hp = Math.max(0, wall.hp - wallDamage);
       wall.hitCooldown = mode === "hammer" ? 12 : 16;
       hitX = wall.x + wall.w * 0.5;
@@ -1700,7 +1686,7 @@
     }
 
     if (stage.boss.active && stage.boss.hp > 0 && overlap(hitBox, stage.boss) && stage.boss.invuln <= 0) {
-      const bossDamage = mode === "hammer" ? 2 : mode === "glove" ? 1 : 1 + Math.floor(pLv / 12);
+      const bossDamage = mode === "hammer" ? 2 : 1;
       stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
       stage.boss.invuln = 16;
       stage.boss.vx += dir * (0.8 + bossDamage * 0.2);
@@ -1726,8 +1712,6 @@
         hudMessage = kickCombo > 1 ? `${hitLabel} x${kickCombo}` : hitLabel;
         hudTimer = 28;
       }
-    } else if (mode === "kick") {
-      playKickSfx(1.1);
     }
   }
 
@@ -1735,6 +1719,13 @@
     const hasWeapon = hammerTimer > 0 || gloveTimer > 0;
     const wantRepeat = hasWeapon && input.attack;
     if (attackCooldown > 0) return;
+    if (!hasWeapon) {
+      if (actions.attackPressed) {
+        hudMessage = "武器アイテム中のみ攻撃できる";
+        hudTimer = 24;
+      }
+      return;
+    }
     if (!actions.attackPressed && !wantRepeat) return;
     executePlayerAttack(currentAttackMode());
   }
@@ -2215,6 +2206,7 @@
     deathAnimActive = false;
     deathJumpVy = 0;
     deadTimer = 0;
+    deadTimerMax = 0;
     cutsceneTime = 0;
     preBossCutsceneTimer = 0;
     cameraX = 0;
@@ -2223,7 +2215,7 @@
     gameState = STATE.CUTSCENE;
   }
 
-  function updateDead(dt, actions) {
+  function updateDead(dt) {
     deadTimer = Math.max(0, deadTimer - dt);
     deathFlashTimer = Math.max(0, deathFlashTimer - dt);
     deathShakeTimer = Math.max(0, deathShakeTimer - dt);
@@ -2240,15 +2232,6 @@
       player.y += deathJumpVy * dt;
       deathJumpVy = Math.min(MAX_FALL + 2.2, deathJumpVy + GRAVITY * 1.08 * dt);
       player.anim += dt * 0.45;
-    }
-
-    if (actions.startPressed || actions.jumpPressed || actions.attackPressed) {
-      deathPauseTimer = 0;
-      if (!deathAnimActive) {
-        deathAnimActive = true;
-        deathJumpVy = -5.6;
-      }
-      deadTimer = Math.min(deadTimer, playerLives > 0 ? 12 : 24);
     }
 
     if (deadTimer > 0) {
@@ -2301,7 +2284,7 @@
     }
 
     if (gameState === STATE.DEAD) {
-      updateDead(dt, actions);
+      updateDead(dt);
       return;
     }
 
@@ -3123,26 +3106,6 @@
       }
       return;
     }
-
-    const dir = player.facing;
-    const t = 1 - clamp(attackEffectTimer / 9, 0, 1);
-    const arc = Math.sin(t * Math.PI);
-    const kx = Math.floor((dir > 0 ? cx + 8 : cx - 12) + dir * arc * 9);
-    const ky = Math.floor(cy + 6 - arc * 5);
-
-    ctx.fillStyle = "rgba(255,238,180,0.42)";
-    ctx.fillRect(kx - 2, ky - 2, 8, 5);
-    ctx.fillStyle = "#ffeec0";
-    ctx.fillRect(kx, ky - 1, 6, 3);
-    ctx.fillStyle = "#ffb06d";
-    ctx.fillRect(kx + (dir > 0 ? 5 : 0), ky, 2, 2);
-
-    ctx.fillStyle = "rgba(255, 215, 138, 0.36)";
-    for (let i = 0; i < 4; i += 1) {
-      const mx = Math.floor(kx - dir * (4 + i * 3));
-      const my = Math.floor(ky + i - 1);
-      ctx.fillRect(mx, my, 3, 1);
-    }
   }
 
   function drawCannon(c) {
@@ -3340,10 +3303,7 @@
       if (invincibleTimer > 0) {
         drawInvincibleBikeRide();
       } else {
-        const kickPose = attackEffectTimer > 0 && attackEffectMode === "kick"
-          ? Math.sin((1 - clamp(attackEffectTimer / 9, 0, 1)) * Math.PI)
-          : 0;
-        drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1, kickPose);
+        drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
       }
     }
 
@@ -3658,7 +3618,7 @@
   }
 
   function drawDeadOverlay() {
-    const flashRatio = clamp(deathFlashTimer / 26, 0, 1);
+    const flashRatio = clamp(deathFlashTimer / 34, 0, 1);
     const blink = Math.floor((deadTimer + 12) / 5) % 2 === 0;
 
     ctx.fillStyle = `rgba(140, 0, 24, ${0.35 + flashRatio * 0.35})`;
@@ -3693,14 +3653,21 @@
     ctx.fillStyle = "#ffd8d8";
     ctx.font = "9px monospace";
     ctx.fillText(`原因: ${deadReason || "ダメージ"}`, 48, 84);
-    ctx.fillText(`残機 x${playerLives}`, 126, 100);
+    ctx.fillText("MISS!   LIFE -1", 108, 98);
+    ctx.fillText(`残機 x${playerLives}`, 126, 110);
 
     if (playerLives > 0) {
       const c = Math.max(1, Math.ceil(deadTimer / 60));
-      ctx.fillText(`再開まで ${c}...`, 120, 114);
+      ctx.fillText(`再開まで ${c}...`, 120, 122);
+
+      const ratio = deadTimerMax > 0 ? clamp(deadTimer / deadTimerMax, 0, 1) : 0;
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.fillRect(88, 133, 144, 5);
+      ctx.fillStyle = "#ffd29b";
+      ctx.fillRect(89, 134, Math.floor((142) * (1 - ratio)), 3);
     } else {
       ctx.fillStyle = blink ? "#ffe5b6" : "#cda977";
-      ctx.fillText("GAME OVER", 122, 114);
+      ctx.fillText("GAME OVER", 122, 122);
     }
   }
 
@@ -3936,12 +3903,7 @@
     }
 
     if (gameState === STATE.DEAD) {
-      deathPauseTimer = 0;
-      if (!deathAnimActive) {
-        deathAnimActive = true;
-        deathJumpVy = -5.6;
-      }
-      deadTimer = Math.min(deadTimer, playerLives > 0 ? 12 : 24);
+      return;
     }
   });
 
