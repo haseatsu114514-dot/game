@@ -859,14 +859,7 @@
       enemy.flash = 0;
     }
 
-    staticSpikes.push(
-      { x: 2486, y: 146, w: 20, h: 14 },
-      { x: 4060, y: 146, w: 18, h: 14 },
-      { x: 6180, y: 146, w: 18, h: 14 },
-      { x: 7000, y: 146, w: 18, h: 14 }
-    );
-
-    // Pop spikes removed per latest balance request.
+    // Spikes removed per latest request.
 
     fallBlocks.push(
       { x: 690, y: 16, w: 20, h: 38, triggerX: 640, state: "idle", vy: 0, timer: 0, warnDuration: 44 },
@@ -2019,23 +2012,6 @@
     if (player.y > H + 42) {
       killPlayer("奈落に落下", { ignoreInvincible: true, instantGameOver: true });
       return;
-    }
-
-    for (const s of stage.staticSpikes) {
-      if (overlap(player, s)) {
-        killPlayer("固定トゲに被弾");
-        return;
-      }
-    }
-
-    for (const trap of stage.popSpikes) {
-      const h = trap.h * trap.raise;
-      if (h <= 1) continue;
-      const hit = { x: trap.x, y: trap.y + trap.h - h, w: trap.w, h };
-      if (overlap(player, hit)) {
-        killPlayer("飛び出しトゲに被弾");
-        return;
-      }
     }
 
     for (const block of stage.fallBlocks) {
@@ -3257,26 +3233,6 @@
     for (const wall of stage.breakWalls) {
       if (wall.hp <= 0) continue;
       drawSolid(wall);
-    }
-
-    for (const s of stage.staticSpikes) {
-      drawSpikesRect(s.x, s.y, s.w, s.h, "#b9cad4", "#d7e6f0");
-    }
-
-    for (const trap of stage.popSpikes) {
-      if (!trap.active && trap.raise <= 0.05) {
-        if (trap.armed) {
-          const blink = Math.floor(trap.warningPulse / 2) % 2 === 0;
-          ctx.fillStyle = blink ? "#e1b458" : "#734f2f";
-          ctx.fillRect(Math.floor(trap.x), Math.floor(trap.y + trap.h - 3), trap.w, 3);
-        } else {
-          ctx.fillStyle = "#57473e";
-          ctx.fillRect(Math.floor(trap.x), Math.floor(trap.y + trap.h - 2), trap.w, 2);
-        }
-        continue;
-      }
-      const h = trap.h * trap.raise;
-      drawSpikesRect(trap.x, trap.y + trap.h - h, trap.w, h, "#d05b5b", "#f1b7b7");
     }
 
     for (const block of stage.fallBlocks) {
