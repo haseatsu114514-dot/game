@@ -1033,9 +1033,8 @@
     addProtein(40, 7160, 132);
 
     // Bike = rare invincibility item.
-    addBike(1, 1140, 110);
-    addBike(2, 3360, 102);
-    addBike(3, 5660, 106);
+    addBike(1, 3360, 102);
+    addBike(2, 5660, 106);
 
     // Weapon items removed.
 
