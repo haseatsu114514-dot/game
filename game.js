@@ -951,7 +951,6 @@
     addBike(1, 1140, 110);
     addBike(2, 3360, 102);
     addBike(3, 5660, 106);
-    addBike(4, 6840, 102);
 
     // Weapon items removed.
 
@@ -2046,7 +2045,7 @@
 
     stage.boss.started = true;
     stage.boss.active = true;
-    stage.boss.maxHp = 12;
+    stage.boss.maxHp = 10;
     stage.boss.hp = stage.boss.maxHp;
     stage.boss.x = 7100;
     stage.boss.y = 124;
@@ -3454,19 +3453,17 @@
       ctx.fillRect(dx, dy, w, h);
     };
 
-    // Hair bob + bangs.
-    paint("#06080c", 1, 0, 10, 1);
-    paint("#090d15", 0, 1, 12, 3);
-    paint("#121b2d", 1, 3, 10, 2);
-    paint("#1d2740", 2, 4, 8, 1);
-    paint("#111725", 0, 5, 3, 2);
-    paint("#111725", 9, 5, 3, 2);
-    paint("#0b0f18", 5, 2, 3, 3);
-    // Center fringe (bangs) so the forehead does not look exposed.
-    paint("#05070b", 5, 4, 2, 2);
-    paint("#070a10", 4, 5, 1, 2);
-    paint("#070a10", 7, 5, 1, 1);
-    paint("#0b0f18", 6, 6, 1, 1);
+    // Hair: round bob silhouette with clear center bangs.
+    paint("#05070b", 2, 0, 8, 1);
+    paint("#070a10", 1, 1, 10, 2);
+    paint("#0b1020", 0, 3, 12, 2);
+    paint("#162038", 1, 5, 10, 1);
+    paint("#111a2e", 0, 6, 3, 2);
+    paint("#111a2e", 9, 6, 3, 2);
+    paint("#05070b", 5, 2, 2, 4);
+    paint("#080b14", 4, 4, 1, 2);
+    paint("#080b14", 7, 4, 1, 2);
+    paint("#0c1220", 5, 6, 2, 1);
 
     // Face.
     paint("#f8e9e1", 3, 5, 6, 4);
