@@ -2976,35 +2976,90 @@
 
   function drawInvincibleBikeRide() {
     if (invincibleTimer <= 0) return;
-    const x = Math.floor(player.x - cameraX - 2);
-    const y = Math.floor(player.y + 13);
-    const pulse = Math.sin(player.anim * 0.36);
+    const x = Math.floor(player.x - cameraX - 4);
+    const y = Math.floor(player.y + 11 + Math.sin(player.anim * 0.24) * 0.5);
+    const dir = player.facing;
+    const pulse = Math.sin(player.anim * 0.34);
+    const shimmer = Math.sin(player.anim * 0.28) * 0.5 + 0.5;
+    const rainbow = ["#ff5f8a", "#ffb66d", "#ffe46f", "#80e79a", "#78bcff", "#bf91ff"];
 
-    const rainbow = ["#ff627a", "#ffb26a", "#ffe26f", "#88e57e", "#7bbdff", "#bb93ff"];
     for (let i = 0; i < rainbow.length; i += 1) {
-      const tx = Math.floor(x - 4 - i * 3 - pulse * 1.4);
+      const tail = 5 + i * 3 + pulse * 1.6;
+      const tx = dir > 0 ? Math.floor(x - tail) : Math.floor(x + 22 + tail);
       ctx.fillStyle = rainbow[i];
-      ctx.fillRect(tx, y - 3 + (i % 2), 3, 1);
+      ctx.fillRect(tx, y - 2 + (i % 2), 3, 1);
     }
 
-    ctx.fillStyle = "#0f1118";
-    ctx.fillRect(x + 1, y + 7, 4, 4);
-    ctx.fillRect(x + 13, y + 7, 4, 4);
-    ctx.fillStyle = "#5c6f97";
-    ctx.fillRect(x + 2, y + 8, 2, 2);
-    ctx.fillRect(x + 14, y + 8, 2, 2);
+    ctx.save();
+    ctx.globalAlpha = 0.23 + shimmer * 0.18;
+    for (let i = 0; i < rainbow.length; i += 1) {
+      ctx.fillStyle = rainbow[i];
+      ctx.fillRect(x - 4 + i, y - 14 + i * 2, 30 - i * 2, 2);
+    }
+    ctx.restore();
 
-    ctx.fillStyle = "#1b2236";
-    ctx.fillRect(x + 4, y + 5, 10, 2);
-    ctx.fillStyle = "#7ed7ff";
-    ctx.fillRect(x + 5, y + 4, 6, 1);
-    ctx.fillStyle = "#ffe39d";
-    ctx.fillRect(x + 11, y + 4, 2, 1);
+    const wheelSpin = Math.floor(player.anim * 0.5) % 2;
+    ctx.fillStyle = "#0d111a";
+    ctx.fillRect(x + 2, y + 7, 5, 5);
+    ctx.fillRect(x + 14, y + 7, 5, 5);
+    ctx.fillStyle = "#7089b9";
+    ctx.fillRect(x + 3 + wheelSpin, y + 9, 1, 1);
+    ctx.fillRect(x + 5 - wheelSpin, y + 8, 1, 1);
+    ctx.fillRect(x + 15 + wheelSpin, y + 9, 1, 1);
+    ctx.fillRect(x + 17 - wheelSpin, y + 8, 1, 1);
+    ctx.fillStyle = "#39435a";
+    ctx.fillRect(x + 4, y + 8, 1, 3);
+    ctx.fillRect(x + 16, y + 8, 1, 3);
 
-    ctx.fillStyle = "#8ea7d8";
-    ctx.fillRect(x + 8, y + 3, 1, 2);
-    ctx.fillStyle = "#d2f2ff";
-    ctx.fillRect(x + 8, y + 2, 2, 1);
+    ctx.fillStyle = "#2a3247";
+    ctx.fillRect(x + 5, y + 5, 10, 2);
+    ctx.fillStyle = "#8ee4ff";
+    ctx.fillRect(x + 6, y + 4, 6, 1);
+    ctx.fillStyle = "#ffd995";
+    ctx.fillRect(x + 12, y + 4, 2, 1);
+    ctx.fillStyle = "#87a2d9";
+    ctx.fillRect(x + 9, y + 3, 1, 2);
+    ctx.fillStyle = "#d6f3ff";
+    ctx.fillRect(x + 9, y + 2, 2, 1);
+    ctx.fillStyle = "#c04f62";
+    ctx.fillRect(x + 8, y + 6, 3, 1);
+
+    ctx.save();
+    ctx.translate(x + 6, y - 11);
+    if (dir < 0) {
+      ctx.translate(12, 0);
+      ctx.scale(-1, 1);
+    }
+    const paint = (color, dx, dy, w = 1, h = 1) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(dx, dy, w, h);
+    };
+
+    paint("#06070c", 1, 0, 9, 1);
+    paint("#0c1020", 0, 1, 11, 3);
+    paint("#161f36", 1, 3, 9, 2);
+    paint("#f8e9e1", 3, 4, 5, 4);
+    paint("#6f4838", 4, 5, 2, 2);
+    paint("#6f4838", 6, 5, 1, 2);
+    paint("#fff8f4", 4, 5, 1, 1);
+    paint("#fff8f4", 6, 5, 1, 1);
+    paint("#10141f", 1, 8, 10, 4);
+    paint("#1d273c", 2, 8, 8, 3);
+    paint("#f4f1ee", 4, 9, 3, 2);
+    paint("#24345a", 4, 11, 6, 2);
+    paint("#141821", 4, 12, 6, 1);
+    paint("#f4e0d3", 1, 9, 1, 2);
+    paint("#f4e0d3", 10, 9, 1, 2);
+    paint("#0e121d", 0, 8, 1, 3);
+    paint("#0e121d", 10, 8, 1, 3);
+
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.38 + shimmer * 0.2;
+    for (let i = 0; i < rainbow.length; i += 1) {
+      ctx.fillStyle = rainbow[(i + Math.floor(player.anim * 0.04)) % rainbow.length];
+      ctx.fillRect(0, i * 2, 11, 2);
+    }
+    ctx.restore();
   }
 
   function drawAutoWeaponEffects() {
@@ -3270,13 +3325,16 @@
     drawGoal();
     drawRushAura();
     drawAutoWeaponEffects();
-    drawInvincibleBikeRide();
     const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (!hurtBlink) {
-      const kickPose = attackEffectTimer > 0 && attackEffectMode === "kick"
-        ? Math.sin((1 - clamp(attackEffectTimer / 9, 0, 1)) * Math.PI)
-        : 0;
-      drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1, kickPose);
+      if (invincibleTimer > 0) {
+        drawInvincibleBikeRide();
+      } else {
+        const kickPose = attackEffectTimer > 0 && attackEffectMode === "kick"
+          ? Math.sin((1 - clamp(attackEffectTimer / 9, 0, 1)) * Math.PI)
+          : 0;
+        drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1, kickPose);
+      }
     }
 
     ctx.restore();
