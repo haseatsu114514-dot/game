@@ -79,6 +79,7 @@
   let hammerHitCooldown = 0;
   let gloveHitCooldown = 0;
   let weaponHudTimer = 0;
+  let dashJumpAssistTimer = 0;
   let attackCooldown = 0;
   let attackEffectTimer = 0;
   let attackEffectMode = "none";
@@ -134,6 +135,12 @@
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
   const CANNON_EXTRA_COOLDOWN = 26;
+  const DASH_JUMP_MIN_SPEED = 1.2;
+  const DASH_JUMP_VX_BONUS = 0.88;
+  const DASH_JUMP_VY_BONUS = 0.46;
+  const DASH_JUMP_ASSIST_FRAMES = 20;
+  const DASH_JUMP_SPEED_CAP_MULT = 1.45;
+  const DASH_JUMP_GRAVITY_MULT = 0.84;
 
   function proteinLevel() {
     return collectedProteinIds.size;
@@ -1152,6 +1159,7 @@
     hammerHitCooldown = 0;
     gloveHitCooldown = 0;
     weaponHudTimer = 0;
+    dashJumpAssistTimer = 0;
     attackCooldown = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
@@ -1193,6 +1201,7 @@
     hammerHitCooldown = 0;
     gloveHitCooldown = 0;
     weaponHudTimer = 0;
+    dashJumpAssistTimer = 0;
     attackCooldown = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
@@ -1239,6 +1248,7 @@
     hammerHitCooldown = 0;
     gloveHitCooldown = 0;
     weaponHudTimer = 0;
+    dashJumpAssistTimer = 0;
     attackCooldown = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
@@ -1972,6 +1982,7 @@
     attackCooldown = Math.max(0, attackCooldown - dt);
     attackEffectTimer = Math.max(0, attackEffectTimer - dt);
     attackEffectPhase += dt;
+    dashJumpAssistTimer = Math.max(0, dashJumpAssistTimer - dt);
     if (gloveTimer <= 0) gloveHitCooldown = 0;
     if (hammerTimer <= 0) hammerHitCooldown = 0;
     updateInvincibleMusicFade(dt);
@@ -2088,14 +2099,22 @@
       player.vx *= Math.pow(friction, dt);
     }
 
-    player.vx = clamp(player.vx, -maxSpeed, maxSpeed);
+    const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
+    player.vx = clamp(player.vx, -speedCap, speedCap);
 
     if (actions.jumpPressed && player.onGround) {
       player.vy = -jumpPower;
+      const runningJump = move !== 0 && Math.abs(player.vx) >= DASH_JUMP_MIN_SPEED && Math.sign(player.vx) === move;
+      if (runningJump) {
+        player.vx = clamp(player.vx + move * DASH_JUMP_VX_BONUS, -maxSpeed * DASH_JUMP_SPEED_CAP_MULT, maxSpeed * DASH_JUMP_SPEED_CAP_MULT);
+        player.vy -= DASH_JUMP_VY_BONUS;
+        dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
+      }
       player.onGround = false;
     }
 
-    player.vy = Math.min(player.vy + GRAVITY * dt, MAX_FALL);
+    const gravityMult = dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1;
+    player.vy = Math.min(player.vy + GRAVITY * gravityMult * dt, MAX_FALL);
     moveWithCollisions(player, solids, dt, triggerCrumble);
 
     player.x = clamp(player.x, 0, stage.width - player.w);
@@ -2152,14 +2171,22 @@
       player.vx *= Math.pow(friction, dt);
     }
 
-    player.vx = clamp(player.vx, -maxSpeed, maxSpeed);
+    const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
+    player.vx = clamp(player.vx, -speedCap, speedCap);
 
     if (actions.jumpPressed && player.onGround) {
       player.vy = -jumpPower;
+      const runningJump = move !== 0 && Math.abs(player.vx) >= DASH_JUMP_MIN_SPEED && Math.sign(player.vx) === move;
+      if (runningJump) {
+        player.vx = clamp(player.vx + move * DASH_JUMP_VX_BONUS, -maxSpeed * DASH_JUMP_SPEED_CAP_MULT, maxSpeed * DASH_JUMP_SPEED_CAP_MULT);
+        player.vy -= DASH_JUMP_VY_BONUS;
+        dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
+      }
       player.onGround = false;
     }
 
-    player.vy = Math.min(player.vy + GRAVITY * dt, MAX_FALL);
+    const gravityMult = dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1;
+    player.vy = Math.min(player.vy + GRAVITY * gravityMult * dt, MAX_FALL);
     moveWithCollisions(player, solids, dt, triggerCrumble);
     player.x = clamp(player.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
     player.anim += dt;
