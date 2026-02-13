@@ -290,8 +290,25 @@
 
   function resumeStageMusicAfterInvincible() {
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
-    startStageMusic(true);
-    setBgmVolume(0, 0);
+
+    ensureStageMusic();
+    if (!stageMusic) return;
+    stageMusicFadeTimer = 0;
+    stageMusicFadeDuration = 0;
+    try {
+      stageMusic.pause();
+      stageMusic.currentTime = 0;
+      stageMusic.muted = false;
+      if ("playbackRate" in stageMusic) stageMusic.playbackRate = 1;
+      if ("defaultPlaybackRate" in stageMusic) stageMusic.defaultPlaybackRate = 1;
+      if ("preservesPitch" in stageMusic) stageMusic.preservesPitch = true;
+      if ("webkitPreservesPitch" in stageMusic) stageMusic.webkitPreservesPitch = true;
+      if ("mozPreservesPitch" in stageMusic) stageMusic.mozPreservesPitch = true;
+      stageMusic.volume = 0;
+      stageMusic.play().catch(() => {});
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
     setBgmVolume(BGM_NORMAL_VOL, INVINCIBLE_BGM_FADE_SEC);
   }
 
@@ -375,7 +392,8 @@
 
   function endInvincibleMode() {
     if (invincibleTimer > 0) return;
-    pendingStageResumeAfterInvincible = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    pendingStageResumeAfterInvincible = false;
+    resumeStageMusicAfterInvincible();
     startInvincibleMusicFadeOut(INVINCIBLE_BGM_FADE_SEC);
   }
 

@@ -147,11 +147,11 @@ body {
 
 @media (max-width: 720px) {
   .controls {
-    gap: 14px;
+    gap: 16px;
   }
 
   .cluster {
-    gap: 12px;
+    gap: 14px;
   }
 
   .title-bar p {
@@ -159,15 +159,15 @@ body {
   }
 
   .ctrl {
-    min-width: 84px;
-    min-height: 66px;
-    border-radius: 14px;
-    font-size: 1.08rem;
-    padding: 0 16px;
+    min-width: 104px;
+    min-height: 82px;
+    border-radius: 16px;
+    font-size: 1.22rem;
+    padding: 0 18px;
   }
 
   .ctrl.action {
-    min-width: 124px;
+    min-width: 154px;
   }
 
   .help p {
