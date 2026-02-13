@@ -935,12 +935,12 @@
     addSolid(6760, 104, 130, 10, { kind: "crumble", state: "solid", collapseAt: 16 });
     addSolid(7090, 116, 90, 10);
 
-    addSolid(1220, 98, 26, 62);
-    addSolid(2060, 90, 20, 70);
-    addSolid(3460, 94, 26, 66);
-    addSolid(4360, 88, 20, 72);
-    addSolid(5610, 96, 22, 64);
-    addSolid(6480, 92, 24, 68);
+    addSolid(1220, 104, 26, 56);
+    addSolid(2060, 96, 20, 64);
+    addSolid(3460, 100, 26, 60);
+    addSolid(4360, 94, 20, 66);
+    addSolid(5610, 102, 22, 58);
+    addSolid(6480, 98, 24, 62);
 
     // Break walls removed with hammer/glove abolition.
 
