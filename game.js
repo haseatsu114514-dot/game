@@ -437,6 +437,29 @@
     }
   }
 
+  function startBossTheme() {
+    openingThemeActive = true;
+    pendingStageResumeAfterInvincible = false;
+    ensureInvincibleMusic();
+    if (!invincibleMusic) return;
+    invincibleMusicFadeTimer = 0;
+    invincibleMusicFadeDuration = 0;
+    stopStageMusic(true);
+
+    try {
+      invincibleMusic.muted = false;
+      invincibleMusic.volume = INVINCIBLE_BGM_VOL;
+      invincibleMusic.currentTime = 0;
+      invincibleMusic.play().catch(() => {});
+    } catch (_e) {
+      openingThemeActive = false;
+      startStageMusic(true);
+      setBgmVolume(0, 0);
+      setBgmVolume(BGM_NORMAL_VOL, 0.12);
+      // Ignore media errors and keep gameplay responsive.
+    }
+  }
+
   function playChipNote(time, note, duration, type, level) {
     if (!audioCtx || !bgmMaster || note <= 0) return;
     const osc = audioCtx.createOscillator();
@@ -2133,11 +2156,9 @@
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     stopInvincibleMusic();
-    startStageMusic(true);
-    setBgmVolume(0, 0);
-    setBgmVolume(BGM_NORMAL_VOL, 0.12);
 
     gameState = STATE.BOSS;
+    startBossTheme();
     cameraX = clamp(BOSS_ARENA.minX - 96, 0, stage.width - W);
     player.x = clamp(player.x, BOSS_ARENA.minX + 10, BOSS_ARENA.maxX - player.w - 12);
     player.vx = 0;
@@ -2159,6 +2180,7 @@
     hitStopTimer = Math.max(hitStopTimer, 4);
     triggerImpact(3.1, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.5, 4.4);
     playKickSfx(2.2);
+    stopInvincibleMusic();
     hudMessage = "白ヒゲの神を撃破!";
     hudTimer = 150;
     gameState = STATE.CLEAR;
