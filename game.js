@@ -1072,6 +1072,105 @@
     }
   }
 
+  function canStandAt(x, y, solids) {
+    const body = { x, y, w: player.w, h: player.h };
+    for (const s of solids) {
+      if (overlap(body, s)) return false;
+    }
+
+    const head = { x, y: y - 8, w: player.w, h: 8 };
+    for (const s of solids) {
+      if (overlap(head, s)) return false;
+    }
+
+    const footY = y + player.h + 1;
+    const supportXs = [
+      x + 2,
+      x + Math.floor(player.w * 0.5),
+      x + player.w - 2,
+    ];
+    for (const sx of supportXs) {
+      if (!pointInSolids(sx, footY, solids)) return false;
+    }
+
+    return true;
+  }
+
+  function isSpawnDangerous(x, y) {
+    const probe = { x: x - 6, y: y - 4, w: player.w + 12, h: player.h + 8 };
+
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive) continue;
+      const enemyPad = { x: enemy.x - 4, y: enemy.y - 3, w: enemy.w + 8, h: enemy.h + 6 };
+      if (overlap(probe, enemyPad)) return true;
+    }
+
+    for (const block of stage.fallBlocks) {
+      if (block.state === "gone") continue;
+      if (overlap(probe, block)) return true;
+    }
+
+    for (const cannon of stage.cannons) {
+      const dx = Math.abs((x + player.w * 0.5) - cannon.x);
+      const dy = Math.abs((y + player.h * 0.5) - cannon.y);
+      if (dx < 20 && dy < 24) return true;
+    }
+
+    return false;
+  }
+
+  function findSafeRespawnPoint(cp) {
+    const solids = collectSolids();
+    const baseX = clamp(cp.x, 2, stage.width - player.w - 2);
+    const baseY = cp.y;
+    const offsets = [0, -8, 8, -16, 16, -24, 24, -34, 34, -46, 46, -60, 60, -78, 78, -98, 98, -120, 120];
+    const candidates = [];
+
+    for (const offset of offsets) {
+      const x = clamp(baseX + offset, 2, stage.width - player.w - 2);
+      let bestY = null;
+      let bestDy = Infinity;
+
+      for (const s of solids) {
+        const left = x + 2;
+        const right = x + player.w - 2;
+        if (left < s.x || right > s.x + s.w) continue;
+
+        const y = s.y - player.h;
+        if (y < 0 || y > H + 20) continue;
+
+        const dy = Math.abs(y - baseY);
+        if (dy > 56) continue;
+        if (dy < bestDy) {
+          bestDy = dy;
+          bestY = y;
+        }
+      }
+
+      if (bestY === null) continue;
+      candidates.push({ x, y: bestY });
+    }
+
+    for (const c of candidates) {
+      if (canStandAt(c.x, c.y, solids) && !isSpawnDangerous(c.x, c.y)) return c;
+    }
+    for (const c of candidates) {
+      if (canStandAt(c.x, c.y, solids)) return c;
+    }
+
+    return { x: baseX, y: baseY };
+  }
+
+  function placePlayerAtCheckpoint(cp) {
+    player = createPlayer(cp.x, cp.y);
+    const safe = findSafeRespawnPoint(cp);
+    player.x = safe.x;
+    player.y = safe.y;
+    player.vx = 0;
+    player.vy = -0.8;
+    player.onGround = false;
+  }
+
   function kickEnemy(enemy, dir, power = 1) {
     enemy.kicked = true;
     enemy.vx = dir * (4.3 + power * 1.55);
@@ -1183,7 +1282,7 @@
     preBossCutsceneTimer = 0;
     stage = buildStage();
     const cp = stage.checkpoints[checkpointIndex];
-    player = createPlayer(cp.x, cp.y);
+    placePlayerAtCheckpoint(cp);
     cameraX = 0;
     proteinRushTimer = 0;
     invincibleTimer = 0;
@@ -1231,7 +1330,7 @@
     preBossCutsceneTimer = 0;
     stage = buildStage();
     const cp = stage.checkpoints[checkpointIndex];
-    player = createPlayer(cp.x, cp.y);
+    placePlayerAtCheckpoint(cp);
     cameraX = clamp(player.x - 120, 0, stage.width - W);
     proteinRushTimer = 0;
     invincibleTimer = 0;
