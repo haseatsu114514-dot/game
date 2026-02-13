@@ -76,6 +76,7 @@ body {
   image-rendering: crisp-edges;
   touch-action: none;
   background: #000;
+  filter: contrast(1.08) saturate(1.1) brightness(1.02);
 }
 
 .controls {

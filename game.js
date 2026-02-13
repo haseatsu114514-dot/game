@@ -2718,6 +2718,97 @@
     }
   }
 
+  function drawReadabilityFrameScreen(sx, sy, w, h, accent = "rgba(220,235,255,0.94)") {
+    const x = Math.floor(sx);
+    const y = Math.floor(sy);
+    const ww = Math.max(2, Math.floor(w));
+    const hh = Math.max(2, Math.floor(h));
+
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fillRect(x - 1, y - 1, ww + 2, hh + 2);
+
+    ctx.fillStyle = "rgba(6,8,12,0.92)";
+    ctx.fillRect(x - 1, y - 1, ww + 2, 1);
+    ctx.fillRect(x - 1, y + hh, ww + 2, 1);
+    ctx.fillRect(x - 1, y, 1, hh);
+    ctx.fillRect(x + ww, y, 1, hh);
+
+    ctx.fillStyle = accent;
+    ctx.fillRect(x, y, ww, 1);
+    ctx.fillRect(x, y + hh - 1, ww, 1);
+    ctx.fillRect(x, y, 1, hh);
+    ctx.fillRect(x + ww - 1, y, 1, hh);
+  }
+
+  function drawReadabilityMark(worldX, worldY, w, h, accent, pad = 1) {
+    const sx = Math.floor(worldX - cameraX) - pad;
+    const sy = Math.floor(worldY) - pad;
+    const ww = Math.floor(w) + pad * 2;
+    const hh = Math.floor(h) + pad * 2;
+    drawReadabilityFrameScreen(sx, sy, ww, hh, accent);
+  }
+
+  function drawReadabilityPass(hurtBlink) {
+    ctx.save();
+
+    for (const protein of stage.proteins) {
+      if (protein.collected) continue;
+      const py = protein.y + Math.sin(protein.bob) * 1.7;
+      drawReadabilityMark(protein.x + 1, py + 1, 8, 10, "rgba(148,228,255,0.96)", 1);
+    }
+
+    for (const bike of stage.bikes) {
+      if (bike.collected) continue;
+      const by = bike.y + Math.sin(bike.bob) * 1.9;
+      drawReadabilityMark(bike.x + 1, by + 2, bike.w - 2, bike.h - 2, "rgba(255,214,138,0.98)", 1);
+    }
+
+    for (const token of stage.checkpointTokens) {
+      if (token.collected) continue;
+      const ty = token.y + Math.sin(token.bob) * 1.6;
+      drawReadabilityMark(token.x + 1, ty + 1, token.w - 2, token.h - 2, "rgba(255,241,164,0.98)", 1);
+    }
+
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive) continue;
+      const accent = enemy.kind === "peacock"
+        ? "rgba(125,243,255,0.98)"
+        : enemy.kind === "partygoon"
+          ? "rgba(255,188,215,0.98)"
+          : "rgba(255,177,177,0.98)";
+      drawReadabilityMark(enemy.x, enemy.y, enemy.w, enemy.h, accent, 1);
+    }
+
+    for (const b of stage.hazardBullets) {
+      if (b.dead) continue;
+      const accent = b.kind === "cannon" ? "rgba(255,210,154,0.98)" : "rgba(205,185,255,0.98)";
+      drawReadabilityMark(b.x, b.y, b.w, b.h, accent, 1);
+    }
+
+    for (const bs of stage.bossShots) {
+      if (bs.dead) continue;
+      drawReadabilityMark(bs.x, bs.y, bs.w, bs.h, "rgba(255,224,164,0.98)", 1);
+    }
+
+    if (stage.boss.active) {
+      drawReadabilityMark(stage.boss.x, stage.boss.y, stage.boss.w, stage.boss.h, "rgba(255,241,197,0.98)", 2);
+    }
+
+    const goalAccent = stage.boss.active ? "rgba(255,160,160,0.96)" : "rgba(158,255,220,0.96)";
+    drawReadabilityMark(stage.goal.x, stage.goal.y, stage.goal.w, stage.goal.h, goalAccent, 1);
+
+    if (!hurtBlink) {
+      const playerAccent = invincibleTimer > 0 ? "rgba(255,255,240,0.98)" : "rgba(167,229,255,0.98)";
+      if (invincibleTimer > 0) {
+        drawReadabilityMark(player.x - 5, player.y + 2, 25, 24, playerAccent, 1);
+      } else {
+        drawReadabilityMark(player.x, player.y, player.w, player.h, playerAccent, 1);
+      }
+    }
+
+    ctx.restore();
+  }
+
   function drawSolid(s) {
     let body = "#434956";
     let top = "#6c7484";
@@ -3594,6 +3685,8 @@
       drawSkyGradient();
       drawParallax();
     }
+    ctx.fillStyle = gameState === STATE.BOSS ? "rgba(6,8,12,0.12)" : "rgba(8,10,16,0.1)";
+    ctx.fillRect(0, 0, W, H - 18);
 
     ctx.save();
 
@@ -3681,6 +3774,7 @@
         drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
       }
     }
+    drawReadabilityPass(hurtBlink);
 
     ctx.restore();
   }
