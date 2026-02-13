@@ -4025,24 +4025,63 @@
     const x = Math.floor(g.x - cameraX);
     const y = Math.floor(g.y);
 
-    ctx.fillStyle = "#1f1f25";
-    ctx.fillRect(x, y, g.w, g.h);
+    const mx = x - 46;
+    const my = y - 72;
+    const mw = 116;
+    const mh = 120;
 
-    ctx.fillStyle = "#5d606b";
-    for (let i = 2; i < g.w - 2; i += 4) {
-      ctx.fillRect(x + i, y + 2, 1, g.h - 4);
+    // Mansion facade.
+    ctx.fillStyle = "#1a1f30";
+    ctx.fillRect(mx, my + 6, mw, mh - 6);
+    ctx.fillStyle = "#232b40";
+    ctx.fillRect(mx + 4, my + 10, mw - 8, mh - 14);
+    ctx.fillStyle = "#36415d";
+    ctx.fillRect(mx + 8, my + 14, mw - 16, 6);
+
+    // Entrance canopy.
+    ctx.fillStyle = "#2c354b";
+    ctx.fillRect(x - 8, y - 8, g.w + 16, 8);
+    ctx.fillStyle = "#141a28";
+    ctx.fillRect(x - 6, y - 6, g.w + 12, 3);
+
+    // Windows.
+    ctx.fillStyle = "#1a2336";
+    for (let row = 0; row < 3; row += 1) {
+      for (let col = 0; col < 4; col += 1) {
+        const wx = mx + 12 + col * 24;
+        const wy = my + 24 + row * 22;
+        if (wx >= x - 12 && wx <= x + g.w + 4 && wy > y - 16) continue;
+        ctx.fillRect(wx, wy, 12, 10);
+        ctx.fillStyle = (row + col) % 2 === 0 ? "#7dd8ff" : "#ffc88d";
+        ctx.fillRect(wx + 2, wy + 2, 8, 6);
+        ctx.fillStyle = "#1a2336";
+      }
     }
 
-    ctx.fillStyle = "#6b4f2f";
-    ctx.fillRect(x - 3, y + g.h - 4, g.w + 6, 4);
+    // Goal collision area = mansion entrance.
+    ctx.fillStyle = "#121722";
+    ctx.fillRect(x - 1, y - 1, g.w + 2, g.h + 2);
+    ctx.fillStyle = "#1f2738";
+    ctx.fillRect(x, y, g.w, g.h);
 
+    // Boyfriend waits inside the entrance lobby.
+    ctx.save();
+    ctx.globalAlpha = stage.boss.active ? 0.26 : 0.72;
     drawBoyfriend(g.x + 4, g.y + 22);
+    ctx.restore();
 
-    const vx = x - 24;
-    ctx.fillStyle = "#2b1e22";
-    ctx.fillRect(vx, y + 4, 12, 20);
-    ctx.fillStyle = "#8b2c2c";
-    ctx.fillRect(vx + 2, y + 2, 8, 3);
+    // Glass overlay to read as "inside the mansion".
+    ctx.fillStyle = "rgba(170, 210, 255, 0.24)";
+    ctx.fillRect(x + 1, y + 2, g.w - 2, g.h - 6);
+    ctx.fillStyle = "rgba(255, 238, 206, 0.18)";
+    ctx.fillRect(x + 2, y + 4, 6, g.h - 12);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.14)";
+    ctx.fillRect(x + g.w - 6, y + 4, 2, g.h - 12);
+
+    ctx.fillStyle = "#6b4f2f";
+    ctx.fillRect(x - 4, y + g.h - 4, g.w + 8, 4);
+    ctx.fillStyle = "#9f7a4d";
+    ctx.fillRect(x - 2, y + g.h - 4, g.w + 4, 1);
 
     if (stage.boss.active) {
       ctx.fillStyle = "rgba(180,20,20,0.45)";
