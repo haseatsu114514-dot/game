@@ -1230,6 +1230,7 @@
     enemy.vx = dir * (4.3 + power * 1.55);
     enemy.vy = -(3.6 + power * 1.05);
     enemy.onGround = false;
+    enemy.alive = false;
   }
 
   function triggerKickBurst(x, y, power = 1) {
@@ -3669,6 +3670,7 @@
     }
 
     for (const e of stage.enemies) {
+      if (!e.alive) continue;
       drawEnemy(e);
     }
 
