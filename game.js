@@ -14,6 +14,7 @@
 
   const STATE = {
     CUTSCENE: "cutscene",
+    PRE_BOSS: "pre_boss",
     PLAY: "play",
     BOSS: "boss",
     DEAD: "dead",
@@ -21,8 +22,8 @@
   };
 
   const BOSS_ARENA = {
-    minX: 4860,
-    maxX: 5180,
+    minX: 6860,
+    maxX: 7180,
   };
   const MAX_HEARTS = 3;
 
@@ -30,16 +31,19 @@
     left: false,
     right: false,
     jump: false,
+    attack: false,
     start: false,
   };
 
   const prevInput = {
     jump: false,
+    attack: false,
     start: false,
   };
 
   let gameState = STATE.CUTSCENE;
   let cutsceneTime = 0;
+  let preBossCutsceneTimer = 0;
   let deadTimer = 0;
   let clearTimer = 0;
   let deaths = 0;
@@ -67,14 +71,15 @@
   let kickFlashPower = 0;
   let kickBurstX = 0;
   let kickBurstY = 0;
-  let giantTimer = 0;
   let hammerTimer = 0;
   let gloveTimer = 0;
-  let hammerSpin = 0;
   let hammerHitCooldown = 0;
   let gloveHitCooldown = 0;
   let weaponHudTimer = 0;
-  let itemGuideTimer = 0;
+  let attackCooldown = 0;
+  let attackEffectTimer = 0;
+  let attackEffectMode = "kick";
+  let attackEffectPhase = 0;
   let hitSparks = [];
   let deathFlashTimer = 0;
   let deathShakeTimer = 0;
@@ -82,6 +87,12 @@
   let audioCtx = null;
   let bgmMaster = null;
   let bgmNoiseBuffer = null;
+  let stageMusic = null;
+  let stageMusicPrimed = false;
+  let stageMusicFadeTimer = 0;
+  let stageMusicFadeDuration = 0;
+  let stageMusicFadeStart = 0;
+  let stageMusicFadeEnd = 0;
   let invincibleMusic = null;
   let invincibleMusicPrimed = false;
   let invincibleMusicFadeTimer = 0;
@@ -90,8 +101,6 @@
   let rilaVoiceNextAt = 0;
   let robotVoiceCurve = null;
   let bgmStarted = false;
-  let bgmStep = 0;
-  let bgmNextTime = 0;
 
   const BGM_TEMPO = 146;
   const BGM_LEAD = [
@@ -106,22 +115,22 @@
     48, 0, 48, 0, 43, 0, 43, 0,
     45, 0, 45, 0, 41, 0, 41, 0,
   ];
-  const BGM_NORMAL_VOL = 0.065;
-  const BGM_DEAD_VOL = 0.018;
-  const INVINCIBLE_BGM_VOL = 0.8;
-  const INVINCIBLE_DURATION = 1200;
+  const BGM_NORMAL_VOL = 0.38;
+  const BGM_DEAD_VOL = 0.14;
+  const INVINCIBLE_BGM_VOL = 0.44;
+  const INVINCIBLE_DURATION = 900;
   const INVINCIBLE_BGM_FADE_SEC = 1.2;
+  const STAGE_BGM_PATH = "assets/stage_bgm.mp3";
   const INVINCIBLE_BGM_PATH = "assets/invincible_bgm.mp3";
-  const GIANT_DURATION = 600;
   const WEAPON_DURATION = 600;
-  const ITEM_GUIDE_DURATION = 720;
+  const PRE_BOSS_CUTSCENE_DURATION = 320;
 
   function proteinLevel() {
     return collectedProteinIds.size;
   }
 
-  function giantFactor() {
-    return giantTimer > 0 ? 1.35 : 1;
+  function powerFactor() {
+    return 1;
   }
 
   function clamp(n, min, max) {
@@ -169,14 +178,76 @@
     return buffer;
   }
 
+  function ensureStageMusic() {
+    if (stageMusic) return;
+    stageMusic = new Audio(STAGE_BGM_PATH);
+    stageMusic.loop = true;
+    stageMusic.volume = BGM_NORMAL_VOL;
+    stageMusic.preload = "auto";
+  }
+
+  function startStageMusic(fromStart = false) {
+    ensureStageMusic();
+    if (!stageMusic) return;
+    stageMusicFadeTimer = 0;
+    stageMusicFadeDuration = 0;
+    try {
+      if (fromStart) {
+        stageMusic.currentTime = 0;
+      }
+      stageMusic.volume = clamp(stageMusic.volume || BGM_NORMAL_VOL, 0, 1);
+      stageMusic.play().catch(() => {});
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
+  }
+
+  function stopStageMusic(resetToStart = false) {
+    if (!stageMusic) return;
+    stageMusicFadeTimer = 0;
+    stageMusicFadeDuration = 0;
+    try {
+      stageMusic.pause();
+      if (resetToStart) {
+        stageMusic.currentTime = 0;
+      }
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
+  }
+
   function setBgmVolume(target, fadeSec = 0.08) {
-    if (!audioCtx || !bgmMaster) return;
-    const now = audioCtx.currentTime;
-    const safeTarget = Math.max(0.0001, target);
-    const current = Math.max(0.0001, bgmMaster.gain.value);
-    bgmMaster.gain.cancelScheduledValues(now);
-    bgmMaster.gain.setValueAtTime(current, now);
-    bgmMaster.gain.exponentialRampToValueAtTime(safeTarget, now + fadeSec);
+    ensureStageMusic();
+    if (!stageMusic) return;
+
+    const safeTarget = clamp(target, 0, 1);
+    if (fadeSec <= 0.01) {
+      stageMusicFadeTimer = 0;
+      stageMusicFadeDuration = 0;
+      try {
+        stageMusic.volume = safeTarget;
+      } catch (_e) {
+        // Ignore media errors and keep gameplay responsive.
+      }
+      return;
+    }
+
+    stageMusicFadeStart = clamp(stageMusic.volume || 0, 0, 1);
+    stageMusicFadeEnd = safeTarget;
+    stageMusicFadeDuration = Math.max(1, Math.round(fadeSec * 60));
+    stageMusicFadeTimer = stageMusicFadeDuration;
+  }
+
+  function updateStageMusicFade(dt) {
+    if (!stageMusic || stageMusicFadeTimer <= 0 || stageMusicFadeDuration <= 0) return;
+    stageMusicFadeTimer = Math.max(0, stageMusicFadeTimer - dt);
+    const t = 1 - stageMusicFadeTimer / stageMusicFadeDuration;
+    const vol = stageMusicFadeStart + (stageMusicFadeEnd - stageMusicFadeStart) * clamp(t, 0, 1);
+    try {
+      stageMusic.volume = clamp(vol, 0, 1);
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
   }
 
   function ensureInvincibleMusic() {
@@ -232,7 +303,7 @@
   function startInvincibleMode(duration = INVINCIBLE_DURATION) {
     invincibleTimer = Math.max(invincibleTimer, duration);
     openingThemeActive = false;
-    setBgmVolume(0.0001, 0.07);
+    stopStageMusic(false);
     ensureInvincibleMusic();
     if (!invincibleMusic) return;
     invincibleMusicFadeTimer = 0;
@@ -252,6 +323,8 @@
     if (invincibleTimer > 0) return;
     startInvincibleMusicFadeOut(INVINCIBLE_BGM_FADE_SEC);
     if (gameState === STATE.PLAY || gameState === STATE.BOSS) {
+      startStageMusic(true);
+      setBgmVolume(0, 0);
       setBgmVolume(BGM_NORMAL_VOL, INVINCIBLE_BGM_FADE_SEC);
     }
   }
@@ -265,7 +338,7 @@
     openingThemeActive = true;
     invincibleMusicFadeTimer = 0;
     invincibleMusicFadeDuration = 0;
-    setBgmVolume(0.0001, 0.16);
+    stopStageMusic(true);
 
     try {
       invincibleMusic.volume = INVINCIBLE_BGM_VOL;
@@ -274,12 +347,10 @@
       if (starting && typeof starting.then === "function") {
         starting.catch(() => {
           openingThemeActive = false;
-          setBgmVolume(BGM_NORMAL_VOL, 0.12);
         });
       }
     } catch (_e) {
       openingThemeActive = false;
-      setBgmVolume(BGM_NORMAL_VOL, 0.12);
       // Ignore media errors and keep gameplay responsive.
     }
   }
@@ -341,8 +412,35 @@
 
     if (!bgmStarted) {
       bgmStarted = true;
-      bgmStep = 0;
-      bgmNextTime = audioCtx.currentTime + 0.04;
+    }
+
+    ensureStageMusic();
+    if (stageMusic && !stageMusicPrimed) {
+      stageMusicPrimed = true;
+      try {
+        if (stageMusic.paused) {
+          stageMusic.muted = true;
+          const priming = stageMusic.play();
+          if (priming && typeof priming.then === "function") {
+            priming.then(() => {
+              stageMusic.pause();
+              stageMusic.currentTime = 0;
+              stageMusic.muted = false;
+              stageMusic.volume = BGM_NORMAL_VOL;
+            }).catch(() => {
+              stageMusic.muted = false;
+              stageMusic.volume = BGM_NORMAL_VOL;
+            });
+          } else {
+            stageMusic.pause();
+            stageMusic.currentTime = 0;
+            stageMusic.muted = false;
+            stageMusic.volume = BGM_NORMAL_VOL;
+          }
+        }
+      } catch (_e) {
+        // Ignore media errors and keep gameplay responsive.
+      }
     }
 
     ensureInvincibleMusic();
@@ -574,37 +672,15 @@
   }
 
   function scheduleBGM() {
-    if (!bgmStarted || !audioCtx || audioCtx.state !== "running") return;
-
-    const stepDur = (60 / BGM_TEMPO) * 0.5;
-    if (invincibleTimer > 0 || openingThemeActive) {
-      bgmNextTime = audioCtx.currentTime + stepDur;
-      return;
-    }
-    const lookAhead = 0.12;
-
-    while (bgmNextTime < audioCtx.currentTime + lookAhead) {
-      const idx = bgmStep % BGM_LEAD.length;
-      const lead = BGM_LEAD[idx];
-      const bass = BGM_BASS[idx];
-
-      if (lead > 0) {
-        playChipNote(bgmNextTime, lead, stepDur * 0.88, "square", 0.05);
-      }
-
-      if (bass > 0) {
-        playChipNote(bgmNextTime, bass, stepDur * 1.55, "triangle", 0.07);
-      }
-
-      if (idx % 2 === 1) {
-        playChipNoise(bgmNextTime, 0.026);
-      }
-      if (idx % 8 === 4) {
-        playChipNoise(bgmNextTime, 0.04);
-      }
-
-      bgmStep += 1;
-      bgmNextTime += stepDur;
+    if (!bgmStarted || !stageMusic) return;
+    const stageActive = gameState === STATE.PLAY || gameState === STATE.BOSS || gameState === STATE.DEAD;
+    if (!stageActive) return;
+    if (invincibleTimer > 0 || openingThemeActive) return;
+    if (!stageMusic.paused) return;
+    try {
+      stageMusic.play().catch(() => {});
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
     }
   }
 
@@ -612,7 +688,7 @@
     const solids = [];
     const enemies = [];
     const proteins = [];
-    const creamPuffs = [];
+    const bikes = [];
     const weaponItems = [];
     const staticSpikes = [];
     const popSpikes = [];
@@ -638,8 +714,8 @@
       });
     };
 
-    const addCreamPuff = (id, x, y) => {
-      creamPuffs.push({
+    const addBike = (id, x, y) => {
+      bikes.push({
         id,
         x,
         y,
@@ -675,6 +751,11 @@
       [3780, 340],
       [4250, 340],
       [4700, 500],
+      [5260, 380],
+      [5720, 320],
+      [6120, 340],
+      [6540, 360],
+      [6940, 460],
     ];
 
     for (const [x, w] of groundSegments) {
@@ -691,13 +772,21 @@
     addSolid(3660, 120, 120, 10);
     addSolid(4120, 112, 130, 10, { kind: "crumble", state: "solid", collapseAt: 18 });
     addSolid(4590, 118, 110, 10);
+    addSolid(5380, 118, 100, 10);
+    addSolid(5860, 108, 110, 10, { kind: "crumble", state: "solid", collapseAt: 18 });
+    addSolid(6340, 114, 120, 10);
+    addSolid(6760, 104, 130, 10, { kind: "crumble", state: "solid", collapseAt: 16 });
+    addSolid(7090, 116, 90, 10);
 
     addSolid(1220, 98, 26, 62);
     addSolid(2060, 90, 20, 70);
     addSolid(3460, 94, 26, 66);
     addSolid(4360, 88, 20, 72);
+    addSolid(5610, 96, 22, 64);
+    addSolid(6480, 92, 24, 68);
 
     breakWalls.push({ x: 3570, y: 96, w: 22, h: 64, hp: 3, maxHp: 3, isWall: true, hitCooldown: 0 });
+    breakWalls.push({ x: 6210, y: 98, w: 22, h: 62, hp: 3, maxHp: 3, isWall: true, hitCooldown: 0 });
 
     enemies.push(
       { x: 420, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.46, minX: 340, maxX: 520, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
@@ -711,12 +800,17 @@
       { x: 4480, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.68, minX: 4310, maxX: 4560, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { kind: "peacock", x: 1620, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.44, minX: 1500, maxX: 1740, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.3, chargeCooldown: 62, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       { kind: "peacock", x: 2940, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.46, minX: 2820, maxX: 3090, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.4, chargeCooldown: 64, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
-      { kind: "peacock", x: 4210, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.48, minX: 4100, maxX: 4350, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.5, chargeCooldown: 66, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 }
+      { kind: "peacock", x: 4210, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.48, minX: 4100, maxX: 4350, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.5, chargeCooldown: 66, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 5480, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.7, minX: 5330, maxX: 5600, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 92, hopInterval: 92 },
+      { x: 5950, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.72, minX: 5820, maxX: 6030, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+      { x: 6420, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.74, minX: 6280, maxX: 6480, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 86, hopInterval: 86 },
+      { kind: "peacock", x: 6640, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.5, minX: 6520, maxX: 6750, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.58, chargeCooldown: 70, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 6890, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.76, minX: 6780, maxX: 7010, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true }
     );
 
     for (let i = 0; i < enemies.length; i += 1) {
       const enemy = enemies[i];
-      enemy.shooter = enemy.kind !== "peacock" && (i === 2 || i === 7);
+      enemy.shooter = enemy.kind !== "peacock" && (enemy.forceShooter || i === 2 || i === 7 || i === 13);
       enemy.shootInterval = enemy.shooter ? 156 + i * 10 : 0;
       enemy.shootCooldown = enemy.shooter ? 96 + i * 10 : 0;
       enemy.flash = 0;
@@ -724,7 +818,9 @@
 
     staticSpikes.push(
       { x: 2486, y: 146, w: 20, h: 14 },
-      { x: 4060, y: 146, w: 18, h: 14 }
+      { x: 4060, y: 146, w: 18, h: 14 },
+      { x: 6180, y: 146, w: 18, h: 14 },
+      { x: 7000, y: 146, w: 18, h: 14 }
     );
 
     popSpikes.push(
@@ -733,7 +829,10 @@
       { x: 2010, y: 146, w: 28, h: 14, triggerX: 1980, delay: 27, armed: false, active: false, raise: 0, warningPulse: 0 },
       { x: 3010, y: 146, w: 26, h: 14, triggerX: 2980, delay: 25, armed: false, active: false, raise: 0, warningPulse: 0 },
       { x: 3950, y: 146, w: 26, h: 14, triggerX: 3920, delay: 25, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 4448, y: 146, w: 30, h: 14, triggerX: 4410, delay: 25, armed: false, active: false, raise: 0, warningPulse: 0 }
+      { x: 4448, y: 146, w: 30, h: 14, triggerX: 4410, delay: 25, armed: false, active: false, raise: 0, warningPulse: 0 },
+      { x: 5410, y: 146, w: 28, h: 14, triggerX: 5380, delay: 24, armed: false, active: false, raise: 0, warningPulse: 0 },
+      { x: 6260, y: 146, w: 26, h: 14, triggerX: 6230, delay: 23, armed: false, active: false, raise: 0, warningPulse: 0 },
+      { x: 6680, y: 146, w: 28, h: 14, triggerX: 6650, delay: 22, armed: false, active: false, raise: 0, warningPulse: 0 }
     );
 
     fallBlocks.push(
@@ -741,14 +840,18 @@
       { x: 1310, y: 10, w: 20, h: 44, triggerX: 1250, state: "idle", vy: 0, timer: 0, warnDuration: 42 },
       { x: 2140, y: 10, w: 24, h: 50, triggerX: 2090, state: "idle", vy: 0, timer: 0, warnDuration: 40 },
       { x: 2870, y: 6, w: 22, h: 46, triggerX: 2810, state: "idle", vy: 0, timer: 0, warnDuration: 40 },
-      { x: 3720, y: 4, w: 24, h: 52, triggerX: 3660, state: "idle", vy: 0, timer: 0, warnDuration: 38 }
+      { x: 3720, y: 4, w: 24, h: 52, triggerX: 3660, state: "idle", vy: 0, timer: 0, warnDuration: 38 },
+      { x: 5570, y: 6, w: 24, h: 48, triggerX: 5510, state: "idle", vy: 0, timer: 0, warnDuration: 36 },
+      { x: 6460, y: 6, w: 24, h: 48, triggerX: 6400, state: "idle", vy: 0, timer: 0, warnDuration: 34 }
     );
 
     cannons.push(
       { x: 1840, y: 142, dir: -1, triggerX: 1760, interval: 156, cool: 62, active: false },
       { x: 2660, y: 142, dir: 1, triggerX: 2580, interval: 144, cool: 52, active: false },
       { x: 3470, y: 142, dir: -1, triggerX: 3390, interval: 132, cool: 48, active: false },
-      { x: 4300, y: 142, dir: -1, triggerX: 4220, interval: 122, cool: 44, active: false }
+      { x: 4300, y: 142, dir: -1, triggerX: 4220, interval: 122, cool: 44, active: false },
+      { x: 6020, y: 142, dir: -1, triggerX: 5950, interval: 118, cool: 40, active: false },
+      { x: 6760, y: 142, dir: 1, triggerX: 6700, interval: 112, cool: 38, active: false }
     );
 
     addProtein(1, 180, 136);
@@ -779,21 +882,24 @@
     addProtein(26, 4740, 132);
     addProtein(27, 5080, 110);
     addProtein(28, 5140, 110);
+    addProtein(29, 5340, 132);
+    addProtein(30, 5460, 102);
+    addProtein(31, 5660, 132);
+    addProtein(32, 5880, 94);
+    addProtein(33, 6080, 132);
+    addProtein(34, 6310, 100);
+    addProtein(35, 6530, 132);
+    addProtein(36, 6750, 90);
+    addProtein(37, 6920, 132);
+    addProtein(38, 7060, 104);
+    addProtein(39, 7120, 132);
+    addProtein(40, 7160, 132);
 
-    addCreamPuff(1, 760, 114);
-    addCreamPuff(2, 1690, 112);
-    addCreamPuff(3, 2620, 112);
-    addCreamPuff(4, 3360, 102);
-    addCreamPuff(5, 4180, 100);
-    addCreamPuff(6, 4970, 126);
-    addCreamPuff(7, 1140, 110);
-    addCreamPuff(8, 2290, 108);
-    addCreamPuff(9, 3010, 110);
-    addCreamPuff(10, 3770, 106);
-    addCreamPuff(11, 4540, 108);
-    addCreamPuff(12, 5120, 120);
-    addCreamPuff(13, 3460, 104);
-    addCreamPuff(14, 4680, 108);
+    // Bike = rare invincibility item.
+    addBike(1, 1140, 110);
+    addBike(2, 3360, 102);
+    addBike(3, 5660, 106);
+    addBike(4, 6840, 102);
 
     addWeaponItem(1, "hammer", 690, 108);
     addWeaponItem(2, "glove", 1710, 106);
@@ -803,14 +909,17 @@
     addWeaponItem(6, "glove", 5030, 116);
     addWeaponItem(7, "hammer", 1530, 134);
     addWeaponItem(8, "glove", 3240, 100);
+    addWeaponItem(9, "hammer", 5540, 102);
+    addWeaponItem(10, "glove", 6120, 104);
+    addWeaponItem(11, "hammer", 6690, 98);
 
     return {
-      width: 5200,
+      width: 7400,
       groundY,
       solids,
       enemies,
       proteins,
-      creamPuffs,
+      bikes,
       weaponItems,
       staticSpikes,
       popSpikes,
@@ -823,16 +932,17 @@
         { x: 34, y: 136, label: "START" },
         { x: 980, y: 136, label: "CP-0" },
         { x: 2200, y: 136, label: "CP-1" },
-        { x: 2920, y: 136, label: "CP-1B" },
         { x: 3380, y: 136, label: "CP-2" },
         { x: 4300, y: 136, label: "CP-3" },
-        { x: 4750, y: 136, label: "CP-4" },
+        { x: 5200, y: 136, label: "CP-4" },
+        { x: 6040, y: 136, label: "CP-5" },
+        { x: 6680, y: 136, label: "CP-6" },
       ],
-      goal: { x: 5040, y: 112, w: 24, h: 48 },
+      goal: { x: 7044, y: 112, w: 24, h: 48 },
       boss: {
         started: false,
         active: false,
-        x: 5100,
+        x: 7100,
         y: 124,
         w: 24,
         h: 36,
@@ -840,8 +950,8 @@
         vy: 0,
         dir: -1,
         onGround: false,
-        hp: 14,
-        maxHp: 14,
+        hp: 28,
+        maxHp: 28,
         mode: "idle",
         modeTimer: 0,
         shotCooldown: 56,
@@ -960,31 +1070,42 @@
     cameraX = clamp(player.x - 120, 0, stage.width - W);
   }
 
-  function killPlayer(reason) {
+  function killPlayer(reason, options = {}) {
+    const ignoreInvincible = options.ignoreInvincible === true;
+    const instantGameOver = options.instantGameOver === true;
+
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
-    if (invincibleTimer > 0) {
+    if (invincibleTimer > 0 && !ignoreInvincible) {
       if (invincibleHitCooldown > 0) return;
       invincibleHitCooldown = 8;
-      hudMessage = "シュークリーム無敵! ノーダメージ";
+      hudMessage = "バイク無敵! ノーダメージ";
       hudTimer = 28;
       triggerImpact(0.9, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.2);
       return;
     }
 
-    if (damageInvulnTimer > 0) return;
+    if (!instantGameOver) {
+      if (damageInvulnTimer > 0) return;
 
-    playerHearts = Math.max(0, playerHearts - 1);
-    damageInvulnTimer = 84;
-    hurtFlashTimer = 24;
-    playDamageSfx();
-    playRilaRobotVoice("hurt");
-    triggerImpact(1.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.8);
+      playerHearts = Math.max(0, playerHearts - 1);
+      damageInvulnTimer = 84;
+      hurtFlashTimer = 24;
+      playDamageSfx();
+      playRilaRobotVoice("hurt");
+      triggerImpact(1.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.8);
 
-    if (playerHearts > 0) {
-      repositionPlayerAfterDamage();
-      hudMessage = `${reason} -1ハート`;
-      hudTimer = 80;
-      return;
+      if (playerHearts > 0) {
+        repositionPlayerAfterDamage();
+        hudMessage = `${reason} -1ハート`;
+        hudTimer = 80;
+        return;
+      }
+    } else {
+      playerHearts = 0;
+      hurtFlashTimer = 24;
+      playDamageSfx();
+      playRilaRobotVoice("hurt");
+      triggerImpact(1.6, player.x + player.w * 0.5, player.y + player.h * 0.5, 2.4);
     }
 
     gameState = STATE.DEAD;
@@ -1002,13 +1123,15 @@
     hurtFlashTimer = 0;
     kickFlashTimer = 0;
     kickFlashPower = 0;
-    giantTimer = 0;
     hammerTimer = 0;
     gloveTimer = 0;
-    hammerSpin = 0;
     hammerHitCooldown = 0;
     gloveHitCooldown = 0;
     weaponHudTimer = 0;
+    attackCooldown = 0;
+    attackEffectTimer = 0;
+    attackEffectPhase = 0;
+    attackEffectMode = "kick";
     deaths += 1;
     hudMessage = reason;
     hudTimer = 80;
@@ -1020,11 +1143,9 @@
     if (resetDeaths) {
       deaths = 0;
       collectedProteinIds = new Set();
-      itemGuideTimer = ITEM_GUIDE_DURATION;
-    } else {
-      itemGuideTimer = 0;
     }
     checkpointIndex = 0;
+    preBossCutsceneTimer = 0;
     stage = buildStage();
     const cp = stage.checkpoints[checkpointIndex];
     player = createPlayer(cp.x, cp.y);
@@ -1042,13 +1163,15 @@
     kickComboTimer = 0;
     kickFlashTimer = 0;
     kickFlashPower = 0;
-    giantTimer = 0;
     hammerTimer = 0;
     gloveTimer = 0;
-    hammerSpin = 0;
     hammerHitCooldown = 0;
     gloveHitCooldown = 0;
     weaponHudTimer = 0;
+    attackCooldown = 0;
+    attackEffectTimer = 0;
+    attackEffectPhase = 0;
+    attackEffectMode = "kick";
     hitSparks = [];
     deathFlashTimer = 0;
     deathShakeTimer = 0;
@@ -1058,10 +1181,13 @@
     gameState = STATE.PLAY;
     hudMessage = "りら: ホームパーティー会場へ殴り込み、彼氏を救出せよ";
     hudTimer = 170;
+    startStageMusic(true);
+    setBgmVolume(0, 0);
     setBgmVolume(BGM_NORMAL_VOL, 0.08);
   }
 
   function respawnFromCheckpoint() {
+    preBossCutsceneTimer = 0;
     stage = buildStage();
     const cp = stage.checkpoints[checkpointIndex];
     player = createPlayer(cp.x, cp.y);
@@ -1079,14 +1205,15 @@
     kickComboTimer = 0;
     kickFlashTimer = 0;
     kickFlashPower = 0;
-    giantTimer = 0;
     hammerTimer = 0;
     gloveTimer = 0;
-    hammerSpin = 0;
     hammerHitCooldown = 0;
     gloveHitCooldown = 0;
     weaponHudTimer = 0;
-    itemGuideTimer = 0;
+    attackCooldown = 0;
+    attackEffectTimer = 0;
+    attackEffectPhase = 0;
+    attackEffectMode = "kick";
     hitSparks = [];
     deathFlashTimer = 0;
     deathShakeTimer = 0;
@@ -1095,6 +1222,8 @@
     gameState = STATE.PLAY;
     hudMessage = `${cp.label} から再開`;
     hudTimer = 70;
+    startStageMusic(true);
+    setBgmVolume(0, 0);
     setBgmVolume(BGM_NORMAL_VOL, 0.08);
   }
 
@@ -1384,26 +1513,20 @@
     }
   }
 
-  function updateCreamPuffs(dt) {
-    for (const cream of stage.creamPuffs) {
-      cream.bob += 0.11 * dt;
-      if (cream.collected) continue;
+  function updateBikes(dt) {
+    for (const bike of stage.bikes) {
+      bike.bob += 0.11 * dt;
+      if (bike.collected) continue;
 
-      const floatY = cream.y + Math.sin(cream.bob) * 1.9;
-      const hit = { x: cream.x, y: floatY, w: cream.w, h: cream.h };
+      const floatY = bike.y + Math.sin(bike.bob) * 1.9;
+      const hit = { x: bike.x, y: floatY, w: bike.w, h: bike.h };
       if (!overlap(player, hit)) continue;
 
-      cream.collected = true;
-      const wasInvincible = invincibleTimer > 0;
+      bike.collected = true;
       startInvincibleMode(INVINCIBLE_DURATION);
-      if (wasInvincible) {
-        giantTimer = Math.max(giantTimer, GIANT_DURATION);
-      }
       playPowerupSfx();
-      triggerImpact(1.25, cream.x + cream.w * 0.5, floatY + cream.h * 0.5, 2.2);
-      hudMessage = wasInvincible
-        ? "シュークリーム連続! 一定時間 巨大化"
-        : "シュークリーム! 一定時間 無敵";
+      triggerImpact(1.25, bike.x + bike.w * 0.5, floatY + bike.h * 0.5, 2.2);
+      hudMessage = "バイク搭乗! 15秒 無敵";
       hudTimer = 90;
     }
   }
@@ -1424,143 +1547,168 @@
 
       if (item.type === "hammer") {
         hammerTimer = Math.max(hammerTimer, WEAPON_DURATION);
-        hudMessage = "ハンマー獲得! 10秒オート攻撃";
+        hudMessage = "ハンマー獲得! 10秒 叩き強化";
       } else {
         gloveTimer = Math.max(gloveTimer, WEAPON_DURATION);
-        hudMessage = "グローブ獲得! 10秒百裂拳";
+        hudMessage = "グローブ獲得! 10秒 百裂拳";
       }
       hudTimer = 84;
     }
   }
 
-  function updateAutoWeapons(dt) {
+  function currentAttackMode() {
+    if (hammerTimer > 0 && gloveTimer > 0) {
+      return hammerTimer >= gloveTimer ? "hammer" : "glove";
+    }
+    if (hammerTimer > 0) return "hammer";
+    if (gloveTimer > 0) return "glove";
+    return "kick";
+  }
+
+  function executePlayerAttack(mode) {
     const pLv = proteinLevel();
-    const gf = giantFactor();
+    const gf = powerFactor();
     const px = player.x + player.w * 0.5;
-    const py = player.y + player.h * 0.5;
+    const dir = player.facing;
 
-    if (hammerTimer > 0) {
-      hammerSpin += dt * (0.78 + gf * 0.18);
-      if (hammerHitCooldown <= 0) {
-        hammerHitCooldown = 9;
-        const radius = 24 + gf * 6;
-        let hits = 0;
+    let hitBox = { x: px - 6, y: player.y + 5, w: 12, h: 16 };
+    let power = 1.06 + pLv * 0.05;
+    let burstPower = 1.3 + pLv * 0.04;
+    let cooldown = 10;
+    let hitLabel = "キック!";
 
-        for (const enemy of stage.enemies) {
-          if (!enemy.alive || enemy.kicked) continue;
-          const ex = enemy.x + enemy.w * 0.5;
-          const ey = enemy.y + enemy.h * 0.5;
-          if (Math.hypot(ex - px, ey - py) > radius) continue;
-          const dir = ex >= px ? 1 : -1;
-          const power = 1.7 * gf + pLv * 0.04;
-          kickEnemy(enemy, dir, power);
-          hits += 1;
-        }
+    if (mode === "hammer") {
+      const hitX = dir > 0 ? player.x + player.w - 2 : player.x - 14;
+      hitBox = { x: hitX, y: player.y - 10, w: 14, h: 36 };
+      power = 1.45 + pLv * 0.06;
+      burstPower = 1.8 + pLv * 0.05;
+      cooldown = 6;
+      hitLabel = "ハンマー連打!";
+    } else if (mode === "glove") {
+      const range = 23 + pLv * 0.4;
+      const hitX = dir > 0 ? player.x + player.w - 1 : player.x - range;
+      hitBox = { x: hitX, y: player.y + 4, w: range, h: 16 };
+      power = 1.12 + pLv * 0.04;
+      burstPower = 1.45 + pLv * 0.04;
+      cooldown = 3.4;
+      hitLabel = "百裂拳!";
+    } else {
+      const range = 19 + pLv * 0.25;
+      const hitX = dir > 0 ? player.x + player.w - 1 : player.x - range;
+      hitBox = { x: hitX, y: player.y + 5, w: range, h: 15 };
+    }
 
-        for (const b of stage.hazardBullets) {
-          const bx = b.x + b.w * 0.5;
-          const by = b.y + b.h * 0.5;
-          if (Math.hypot(bx - px, by - py) <= radius + 6) {
-            b.dead = true;
-            hits += 1;
-          }
-        }
+    attackCooldown = cooldown;
+    attackEffectTimer = mode === "hammer" ? 12 : 9;
+    attackEffectMode = mode;
+    attackEffectPhase = 0;
+    if (mode === "hammer") {
+      hammerHitCooldown = cooldown;
+    } else if (mode === "glove") {
+      gloveHitCooldown = cooldown;
+    }
 
-        for (const bs of stage.bossShots) {
-          const sx = bs.x + bs.w * 0.5;
-          const sy = bs.y + bs.h * 0.5;
-          if (Math.hypot(sx - px, sy - py) <= radius + 5) {
-            bs.dead = true;
-            hits += 1;
-          }
-        }
+    let hits = 0;
+    let hitX = player.x + player.w * 0.5 + dir * 8;
+    let hitY = player.y + 11;
 
-        if (stage.boss.active && stage.boss.hp > 0) {
-          const boss = stage.boss;
-          const bx = boss.x + boss.w * 0.5;
-          const by = boss.y + boss.h * 0.5;
-          if (Math.hypot(bx - px, by - py) <= radius + 9 && boss.invuln <= 0) {
-            const damage = 1;
-            boss.hp = Math.max(0, boss.hp - damage);
-            boss.invuln = 10;
-            boss.vx += (bx >= px ? 1 : -1) * (0.8 + gf * 0.24);
-            boss.vy = Math.min(boss.vy, -2.4);
-            hits += 1;
-            if (boss.hp <= 0) {
-              defeatBoss();
-            }
-          }
-        }
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlap(hitBox, enemy)) continue;
+      const knockDir = enemy.x + enemy.w * 0.5 >= px ? 1 : -1;
+      kickEnemy(enemy, knockDir, power * gf);
+      hitX = enemy.x + enemy.w * 0.5;
+      hitY = enemy.y + enemy.h * 0.5;
+      hits += 1;
+    }
 
-        if (hits > 0) {
-          if (kickComboTimer > 0) {
-            kickCombo = Math.min(99, kickCombo + hits);
-          } else {
-            kickCombo = hits;
-          }
-          kickComboTimer = 54;
-          triggerKickBurst(px, py - 1, 2 + gf * 0.55 + hits * 0.08);
-          playKickSfx(1.65 + gf * 0.35);
-        }
+    for (const b of stage.hazardBullets) {
+      if (!overlap(hitBox, b)) continue;
+      b.dead = true;
+      hits += 1;
+    }
+
+    for (const bs of stage.bossShots) {
+      if (!overlap(hitBox, bs)) continue;
+      bs.dead = true;
+      hits += 1;
+    }
+
+    for (const wall of stage.breakWalls) {
+      if (wall.hp <= 0) continue;
+      if (wall.hitCooldown > 0) continue;
+      if (!overlap(hitBox, wall)) continue;
+      const wallDamage = mode === "hammer" ? 3 : mode === "glove" ? 1 : 2;
+      wall.hp = Math.max(0, wall.hp - wallDamage);
+      wall.hitCooldown = mode === "hammer" ? 12 : 16;
+      hitX = wall.x + wall.w * 0.5;
+      hitY = wall.y + wall.h * 0.4;
+      hits += 1;
+      hudMessage = wall.hp <= 0 ? "壁を破壊! 先へ進め!" : `壁にヒット! 残り耐久 ${wall.hp}`;
+      hudTimer = wall.hp <= 0 ? 90 : 46;
+    }
+
+    if (stage.boss.active && stage.boss.hp > 0 && overlap(hitBox, stage.boss) && stage.boss.invuln <= 0) {
+      const bossDamage = mode === "hammer" ? 2 : mode === "glove" ? 1 : 1 + Math.floor(pLv / 12);
+      stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
+      stage.boss.invuln = 16;
+      stage.boss.vx += dir * (0.8 + bossDamage * 0.2);
+      stage.boss.vy = Math.min(stage.boss.vy, -2.4);
+      hitX = stage.boss.x + stage.boss.w * 0.5;
+      hitY = stage.boss.y + stage.boss.h * 0.5;
+      hits += 1;
+      if (stage.boss.hp <= 0) {
+        defeatBoss();
       }
     }
 
-    if (gloveTimer > 0) {
-      if (gloveHitCooldown <= 0) {
-        gloveHitCooldown = 2.2;
-        const range = 20 + gf * 6;
-        const hitX = player.facing > 0 ? player.x + player.w - 1 : player.x - range;
-        const hitW = range;
-        const hitY = player.y + 4;
-        const hitH = 16;
-        const punchHit = { x: hitX, y: hitY, w: hitW, h: hitH };
-        let hits = 0;
-
-        for (const enemy of stage.enemies) {
-          if (!enemy.alive || enemy.kicked) continue;
-          if (!overlap(punchHit, enemy)) continue;
-          const power = 1.1 * gf + pLv * 0.03;
-          kickEnemy(enemy, player.facing, power);
-          hits += 1;
-        }
-
-        for (const b of stage.hazardBullets) {
-          if (!overlap(punchHit, b)) continue;
-          b.dead = true;
-          hits += 1;
-        }
-
-        for (const bs of stage.bossShots) {
-          if (!overlap(punchHit, bs)) continue;
-          bs.dead = true;
-          hits += 1;
-        }
-
-        if (stage.boss.active && stage.boss.hp > 0 && overlap(punchHit, stage.boss)) {
-          if (stage.boss.invuln <= 0) {
-            stage.boss.hp = Math.max(0, stage.boss.hp - 1);
-            stage.boss.invuln = 8;
-            stage.boss.vx += player.facing * (0.7 + gf * 0.2);
-            stage.boss.vy = Math.min(stage.boss.vy, -2.1);
-            hits += 1;
-            if (stage.boss.hp <= 0) {
-              defeatBoss();
-            }
-          }
-        }
-
-        if (hits > 0) {
-          if (kickComboTimer > 0) {
-            kickCombo = Math.min(99, kickCombo + hits);
-          } else {
-            kickCombo = hits;
-          }
-          kickComboTimer = 46;
-          const bx = player.facing > 0 ? player.x + player.w + 7 : player.x - 7;
-          triggerKickBurst(bx, player.y + 11, 1.35 + gf * 0.28 + hits * 0.05);
-          playKickSfx(1.28 + gf * 0.2);
-        }
+    if (hits > 0) {
+      if (kickComboTimer > 0) {
+        kickCombo = Math.min(99, kickCombo + hits);
+      } else {
+        kickCombo = hits;
       }
+      kickComboTimer = mode === "glove" ? 38 : 48;
+      triggerKickBurst(hitX, hitY, burstPower + hits * 0.08);
+      playKickSfx(mode === "hammer" ? 1.78 : mode === "glove" ? 1.35 : 1.52);
+      if (mode !== "hammer" || hits <= 1) {
+        hudMessage = kickCombo > 1 ? `${hitLabel} x${kickCombo}` : hitLabel;
+        hudTimer = 28;
+      }
+    } else if (mode === "kick") {
+      playKickSfx(1.1);
+    }
+  }
+
+  function updatePlayerAttack(dt, actions) {
+    const hasWeapon = hammerTimer > 0 || gloveTimer > 0;
+    const wantRepeat = hasWeapon && input.attack;
+    if (attackCooldown > 0) return;
+    if (!actions.attackPressed && !wantRepeat) return;
+    executePlayerAttack(currentAttackMode());
+  }
+
+  function resolveEnemyContactDamage() {
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlap(player, enemy)) continue;
+      if (enemy.kind === "peacock") {
+        killPlayer("孔雀に接触");
+      } else {
+        killPlayer("敵に接触");
+      }
+      return;
+    }
+  }
+
+  function resolveBossContactDamage() {
+    if (!stage.boss.active) return;
+    if (!overlap(player, stage.boss)) return;
+    const rage = stage.boss.hp <= Math.ceil(stage.boss.maxHp * 0.55);
+    if (stage.boss.mode === "dash") {
+      killPlayer("神の突進に被弾");
+    } else {
+      killPlayer(rage ? "神威に接触して被弾" : "神に接触して被弾");
     }
   }
 
@@ -1570,14 +1718,14 @@
     stage.boss.started = true;
     stage.boss.active = true;
     stage.boss.hp = stage.boss.maxHp;
-    stage.boss.x = 5100;
+    stage.boss.x = 7100;
     stage.boss.y = 124;
     stage.boss.vx = 0;
     stage.boss.vy = 0;
     stage.boss.dir = -1;
     stage.boss.mode = "intro";
-    stage.boss.modeTimer = 54;
-    stage.boss.shotCooldown = 44;
+    stage.boss.modeTimer = 42;
+    stage.boss.shotCooldown = 28;
     stage.boss.attackCycle = 0;
     stage.boss.invuln = 24;
     stage.bossShots = [];
@@ -1590,7 +1738,7 @@
 
     triggerImpact(2.4, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.55, 3.4);
     playKickSfx(1.8);
-    hudMessage = "白髪・白ヒゲの神が降臨! 飛び道具を見て回避しろ";
+    hudMessage = "ホームパーティー会場で神が降臨! 回避しつつ蹴れ";
     hudTimer = 120;
   }
 
@@ -1642,19 +1790,20 @@
     if (!stage.boss.active) return;
 
     const boss = stage.boss;
+    const rage = boss.hp <= Math.ceil(boss.maxHp * 0.55);
     boss.invuln = Math.max(0, boss.invuln - dt);
     boss.modeTimer -= dt;
     boss.shotCooldown -= dt;
 
     if (boss.mode === "intro") {
-      boss.vx = -0.36;
+      boss.vx = -0.54;
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = 64;
+        boss.modeTimer = rage ? 38 : 48;
       }
     } else if (boss.mode === "idle") {
-      boss.vx += boss.dir * 0.14 * dt;
-      boss.vx = clamp(boss.vx, -0.82, 0.82);
+      boss.vx += boss.dir * (rage ? 0.29 : 0.22) * dt;
+      boss.vx = clamp(boss.vx, -(rage ? 1.4 : 1.12), rage ? 1.4 : 1.12);
 
       if (boss.x < BOSS_ARENA.minX + 18) {
         boss.x = BOSS_ARENA.minX + 18;
@@ -1667,115 +1816,68 @@
       if (boss.modeTimer <= 0) {
         if (boss.attackCycle % 2 === 0) {
           boss.mode = "windup";
-          boss.modeTimer = 40;
+          boss.modeTimer = rage ? 20 : 28;
           boss.vx = 0;
         } else {
           boss.mode = "shoot";
-          boss.modeTimer = 48;
-          boss.shotCooldown = 18;
+          boss.modeTimer = rage ? 78 : 66;
+          boss.shotCooldown = rage ? 10 : 14;
         }
         boss.attackCycle += 1;
       }
     } else if (boss.mode === "windup") {
-      boss.vx *= Math.pow(0.74, dt);
+      boss.vx *= Math.pow(rage ? 0.62 : 0.68, dt);
       if (boss.modeTimer <= 0) {
         boss.mode = "dash";
-        boss.modeTimer = 22;
-        boss.vx = boss.dir * (1.95 + (boss.maxHp - boss.hp) * 0.022);
+        boss.modeTimer = rage ? 34 : 28;
+        boss.vx = boss.dir * (2.55 + (boss.maxHp - boss.hp) * 0.034 + (rage ? 0.38 : 0));
       }
     } else if (boss.mode === "dash") {
       if (boss.x <= BOSS_ARENA.minX + 3) {
         boss.x = BOSS_ARENA.minX + 3;
         boss.dir = 1;
         boss.mode = "idle";
-        boss.modeTimer = 62;
+        boss.modeTimer = rage ? 34 : 46;
       } else if (boss.x + boss.w >= BOSS_ARENA.maxX - 3) {
         boss.x = BOSS_ARENA.maxX - 3 - boss.w;
         boss.dir = -1;
         boss.mode = "idle";
-        boss.modeTimer = 62;
+        boss.modeTimer = rage ? 34 : 46;
       } else if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = 62;
+        boss.modeTimer = rage ? 34 : 46;
       }
     } else if (boss.mode === "shoot") {
-      boss.vx *= Math.pow(0.84, dt);
+      boss.vx *= Math.pow(rage ? 0.74 : 0.79, dt);
 
       if (boss.shotCooldown <= 0) {
         const aim = player.x + player.w * 0.5 < boss.x + boss.w * 0.5 ? -1 : 1;
         const spread = (boss.attackCycle % 3) - 1;
-        stage.bossShots.push({
-          x: boss.x + boss.w * 0.5 - 2,
-          y: boss.y + 10,
-          w: 5,
-          h: 5,
-          vx: aim * (1.35 + Math.abs(spread) * 0.12),
-          vy: -0.46 + spread * 0.2,
-          ttl: 120,
-        });
-        boss.shotCooldown = 26;
+        const volleyOffsets = rage ? [-0.38, -0.19, 0, 0.19, 0.38] : [-0.22, 0, 0.22];
+        for (const offset of volleyOffsets) {
+          stage.bossShots.push({
+            x: boss.x + boss.w * 0.5 - 2,
+            y: boss.y + 10,
+            w: rage ? 6 : 5,
+            h: rage ? 6 : 5,
+            vx: aim * (1.68 + Math.abs(spread) * 0.16) + aim * offset * 0.36,
+            vy: -0.56 + spread * 0.18 + offset,
+            ttl: rage ? 148 : 136,
+          });
+        }
+        boss.shotCooldown = rage ? 11 : 16;
         boss.attackCycle += 1;
       }
 
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = 62;
+        boss.modeTimer = rage ? 34 : 46;
       }
     }
 
     boss.vy = Math.min(boss.vy + GRAVITY * dt, MAX_FALL);
     moveWithCollisions(boss, solids, dt);
     boss.x = clamp(boss.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - boss.w - 2);
-
-    if (overlap(player, boss)) {
-      const dir = player.x + player.w * 0.5 < boss.x + boss.w * 0.5 ? 1 : -1;
-
-      if (boss.mode === "dash") {
-        player.vx -= dir * 2.8;
-        player.vy = -4.4;
-        hitStopTimer = Math.max(hitStopTimer, 2.6);
-        triggerImpact(1.8, boss.x + boss.w * 0.5, boss.y + boss.h * 0.5, 2.2);
-        hudMessage = "突進ヒット! 体勢を立て直せ";
-        hudTimer = 34;
-        return;
-      }
-
-      if (boss.invuln <= 0) {
-        if (kickComboTimer > 0) {
-          kickCombo = Math.min(99, kickCombo + 1);
-        } else {
-          kickCombo = 1;
-        }
-        kickComboTimer = 52;
-
-        const pLv = proteinLevel();
-        const gf = giantFactor();
-        const bonus = Math.min(2.4, kickCombo * 0.18) + pLv * 0.06;
-        const damage = 1 + Math.floor(pLv / 10) + (gf > 1 ? 1 : 0);
-
-        boss.hp = Math.max(0, boss.hp - damage);
-        boss.invuln = 12;
-        boss.vx += dir * (1.9 + bonus * 0.45 + (gf - 1) * 0.8);
-        boss.vy = -2.8;
-
-        player.vx -= dir * (0.45 + bonus * 0.05);
-        player.vy = -4.8;
-
-        triggerKickBurst(boss.x + boss.w * 0.5, boss.y + boss.h * 0.5, 2 + bonus * 1.05 + (gf - 1) * 1.1);
-        playKickSfx(2 + bonus * 0.62 + (gf - 1) * 0.5);
-
-        hudMessage = kickCombo > 1 ? `BOSS KICK x${kickCombo}!` : "ボスに接触キック!";
-        hudTimer = 36;
-
-        if (boss.hp <= 0) {
-          defeatBoss();
-          return;
-        }
-      } else {
-        player.vx -= dir * 0.42;
-        player.vy = Math.min(player.vy, -1.2);
-      }
-    }
   }
 
   function updateImpactEffects(dt) {
@@ -1786,15 +1888,16 @@
     hurtFlashTimer = Math.max(0, hurtFlashTimer - dt);
     kickFlashTimer = Math.max(0, kickFlashTimer - dt);
     kickFlashPower = Math.max(0, kickFlashPower - dt * 0.24);
-    giantTimer = Math.max(0, giantTimer - dt);
     hammerTimer = Math.max(0, hammerTimer - dt);
     gloveTimer = Math.max(0, gloveTimer - dt);
     hammerHitCooldown = Math.max(0, hammerHitCooldown - dt);
     gloveHitCooldown = Math.max(0, gloveHitCooldown - dt);
     weaponHudTimer = Math.max(0, weaponHudTimer - dt);
-    itemGuideTimer = Math.max(0, itemGuideTimer - dt);
-    if (hammerTimer <= 0) hammerSpin = 0;
+    attackCooldown = Math.max(0, attackCooldown - dt);
+    attackEffectTimer = Math.max(0, attackEffectTimer - dt);
+    attackEffectPhase += dt;
     if (gloveTimer <= 0) gloveHitCooldown = 0;
+    if (hammerTimer <= 0) hammerHitCooldown = 0;
     updateInvincibleMusicFade(dt);
     if (invincibleTimer > 0) {
       invincibleTimer = Math.max(0, invincibleTimer - dt);
@@ -1823,72 +1926,16 @@
     hitSparks = hitSparks.filter((s) => s.life > 0);
   }
 
-  function resolvePlayerEnemyKick() {
-    for (const enemy of stage.enemies) {
-      if (!enemy.alive) continue;
-      if (enemy.kicked) continue;
-      if (!overlap(player, enemy)) continue;
-
-      const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
-      if (kickComboTimer > 0) {
-        kickCombo = Math.min(99, kickCombo + 1);
-      } else {
-        kickCombo = 1;
-      }
-      kickComboTimer = 44;
-
-      const pLv = proteinLevel();
-      const gf = giantFactor();
-      const comboBonus = Math.min(2.2, kickCombo * 0.16);
-      const proteinBonus = pLv * 0.07;
-      const kickPower = (1 + comboBonus + proteinBonus) * gf;
-      const burstPower = 1.2 + comboBonus + proteinBonus * 0.45 + (gf - 1) * 1.1;
-
-      kickEnemy(enemy, dir, kickPower);
-      player.vx += dir * (0.55 + comboBonus * 0.2);
-      player.vy = Math.min(player.vy, -(2.1 + comboBonus * 0.35));
-
-      triggerKickBurst(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.5, burstPower);
-      playKickSfx(1.35 + comboBonus * 0.56);
-
-      hudMessage = kickCombo > 1 ? `KICK x${kickCombo}!!` : "接触キック!";
-      hudTimer = 28;
-    }
-  }
-
   function resolveBreakWalls(dt) {
     for (const wall of stage.breakWalls) {
       if (wall.hp <= 0) continue;
       wall.hitCooldown = Math.max(0, (wall.hitCooldown || 0) - dt);
-      if (wall.hitCooldown > 0) continue;
-      if (!overlap(player, wall)) continue;
-
-      const dir = player.x + player.w * 0.5 < wall.x + wall.w * 0.5 ? 1 : -1;
-      const pLv = proteinLevel();
-      const damage = pLv >= 20 ? 2 : 1;
-      const gf = giantFactor();
-      const totalDamage = damage + (gf > 1 ? 1 : 0);
-      wall.hp = Math.max(0, wall.hp - totalDamage);
-      wall.hitCooldown = 18;
-
-      player.vx -= dir * 0.56;
-      player.vy = Math.min(player.vy, -2.6);
-      triggerKickBurst(wall.x + wall.w * 0.5, player.y + 12, 1.5 + totalDamage * 0.6 + (gf - 1) * 0.55);
-      playKickSfx(1.55 + totalDamage * 0.32 + (gf - 1) * 0.35);
-
-      if (wall.hp <= 0) {
-        hudMessage = "壁を破壊! 先へ進め!";
-        hudTimer = 90;
-      } else {
-        hudMessage = `壁に蹴り! 残り耐久 ${wall.hp}`;
-        hudTimer = 46;
-      }
     }
   }
 
   function resolveHazards() {
     if (player.y > H + 42) {
-      killPlayer("奈落に落下");
+      killPlayer("奈落に落下", { ignoreInvincible: true, instantGameOver: true });
       return;
     }
 
@@ -1921,17 +1968,30 @@
   function resolveGoal() {
     if (!overlap(player, stage.goal)) return;
     if (!stage.boss.started) {
-      startBossBattle();
+      startPreBossCutscene();
     }
+  }
+
+  function startPreBossCutscene() {
+    if (stage.boss.started) return;
+    if (gameState !== STATE.PLAY) return;
+    gameState = STATE.PRE_BOSS;
+    preBossCutsceneTimer = 0;
+    player.vx = 0;
+    player.vy = 0;
+    hudMessage = "";
+    hudTimer = 0;
   }
 
   function sampleActions() {
     const actions = {
       jumpPressed: input.jump && !prevInput.jump,
+      attackPressed: input.attack && !prevInput.attack,
       startPressed: input.start && !prevInput.start,
     };
 
     prevInput.jump = input.jump;
+    prevInput.attack = input.attack;
     prevInput.start = input.start;
 
     return actions;
@@ -1940,7 +2000,6 @@
   function updatePlay(dt, actions) {
     if (hudTimer > 0) hudTimer -= dt;
     updateImpactEffects(dt);
-    if (itemGuideTimer > 0 && actions.startPressed) itemGuideTimer = 0;
 
     if (hitStopTimer > 0) {
       hitStopTimer = Math.max(0, hitStopTimer - dt);
@@ -1950,10 +2009,10 @@
 
     const pLv = proteinLevel();
     const rush = proteinRushTimer > 0 ? 1 : 0;
-    const accel = 0.42 + pLv * 0.014 + rush * 0.06;
-    const maxSpeed = 2.6 + pLv * 0.042 + rush * 0.52;
-    const friction = rush ? 0.84 : 0.78;
-    const jumpPower = 6.7 + pLv * 0.055 + rush * 0.25;
+    const accel = 0.24 + pLv * 0.006 + rush * 0.03;
+    const maxSpeed = 1.7 + pLv * 0.022 + rush * 0.26;
+    const friction = rush ? 0.87 : 0.83;
+    const jumpPower = 6.35 + pLv * 0.046 + rush * 0.16;
 
     const solids = collectSolids();
 
@@ -1990,11 +2049,10 @@
     updateEnemies(dt, solidsAfter);
     updateHazardBullets(dt, solidsAfter);
     updateProteins(dt);
-    updateCreamPuffs(dt);
+    updateBikes(dt);
     updateWeaponItems(dt);
-    updateAutoWeapons(dt);
-
-    resolvePlayerEnemyKick();
+    updatePlayerAttack(dt, actions);
+    resolveEnemyContactDamage();
     resolveBreakWalls(dt);
     resolveHazards();
     resolveGoal();
@@ -2006,7 +2064,6 @@
   function updateBossBattle(dt, actions) {
     if (hudTimer > 0) hudTimer -= dt;
     updateImpactEffects(dt);
-    if (itemGuideTimer > 0 && actions.startPressed) itemGuideTimer = 0;
 
     if (hitStopTimer > 0) {
       hitStopTimer = Math.max(0, hitStopTimer - dt);
@@ -2016,10 +2073,10 @@
 
     const pLv = proteinLevel();
     const rush = proteinRushTimer > 0 ? 1 : 0;
-    const accel = 0.42 + pLv * 0.014 + rush * 0.06;
-    const maxSpeed = 2.6 + pLv * 0.042 + rush * 0.52;
-    const friction = rush ? 0.84 : 0.78;
-    const jumpPower = 6.7 + pLv * 0.055 + rush * 0.25;
+    const accel = 0.24 + pLv * 0.006 + rush * 0.03;
+    const maxSpeed = 1.7 + pLv * 0.022 + rush * 0.26;
+    const friction = rush ? 0.87 : 0.83;
+    const jumpPower = 6.35 + pLv * 0.046 + rush * 0.16;
 
     const solids = collectSolids();
 
@@ -2047,11 +2104,13 @@
     player.anim += dt;
 
     updateProteins(dt);
-    updateCreamPuffs(dt);
+    updateBikes(dt);
     updateWeaponItems(dt);
     updateBoss(dt, solids);
     updateBossShots(dt, solids);
-    updateAutoWeapons(dt);
+    updatePlayerAttack(dt, actions);
+    resolveBossContactDamage();
+    resolveBreakWalls(dt);
     resolveHazards();
 
     cameraX = clamp(player.x + player.w * 0.5 - W * 0.45, BOSS_ARENA.minX - 120, stage.width - W);
@@ -2067,8 +2126,15 @@
       return;
     }
 
-    if (cutsceneTime > 740) {
+    if (cutsceneTime > 560) {
       startGameplay(true);
+    }
+  }
+
+  function updatePreBossCutscene(dt, actions) {
+    preBossCutsceneTimer += dt;
+    if (actions.startPressed || actions.jumpPressed || preBossCutsceneTimer > PRE_BOSS_CUTSCENE_DURATION) {
+      startBossBattle();
     }
   }
 
@@ -2100,8 +2166,15 @@
   }
 
   function update(dt, actions) {
+    updateStageMusicFade(dt);
+
     if (gameState === STATE.CUTSCENE) {
       updateCutscene(dt, actions);
+      return;
+    }
+
+    if (gameState === STATE.PRE_BOSS) {
+      updatePreBossCutscene(dt, actions);
       return;
     }
 
@@ -2330,17 +2403,20 @@
     paint("#101626", 1, 9, 3, 2);
     paint("#101626", 10, 9, 3, 2);
 
-    // Face: pale skin + brown eyes.
-    paint("#f7e8df", 4, 6, 6, 6);
-    paint("#ecd5c9", 4, 11, 6, 1);
-    paint("#fdf6f0", 5, 7, 2, 1);
-    paint("#fdf6f0", 8, 7, 2, 1);
-    paint("#6f4838", 5, 7, 1, 1);
-    paint("#6f4838", 8, 7, 1, 1);
+    // Face: softer cute look, larger eyes, small blush.
+    paint("#f8e9e1", 4, 6, 6, 6);
+    paint("#edd8cd", 4, 11, 6, 1);
+    paint("#fff6f1", 5, 7, 2, 1);
+    paint("#fff6f1", 8, 7, 2, 1);
     paint("#2a1c1d", 5, 6, 2, 1);
     paint("#2a1c1d", 8, 6, 2, 1);
-    paint("#f0d0c1", 7, 8, 1, 1);
-    paint("#c79189", 6, 10, 2, 1);
+    paint("#6f4838", 5, 7, 2, 2);
+    paint("#6f4838", 8, 7, 2, 2);
+    paint("#fff8f4", 5, 7, 1, 1);
+    paint("#fff8f4", 8, 7, 1, 1);
+    paint("#f2c8bb", 4, 9, 1, 1);
+    paint("#f2c8bb", 10, 9, 1, 1);
+    paint("#c48a83", 6, 10, 2, 1);
 
     // Neck + rider jacket + white inner shirt.
     paint("#f3ddd1", 6, 12, 2, 1);
@@ -2589,70 +2665,98 @@
     const x = Math.floor(protein.x - cameraX);
     const y = Math.floor(protein.y + Math.sin(protein.bob) * 1.7);
 
-    ctx.fillStyle = "#212531";
-    ctx.fillRect(x + 0, y + 0, 10, 12);
-    ctx.fillStyle = "#f2f2f7";
-    ctx.fillRect(x + 1, y + 1, 8, 10);
-    ctx.fillStyle = "#d03a46";
-    ctx.fillRect(x + 2, y + 2, 6, 3);
-    ctx.fillStyle = "#f7cf88";
-    ctx.fillRect(x + 4, y + 3, 2, 1);
-    ctx.fillStyle = "#3a4c77";
+    ctx.fillStyle = "#121623";
+    ctx.fillRect(x, y, 10, 12);
+    ctx.fillStyle = "#e9d59f";
+    ctx.fillRect(x + 1, y + 1, 8, 2);
+    ctx.fillStyle = "#c5a068";
+    ctx.fillRect(x + 2, y + 2, 6, 1);
+    ctx.fillStyle = "#f7f8fd";
+    ctx.fillRect(x + 1, y + 3, 8, 8);
+    ctx.fillStyle = "#cdd6e8";
+    ctx.fillRect(x + 1, y + 10, 8, 1);
+    ctx.fillStyle = "#4770b8";
     ctx.fillRect(x + 2, y + 6, 6, 3);
-    ctx.fillStyle = "#b9c2d8";
-    ctx.fillRect(x + 3, y + 0, 4, 1);
-    ctx.fillStyle = "#7f8baa";
-    ctx.fillRect(x + 2, y + 9, 6, 1);
+    ctx.fillStyle = "#eaf4ff";
+    ctx.fillRect(x + 3, y + 6, 1, 3);
+    ctx.fillRect(x + 4, y + 6, 2, 1);
+    ctx.fillRect(x + 5, y + 7, 1, 1);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillRect(x + 2, y + 4, 1, 2);
   }
 
-  function drawCreamPuff(cream) {
-    if (cream.collected) return;
-    const x = Math.floor(cream.x - cameraX);
-    const y = Math.floor(cream.y + Math.sin(cream.bob) * 1.9);
+  function drawBikePickup(bike) {
+    if (bike.collected) return;
+    const x = Math.floor(bike.x - cameraX);
+    const y = Math.floor(bike.y + Math.sin(bike.bob) * 1.9);
+    const blink = Math.floor(player.anim * 0.18) % 2 === 0;
 
-    ctx.fillStyle = "#412f24";
-    ctx.fillRect(x + 0, y + 2, 12, 7);
-    ctx.fillStyle = "#d09a5f";
-    ctx.fillRect(x + 1, y + 2, 10, 2);
-    ctx.fillStyle = "#f2c98f";
-    ctx.fillRect(x + 1, y + 4, 10, 2);
-    ctx.fillStyle = "#f8f3e8";
-    ctx.fillRect(x + 2, y + 5, 8, 2);
-    ctx.fillStyle = "#efdfc8";
-    ctx.fillRect(x + 3, y + 4, 6, 1);
-    ctx.fillStyle = "#a66e3f";
-    ctx.fillRect(x + 1, y + 8, 10, 1);
-    ctx.fillStyle = "#fff6e6";
-    ctx.fillRect(x + 5, y + 6, 2, 1);
+    ctx.fillStyle = "#0f1220";
+    ctx.fillRect(x + 1, y + 8, 3, 3);
+    ctx.fillRect(x + 8, y + 8, 3, 3);
+    ctx.fillStyle = "#7e97cd";
+    ctx.fillRect(x + 2, y + 9, 1, 1);
+    ctx.fillRect(x + 9, y + 9, 1, 1);
+
+    ctx.fillStyle = "#ff5f84";
+    ctx.fillRect(x + 3, y + 7, 5, 1);
+    ctx.fillRect(x + 6, y + 6, 3, 1);
+    ctx.fillStyle = "#6ddfff";
+    ctx.fillRect(x + 4, y + 6, 2, 1);
+    ctx.fillRect(x + 8, y + 5, 2, 1);
+    ctx.fillRect(x + 9, y + 4, 1, 1);
+    ctx.fillStyle = "#d7f6ff";
+    ctx.fillRect(x + 5, y + 5, 2, 1);
+    ctx.fillStyle = "#ffd983";
+    ctx.fillRect(x + 7, y + 4, 2, 1);
+    ctx.fillStyle = "#101626";
+    ctx.fillRect(x + 5, y + 7, 1, 2);
+
+    if (blink) {
+      ctx.fillStyle = "#ffd97d";
+      ctx.fillRect(x + 5, y + 1, 2, 1);
+      ctx.fillRect(x + 6, y + 0, 1, 3);
+      ctx.fillStyle = "#ff82c5";
+      ctx.fillRect(x - 1, y + 3, 1, 1);
+      ctx.fillRect(x + 12, y + 4, 1, 1);
+    }
   }
 
   function drawWeaponItem(item) {
     if (item.collected) return;
     const x = Math.floor(item.x - cameraX);
     const y = Math.floor(item.y + Math.sin(item.bob) * 1.6);
+    const hammer = item.type === "hammer";
 
-    ctx.fillStyle = "#1a1722";
+    ctx.fillStyle = hammer ? "#1a2236" : "#2b1821";
     ctx.fillRect(x, y, 12, 12);
-    ctx.fillStyle = "#31364a";
+    ctx.fillStyle = hammer ? "#6ab3ff" : "#ff88b0";
     ctx.fillRect(x + 1, y + 1, 10, 10);
+    ctx.fillStyle = "#151928";
+    ctx.fillRect(x + 2, y + 2, 8, 8);
 
-    if (item.type === "hammer") {
-      ctx.fillStyle = "#b8c4dd";
-      ctx.fillRect(x + 2, y + 2, 7, 3);
-      ctx.fillStyle = "#8493ae";
-      ctx.fillRect(x + 3, y + 3, 5, 1);
-      ctx.fillStyle = "#5a3b26";
-      ctx.fillRect(x + 5, y + 4, 2, 6);
-      ctx.fillStyle = "#3d2718";
-      ctx.fillRect(x + 5, y + 9, 2, 2);
+    if (hammer) {
+      ctx.fillStyle = "#dce7ff";
+      ctx.fillRect(x + 3, y + 3, 6, 3);
+      ctx.fillStyle = "#9eb2d8";
+      ctx.fillRect(x + 4, y + 4, 4, 1);
+      ctx.fillStyle = "#8a5a35";
+      ctx.fillRect(x + 6, y + 5, 2, 5);
+      ctx.fillStyle = "#5e3b21";
+      ctx.fillRect(x + 6, y + 9, 2, 1);
+      ctx.fillStyle = "rgba(222, 244, 255, 0.5)";
+      ctx.fillRect(x + 2, y + 2, 1, 1);
     } else {
-      ctx.fillStyle = "#ffd7d7";
-      ctx.fillRect(x + 3, y + 3, 6, 5);
-      ctx.fillRect(x + 8, y + 4, 2, 3);
-      ctx.fillStyle = "#efb7b7";
-      ctx.fillRect(x + 4, y + 4, 4, 3);
-      ctx.fillStyle = "#8d5f5f";
+      ctx.fillStyle = "#ffdbe4";
+      ctx.fillRect(x + 3, y + 4, 6, 4);
+      ctx.fillRect(x + 8, y + 5, 2, 2);
+      ctx.fillStyle = "#f3b8cc";
+      ctx.fillRect(x + 4, y + 5, 4, 2);
+      ctx.fillStyle = "#c97b95";
       ctx.fillRect(x + 3, y + 8, 3, 2);
+      ctx.fillStyle = "#ffd89d";
+      ctx.fillRect(x + 1, y + 5, 2, 1);
+      ctx.fillRect(x + 0, y + 6, 2, 1);
     }
   }
 
@@ -2671,10 +2775,9 @@
   }
 
   function drawRushAura() {
-    if (proteinRushTimer <= 0 && invincibleTimer <= 0 && giantTimer <= 0) return;
+    if (proteinRushTimer <= 0 && invincibleTimer <= 0) return;
     const r = clamp(proteinRushTimer / 90, 0, 1);
     const i = clamp(invincibleTimer / INVINCIBLE_DURATION, 0, 1);
-    const g = clamp(giantTimer / GIANT_DURATION, 0, 1);
     const px = Math.floor(player.x - cameraX);
     const py = Math.floor(player.y);
     const pulse = 0.25 + Math.sin(player.anim * 0.45) * 0.12;
@@ -2687,58 +2790,142 @@
     }
 
     if (i > 0) {
-      const sparkPulse = 0.2 + Math.sin(player.anim * 0.7) * 0.08;
-      ctx.fillStyle = `rgba(255, 245, 150, ${sparkPulse * i})`;
-      ctx.fillRect(px - 5, py - 4, player.w + 10, player.h + 8);
-      ctx.strokeStyle = `rgba(255, 255, 210, ${0.32 * i})`;
-      ctx.strokeRect(px - 4, py - 3, player.w + 8, player.h + 6);
-    }
-
-    if (g > 0) {
-      const giantPulse = 0.16 + Math.sin(player.anim * 0.38) * 0.06;
-      ctx.fillStyle = `rgba(255, 172, 80, ${giantPulse * g})`;
-      ctx.fillRect(px - 8, py - 10, player.w + 16, player.h + 16);
-      ctx.strokeStyle = `rgba(255, 217, 160, ${0.4 * g})`;
-      ctx.strokeRect(px - 7, py - 9, player.w + 14, player.h + 14);
+      const shimmer = 0.18 + Math.sin(player.anim * 0.7) * 0.06;
+      ctx.fillStyle = `rgba(255, 80, 80, ${shimmer * i})`;
+      ctx.fillRect(px - 6, py - 6, player.w + 12, 2);
+      ctx.fillStyle = `rgba(255, 173, 72, ${shimmer * i})`;
+      ctx.fillRect(px - 6, py - 3, player.w + 12, 2);
+      ctx.fillStyle = `rgba(255, 235, 112, ${shimmer * i})`;
+      ctx.fillRect(px - 6, py + 0, player.w + 12, 2);
+      ctx.fillStyle = `rgba(95, 232, 160, ${shimmer * i})`;
+      ctx.fillRect(px - 6, py + 3, player.w + 12, 2);
+      ctx.fillStyle = `rgba(105, 188, 255, ${shimmer * i})`;
+      ctx.fillRect(px - 6, py + 6, player.w + 12, 2);
+      ctx.fillStyle = `rgba(192, 142, 255, ${shimmer * i})`;
+      ctx.fillRect(px - 6, py + 9, player.w + 12, 2);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.26 * i})`;
+      ctx.strokeRect(px - 5, py - 5, player.w + 10, player.h + 10);
     }
   }
 
+  function drawInvincibleBikeRide() {
+    if (invincibleTimer <= 0) return;
+    const x = Math.floor(player.x - cameraX - 2);
+    const y = Math.floor(player.y + 13);
+    const pulse = Math.sin(player.anim * 0.36);
+
+    const rainbow = ["#ff627a", "#ffb26a", "#ffe26f", "#88e57e", "#7bbdff", "#bb93ff"];
+    for (let i = 0; i < rainbow.length; i += 1) {
+      const tx = Math.floor(x - 4 - i * 3 - pulse * 1.4);
+      ctx.fillStyle = rainbow[i];
+      ctx.fillRect(tx, y - 3 + (i % 2), 3, 1);
+    }
+
+    ctx.fillStyle = "#0f1118";
+    ctx.fillRect(x + 1, y + 7, 4, 4);
+    ctx.fillRect(x + 13, y + 7, 4, 4);
+    ctx.fillStyle = "#5c6f97";
+    ctx.fillRect(x + 2, y + 8, 2, 2);
+    ctx.fillRect(x + 14, y + 8, 2, 2);
+
+    ctx.fillStyle = "#1b2236";
+    ctx.fillRect(x + 4, y + 5, 10, 2);
+    ctx.fillStyle = "#7ed7ff";
+    ctx.fillRect(x + 5, y + 4, 6, 1);
+    ctx.fillStyle = "#ffe39d";
+    ctx.fillRect(x + 11, y + 4, 2, 1);
+
+    ctx.fillStyle = "#8ea7d8";
+    ctx.fillRect(x + 8, y + 3, 1, 2);
+    ctx.fillStyle = "#d2f2ff";
+    ctx.fillRect(x + 8, y + 2, 2, 1);
+  }
+
   function drawAutoWeaponEffects() {
-    if (hammerTimer <= 0 && gloveTimer <= 0) return;
+    if (attackEffectTimer <= 0) return;
 
     const cx = Math.floor(player.x - cameraX + player.w * 0.5);
     const cy = Math.floor(player.y + 11);
-    const gf = giantFactor();
+    const mode = attackEffectMode;
 
-    if (hammerTimer > 0) {
-      const radius = 9 + gf * 4;
-      const hx = Math.floor(cx + Math.cos(hammerSpin * 0.4) * radius);
-      const hy = Math.floor(cy + Math.sin(hammerSpin * 0.4) * (radius - 2));
-      ctx.fillStyle = "#c8d3ea";
-      ctx.fillRect(hx - 3, hy - 2, 6, 3);
-      ctx.fillStyle = "#98a8c4";
-      ctx.fillRect(hx - 2, hy - 1, 4, 1);
-      ctx.fillStyle = "#6b4a32";
-      ctx.fillRect(hx - 1, hy + 1, 2, 5);
-      ctx.fillStyle = "rgba(255, 225, 170, 0.35)";
-      ctx.strokeRect(hx - 5, hy - 4, 10, 9);
-    }
-
-    if (gloveTimer > 0) {
+    if (mode === "hammer") {
       const dir = player.facing;
-      const gx = dir > 0 ? cx + 8 : cx - 18;
-      const gy = cy - 1;
-      const pulse = Math.sin(player.anim * 1.2) * 1.6;
-      ctx.fillStyle = "#ffd6d6";
-      ctx.fillRect(Math.floor(gx + pulse * dir), gy - 1, 8, 4);
-      ctx.fillStyle = "#f4bcbc";
-      ctx.fillRect(Math.floor(gx + 2 + pulse * dir), gy, 5, 2);
-      ctx.fillStyle = "rgba(255, 235, 180, 0.25)";
+      const hx = Math.floor(cx + dir * 8);
+      const topY = cy - 15;
+      const bottomY = cy + 11;
+      const cycle = (Math.sin(attackEffectPhase * 1.9) + 1) * 0.5;
+      const hy = Math.floor(topY + (bottomY - topY) * cycle);
+
+      ctx.fillStyle = "rgba(255,220,160,0.28)";
+      ctx.fillRect(hx - 2, topY - 2, 4, bottomY - topY + 6);
+
+      ctx.fillStyle = "#c8d3ea";
+      ctx.fillRect(hx - 4, hy - 3, 8, 4);
+      ctx.fillStyle = "#98a8c4";
+      ctx.fillRect(hx - 3, hy - 2, 6, 2);
+      ctx.fillStyle = "#6b4a32";
+      ctx.fillRect(hx - 1, hy + 1, 2, 8);
+      ctx.fillStyle = "#4d331f";
+      ctx.fillRect(hx - 1, hy + 8, 2, 2);
+
+      ctx.fillStyle = "rgba(255, 240, 188, 0.5)";
       for (let i = 0; i < 3; i += 1) {
-        const tx = Math.floor(gx + pulse * dir - dir * i * 4);
-        ctx.fillRect(tx, gy + i - 1, 3, 1);
+        ctx.fillRect(hx - 6 + i * 6, hy + 7 + i, 4, 1);
       }
+      return;
     }
+
+    if (mode === "glove") {
+      const dir = player.facing;
+      const startX = dir > 0 ? cx + 7 : cx - 7;
+      const gy = cy - 1;
+      const phase = player.anim * 0.95;
+      const fists = 7;
+
+      for (let i = 0; i < fists; i += 1) {
+        const wave = phase * 3.4 + i * 0.9;
+        const reach = 5 + i * 3 + Math.sin(wave) * 1.6;
+        const fx = startX + dir * reach;
+        const fy = gy + (i % 2 === 0 ? -2 : 1) + Math.floor(Math.cos(wave * 1.4) * 1.2);
+        const fistX = Math.floor(dir > 0 ? fx : fx - 6);
+        const alpha = clamp(0.95 - i * 0.11, 0.2, 0.95);
+        const g = clamp(232 - i * 12, 140, 232);
+        const b = clamp(232 - i * 8, 150, 232);
+
+        ctx.fillStyle = `rgba(255, ${g}, ${b}, ${alpha})`;
+        ctx.fillRect(fistX, fy, 6, 3);
+        ctx.fillStyle = `rgba(244, ${clamp(g - 36, 110, 200)}, ${clamp(b - 30, 110, 200)}, ${alpha})`;
+        ctx.fillRect(fistX + 1, fy + 1, 4, 1);
+
+        ctx.fillStyle = `rgba(255, 236, 175, ${0.32 - i * 0.03})`;
+        if (dir > 0) {
+          ctx.fillRect(fistX - 6, fy + 1, 6, 1);
+          ctx.fillRect(fistX + 5, fy + 1, 2, 1);
+        } else {
+          ctx.fillRect(fistX + 6, fy + 1, 6, 1);
+          ctx.fillRect(fistX - 1, fy + 1, 2, 1);
+        }
+      }
+
+      const flashX = Math.floor(startX + dir * (25 + Math.sin(phase * 2.6) * 2));
+      ctx.fillStyle = "rgba(255, 245, 188, 0.6)";
+      for (let i = 0; i < 4; i += 1) {
+        const sx = dir > 0 ? flashX + i * 2 : flashX - i * 2;
+        const sy = gy - 2 + i;
+        ctx.fillRect(sx, sy, 2, 1);
+      }
+      return;
+    }
+
+    const dir = player.facing;
+    const sx = dir > 0 ? cx + 6 : cx - 12;
+    const sy = cy - 1;
+    ctx.fillStyle = "rgba(255,238,180,0.45)";
+    ctx.fillRect(sx, sy - 1, 10, 5);
+    ctx.fillStyle = "#ffeec0";
+    ctx.fillRect(sx + 2, sy, 6, 3);
+    ctx.fillStyle = "#ffb06d";
+    ctx.fillRect(sx + (dir > 0 ? 8 : 0), sy + 1, 2, 1);
   }
 
   function drawCannon(c) {
@@ -2873,8 +3060,8 @@
       drawProtein(protein);
     }
 
-    for (const cream of stage.creamPuffs) {
-      drawCreamPuff(cream);
+    for (const bike of stage.bikes) {
+      drawBikePickup(bike);
     }
 
     for (const item of stage.weaponItems) {
@@ -2907,9 +3094,10 @@
     drawGoal();
     drawRushAura();
     drawAutoWeaponEffects();
+    drawInvincibleBikeRide();
     const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (!hurtBlink) {
-      drawHero(player.x - cameraX, player.y, player.facing, player.anim, giantTimer > 0 ? 1.55 : 1);
+      drawHero(player.x - cameraX, player.y, player.facing, player.anim);
     }
 
     ctx.restore();
@@ -2981,9 +3169,9 @@
         "りら: 私はAI。普段はジムのインストラクターなリア充。",
         "シュークリームで元気回復、プロテインはバニラ派!",
       ]);
-    } else if (t < 460) {
-      const k = clamp((t - 220) / 240, 0, 1);
-      const kidnapX = 120 + k * 110;
+    } else {
+      const k = clamp((t - 220) / 320, 0, 1);
+      const kidnapX = 120 + k * 120;
 
       ctx.fillStyle = "#161b2f";
       ctx.fillRect(0, 0, W, H);
@@ -2998,7 +3186,8 @@
       ctx.fillStyle = "#212736";
       ctx.fillRect(0, 132, W, 48);
 
-      drawHero(84, 112, 1, t);
+      const run = Math.sin(t * 0.22) * 1.2;
+      drawHero(84 + run, 112, 1, t);
 
       ctx.fillStyle = "#2d1c21";
       ctx.fillRect(kidnapX, 100, 14, 24);
@@ -3010,40 +3199,155 @@
       ctx.fillStyle = "#1a1f2a";
       ctx.fillRect(kidnapX + 16, 111, 6, 4);
 
-      drawTextPanel([
-        "悪の組織が彼氏に権利収入と不労所得を甘く勧誘。",
-        "断った彼氏はホームパーティー会場へ連行された。",
-      ]);
+      if (t < 430) {
+        drawTextPanel([
+          "悪の組織が彼氏に権利収入と不労所得を甘く勧誘。",
+          "断った彼氏はホームパーティー会場へ連行された。",
+        ]);
+      } else {
+        drawTextPanel([
+          "彼氏がさらわれた! りらは会場へ全力ダッシュ。",
+          "今すぐ追いかけて救出だ!",
+        ]);
+      }
+    }
+
+    ctx.fillStyle = "rgba(0,0,0,0.44)";
+    ctx.fillRect(90, 8, 140, 14);
+    ctx.fillStyle = "#f4f3ff";
+    ctx.font = "9px monospace";
+    ctx.textBaseline = "top";
+    ctx.fillText("タップ / Enter でスキップ", 101, 11);
+  }
+
+  function drawPreBossCutscene() {
+    const t = preBossCutsceneTimer;
+    const approach = clamp(t / 110, 0, 1);
+    const party = clamp((t - 90) / 120, 0, 1);
+    const descend = clamp((t - 156) / 110, 0, 1);
+
+    ctx.fillStyle = "#0b1120";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#1a2746";
+    for (let i = 0; i < W; i += 16) {
+      const h = 36 + ((i / 16) % 5) * 12;
+      ctx.fillRect(i, 124 - h, 11, h);
+      if ((i / 16) % 2 === 0) {
+        ctx.fillStyle = "#7ce2ff";
+        ctx.fillRect(i + 2, 124 - h + 8, 2, 2);
+        ctx.fillStyle = "#1a2746";
+      }
+    }
+
+    const mx = 172;
+    const my = 48;
+    ctx.fillStyle = "#22293b";
+    ctx.fillRect(mx, my, 104, 112);
+    ctx.fillStyle = "#2f3952";
+    ctx.fillRect(mx + 4, my + 4, 96, 104);
+    ctx.fillStyle = "#455173";
+    ctx.fillRect(mx + 10, my + 10, 84, 18);
+    ctx.fillStyle = "#6ad7ff";
+    for (let i = 0; i < 7; i += 1) {
+      ctx.fillRect(mx + 14 + i * 12, my + 16, 4, 4);
+    }
+
+    ctx.fillStyle = "#2a1e24";
+    ctx.fillRect(mx + 39, my + 64, 26, 40);
+    ctx.fillStyle = "#8f2b58";
+    ctx.fillRect(mx + 37, my + 62, 30, 3);
+
+    ctx.fillStyle = "#262d3b";
+    ctx.fillRect(0, 132, W, 48);
+    ctx.fillStyle = "#4f5d73";
+    for (let i = 0; i < W; i += 18) ctx.fillRect(i, 140, 10, 1);
+
+    const heroX = 38 + approach * 122;
+    drawHero(heroX, 112, 1, t * 1.3);
+
+    if (t > 96) {
+      const open = clamp((t - 96) / 24, 0, 1);
+      const doorW = Math.max(8, Math.floor(26 - open * 16));
+      ctx.fillStyle = "#11141d";
+      ctx.fillRect(mx + 39, my + 64, doorW, 40);
+      ctx.fillStyle = "rgba(255, 220, 170, 0.18)";
+      ctx.fillRect(mx + 39 + doorW, my + 64, 26 - doorW, 40);
+    }
+
+    if (party > 0.02) {
+      const roomX = mx + 12;
+      const roomY = my + 40;
+      const roomW = 80;
+      const roomH = 54;
+      ctx.fillStyle = `rgba(72, 30, 84, ${0.48 + party * 0.3})`;
+      ctx.fillRect(roomX, roomY, roomW, roomH);
+
+      const pulse = 0.18 + (Math.sin(t * 0.24) * 0.5 + 0.5) * 0.22;
+      ctx.fillStyle = `rgba(255, 116, 198, ${pulse})`;
+      ctx.fillRect(roomX + 2, roomY + 3, roomW - 4, 2);
+      ctx.fillStyle = `rgba(112, 208, 255, ${pulse * 0.9})`;
+      ctx.fillRect(roomX + 2, roomY + 9, roomW - 4, 1);
+
+      // Party silhouettes.
+      const guests = [roomX + 10, roomX + 24, roomX + 55, roomX + 68];
+      for (const gx of guests) {
+        ctx.fillStyle = "#1d2032";
+        ctx.fillRect(gx, roomY + 26, 8, 20);
+        ctx.fillStyle = "#2f3350";
+        ctx.fillRect(gx + 1, roomY + 25, 6, 2);
+      }
+
+      ctx.fillStyle = "#3a2f28";
+      ctx.fillRect(roomX + 28, roomY + 36, 24, 6);
+      ctx.fillStyle = "#bb8e67";
+      ctx.fillRect(roomX + 30, roomY + 34, 20, 2);
+      ctx.fillStyle = "#f2d5a8";
+      ctx.fillRect(roomX + 33, roomY + 33, 2, 1);
+      ctx.fillRect(roomX + 45, roomY + 33, 2, 1);
+    }
+
+    if (descend > 0.01) {
+      const beamX = mx + 52;
+      const beamTop = 0;
+      const beamBottom = my + 90;
+      const beamW = 12 + Math.sin(t * 0.35) * 2;
+      ctx.fillStyle = `rgba(236, 246, 255, ${0.16 + descend * 0.28})`;
+      ctx.fillRect(beamX - beamW, beamTop, beamW * 2, beamBottom);
+      ctx.fillStyle = `rgba(255, 242, 196, ${0.14 + descend * 0.22})`;
+      ctx.fillRect(beamX - 4, beamTop, 8, beamBottom);
+
+      for (let i = 0; i < 4; i += 1) {
+        const lx = beamX - 18 + i * 12 + Math.sin((t + i * 22) * 0.2) * 2;
+        ctx.fillStyle = "rgba(210, 236, 255, 0.42)";
+        ctx.fillRect(Math.floor(lx), Math.floor(26 + i * 10), 2, 8);
+      }
+
+      const godY = my - 22 + descend * 42;
+      ctx.fillStyle = "#f6f8ff";
+      ctx.fillRect(beamX - 8, Math.floor(godY), 16, 8);
+      ctx.fillStyle = "#e5ebf9";
+      ctx.fillRect(beamX - 7, Math.floor(godY + 1), 14, 5);
+      ctx.fillStyle = "#f2dec5";
+      ctx.fillRect(beamX - 4, Math.floor(godY + 7), 8, 6);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(beamX - 6, Math.floor(godY + 11), 12, 6);
+      ctx.fillStyle = "#d7dff2";
+      ctx.fillRect(beamX - 4, Math.floor(godY + 12), 8, 2);
+      ctx.fillStyle = "#f8fbff";
+      ctx.fillRect(beamX - 7, Math.floor(godY + 15), 14, 8);
+      ctx.fillStyle = "#dee6f8";
+      ctx.fillRect(beamX - 5, Math.floor(godY + 16), 10, 4);
+      ctx.fillStyle = "#f5d785";
+      ctx.fillRect(beamX - 5, Math.floor(godY - 3), 10, 2);
+    }
+
+    if (t < 130) {
+      drawTextPanel(["マンションのホームパーティー会場に到着。"]);
+    } else if (t < 226) {
+      drawTextPanel(["会場では怪しい勧誘会が始まっていた。"]);
     } else {
-      ctx.fillStyle = "#11182d";
-      ctx.fillRect(0, 0, W, H);
-
-      for (let i = 0; i < 180; i += 12) {
-        ctx.fillStyle = i % 24 === 0 ? "#2c3c62" : "#1e2b49";
-        ctx.fillRect(i + 6, 48 + (i % 30), 7, 94);
-        ctx.fillStyle = "#7ed5ff";
-        if (i % 24 === 0) ctx.fillRect(i + 9, 64 + (i % 30), 2, 2);
-      }
-      ctx.fillStyle = "#252c3a";
-      ctx.fillRect(0, 138, W, 42);
-
-      drawHero(76, 108, 1, t);
-
-      const cageX = 236;
-      ctx.fillStyle = "#343743";
-      ctx.fillRect(cageX, 94, 26, 42);
-      ctx.fillStyle = "#646b78";
-      for (let i = 3; i < 23; i += 4) {
-        ctx.fillRect(cageX + i, 96, 1, 38);
-      }
-
-      ctx.fillStyle = "#d44242";
-      ctx.fillRect(cageX + 7, 112, 9, 3);
-
-      drawTextPanel([
-        "目的: 白髪で白ヒゲの神を倒し、闇堕ち勧誘を阻止。",
-        "ホームパーティー会場で救出し、結婚EDへ。",
-      ]);
+      drawTextPanel(["ホームパーティーで白ヒゲの神が降臨。"], 136);
     }
 
     ctx.fillStyle = "rgba(0,0,0,0.44)";
@@ -3055,100 +3359,49 @@
   }
 
   function drawHUD() {
-    ctx.fillStyle = "rgba(9, 8, 12, 0.72)";
-    ctx.fillRect(0, 0, W, 24);
+    const hudH = 18;
+    ctx.fillStyle = "rgba(9, 8, 12, 0.74)";
+    ctx.fillRect(0, 0, W, hudH);
 
     ctx.fillStyle = "#f7f1ff";
     ctx.font = "9px monospace";
     ctx.textBaseline = "top";
-    ctx.fillText(`DEATH ${deaths}`, 6, 3);
-    ctx.fillText(`PROT ${collectedProteinIds.size}/${stage.proteins.length}`, 80, 3);
-    if (kickCombo > 1 && kickComboTimer > 0) {
-      ctx.fillText(`CMB x${kickCombo}`, 160, 3);
-    }
-    if (giantTimer > 0) {
-      ctx.fillText(`BIG ${Math.ceil(giantTimer / 60)}s`, 206, 3);
-    } else if (hammerTimer > 0) {
-      ctx.fillText(`HAM ${Math.ceil(hammerTimer / 60)}s`, 206, 3);
-    } else if (gloveTimer > 0) {
-      ctx.fillText(`GLV ${Math.ceil(gloveTimer / 60)}s`, 206, 3);
-    }
+    ctx.fillText(`D${deaths}`, 5, 4);
+    ctx.fillText(`P${collectedProteinIds.size}`, 24, 4);
 
-    const isBossHud = gameState === STATE.BOSS && stage.boss.active;
-    ctx.fillText("LIFE", 6, 13);
     for (let i = 0; i < MAX_HEARTS; i += 1) {
-      drawHeartIcon(26 + i * 10, 14, i < playerHearts);
+      drawHeartIcon(50 + i * 10, 5, i < playerHearts);
     }
 
-    if (isBossHud) {
-      ctx.fillText(`BOSS HP ${stage.boss.hp}/${stage.boss.maxHp}`, 58, 13);
-      const barX = 132;
-      const barY = 13;
-      const barW = 66;
+    if (gameState === STATE.BOSS && stage.boss.active) {
+      const barX = 116;
+      const barY = 6;
+      const barW = 86;
       const ratio = clamp(stage.boss.hp / stage.boss.maxHp, 0, 1);
-      ctx.fillStyle = "#311719";
-      ctx.fillRect(barX, barY, barW, 7);
+      ctx.fillStyle = "#2a1314";
+      ctx.fillRect(barX, barY, barW, 6);
       ctx.fillStyle = "#e25555";
-      ctx.fillRect(barX + 1, barY + 1, Math.floor((barW - 2) * ratio), 5);
+      ctx.fillRect(barX + 1, barY + 1, Math.floor((barW - 2) * ratio), 4);
       ctx.fillStyle = "#f7f1ff";
-    } else {
-      const cp = stage.checkpoints[checkpointIndex];
-      ctx.fillText(`CP ${cp.label}`, 58, 13);
     }
-    ctx.fillText("PLAYER りら", 202, 13);
-    const speedPct = Math.round(proteinLevel() * 2.2 + (proteinRushTimer > 0 ? 12 : 0));
-    ctx.fillText(`SPD +${speedPct}%`, 254, 13);
+
+    if (hammerTimer > 0) {
+      ctx.fillText(`HAM ${Math.ceil(hammerTimer / 60)}`, 208, 4);
+    } else if (gloveTimer > 0) {
+      ctx.fillText(`GLV ${Math.ceil(gloveTimer / 60)}`, 208, 4);
+    }
+
     if (invincibleTimer > 0) {
-      const sec = (invincibleTimer / 60).toFixed(1);
-      ctx.fillText("BGM LOVE", 246, 3);
       ctx.fillStyle = "#ffe7a8";
-      ctx.fillText(`MUTEKI ${sec}s`, 226, 13);
+      ctx.fillText(`INV ${Math.ceil(invincibleTimer / 60)}`, 266, 4);
       ctx.fillStyle = "#f7f1ff";
-    } else {
-      ctx.fillText(audioCtx && bgmStarted ? "BGM ON" : "BGM TAP", 248, 3);
     }
 
     if (hurtFlashTimer > 0 && (gameState === STATE.PLAY || gameState === STATE.BOSS)) {
       const flash = clamp(hurtFlashTimer / 24, 0, 1);
       ctx.fillStyle = `rgba(255, 130, 130, ${0.18 * flash})`;
-      ctx.fillRect(0, 24, W, H - 24);
+      ctx.fillRect(0, hudH, W, H - hudH);
     }
-
-    if (hudTimer > 0 && hudMessage) {
-      const y = H - 18;
-      ctx.fillStyle = "rgba(10, 10, 14, 0.82)";
-      ctx.fillRect(0, y, W, 18);
-      ctx.fillStyle = "#f4ecff";
-      ctx.fillText(hudMessage, 8, y + 5);
-    }
-  }
-
-  function drawItemGuideOverlay() {
-    if (itemGuideTimer <= 0) return;
-    if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
-
-    const fadeIn = clamp((ITEM_GUIDE_DURATION - itemGuideTimer) / 42, 0, 1);
-    const fadeOut = clamp(itemGuideTimer / 46, 0, 1);
-    const alpha = Math.min(fadeIn, fadeOut);
-    if (alpha <= 0.01) return;
-
-    ctx.fillStyle = `rgba(7, 8, 12, ${0.84 * alpha})`;
-    ctx.fillRect(10, 30, 300, 86);
-    ctx.strokeStyle = `rgba(208, 224, 255, ${0.85 * alpha})`;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(10, 30, 300, 86);
-
-    ctx.fillStyle = `rgba(245, 245, 255, ${alpha})`;
-    ctx.font = "8px monospace";
-    ctx.textBaseline = "top";
-    ctx.fillText("ITEM GUIDE (Enterで閉じる)", 16, 36);
-    ctx.fillText("PROTEIN : SPD/ジャンプ/キック強化", 16, 48);
-    ctx.fillText("シュークリーム : 20秒無敵", 16, 58);
-    ctx.fillText("無敵中に再取得 : 巨大化", 16, 68);
-    ctx.fillText("HAMMER : 10秒 周囲オート攻撃", 16, 78);
-    ctx.fillText("GLOVE  : 10秒 前方百裂拳", 16, 88);
-    ctx.fillStyle = `rgba(255, 231, 168, ${0.9 * alpha})`;
-    ctx.fillText("目安難易度: やや難しい(慣れれば15分前後でクリア)", 16, 100);
   }
 
   function drawDeadOverlay() {
@@ -3330,6 +3583,12 @@
       return;
     }
 
+    if (gameState === STATE.PRE_BOSS) {
+      drawPreBossCutscene();
+      drawPs1Overlay();
+      return;
+    }
+
     const deadShake = gameState === STATE.DEAD ? deathShakeTimer * 0.2 : 0;
     const impactRatio = clamp(impactShakeTimer / 18, 0, 1);
     const playShake = (gameState === STATE.PLAY || gameState === STATE.BOSS) ? impactShakePower * impactRatio : 0;
@@ -3346,7 +3605,6 @@
     drawWorld();
     drawKickBurstOverlay();
     drawHUD();
-    drawItemGuideOverlay();
 
     if (gameState === STATE.DEAD) {
       drawDeadOverlay();
@@ -3392,6 +3650,7 @@
   bindHoldButton("btn-left", "left");
   bindHoldButton("btn-right", "right");
   bindHoldButton("btn-jump", "jump");
+  bindHoldButton("btn-attack", "attack");
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -3399,6 +3658,11 @@
 
     if (gameState === STATE.CUTSCENE) {
       startGameplay(true);
+      return;
+    }
+
+    if (gameState === STATE.PRE_BOSS) {
+      startBossBattle();
       return;
     }
 
@@ -3424,6 +3688,8 @@
     ArrowUp: "jump",
     KeyW: "jump",
     Space: "jump",
+    KeyJ: "attack",
+    KeyF: "attack",
     Enter: "start",
   };
 
@@ -3449,6 +3715,7 @@
     input.left = false;
     input.right = false;
     input.jump = false;
+    input.attack = false;
     input.start = false;
   });
 
