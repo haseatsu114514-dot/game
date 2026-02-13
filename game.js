@@ -1285,11 +1285,11 @@
 
     playerLives = Math.max(0, playerLives - 1);
     gameState = STATE.DEAD;
-    deadTimer = playerLives > 0 ? 188 : 228;
+    deadTimer = playerLives > 0 ? 134 : 182;
     deadTimerMax = deadTimer;
     deathFlashTimer = 34;
     deathShakeTimer = 26;
-    deathPauseTimer = 34;
+    deathPauseTimer = 24;
     deathAnimActive = false;
     deathJumpVy = 0;
     player.vx = 0;
@@ -2448,10 +2448,15 @@
     startOpeningTheme();
   }
 
-  function updateDead(dt) {
+  function updateDead(dt, actions) {
     deadTimer = Math.max(0, deadTimer - dt);
     deathFlashTimer = Math.max(0, deathFlashTimer - dt);
     deathShakeTimer = Math.max(0, deathShakeTimer - dt);
+
+    const wantsFastContinue = actions.startPressed || actions.jumpPressed;
+    if (wantsFastContinue && deathPauseTimer <= 0 && deadTimer > 0) {
+      deadTimer = Math.min(deadTimer, 14);
+    }
 
     if (deathPauseTimer > 0) {
       deathPauseTimer = Math.max(0, deathPauseTimer - dt);
@@ -2517,7 +2522,7 @@
     }
 
     if (gameState === STATE.DEAD) {
-      updateDead(dt);
+      updateDead(dt, actions);
       return;
     }
 
