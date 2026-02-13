@@ -627,7 +627,7 @@
     return curve;
   }
 
-  function playRilaRobotVoice(type = "kick") {
+  function playRilaRobotVoice(type = "attack") {
     if (!audioCtx || audioCtx.state !== "running") return;
     const now = audioCtx.currentTime;
     if (now < rilaVoiceNextAt) return;
@@ -1083,7 +1083,7 @@
     kickFlashTimer = Math.max(kickFlashTimer, 9 + p * 3);
     kickFlashPower = Math.max(kickFlashPower, 1 + p * 0.7);
     triggerImpact(1.65 + p * 0.55, x, y, 2.6 + p * 0.8);
-    playRilaRobotVoice("kick");
+    playRilaRobotVoice("attack");
     spawnHitSparks(x, y, "#fff7bc", "#ff9645");
     spawnHitSparks(x, y, "#ffe8a0", "#ff5d53");
   }
@@ -1824,7 +1824,7 @@
 
     triggerImpact(2.4, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.55, 3.4);
     playKickSfx(1.8);
-    hudMessage = "ホームパーティー会場で神が降臨! 回避しつつ蹴れ";
+    hudMessage = "ホームパーティー会場で神が降臨! 回避しつつ戦え";
     hudTimer = 120;
   }
 
