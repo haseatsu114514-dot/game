@@ -1981,6 +1981,43 @@
   function resolveBossContactDamage() {
     if (!stage.boss.active) return;
     if (!overlap(player, stage.boss)) return;
+    const b = stage.boss;
+    const playerBottom = player.y + player.h;
+    const bossTop = b.y;
+    const bossMidY = b.y + b.h * 0.5;
+    const descending = player.vy > 0.22;
+    const verticalWindow = playerBottom >= bossTop - 5 && playerBottom <= bossTop + 10;
+    const centerAbove = player.y + player.h * 0.54 <= bossMidY + 1;
+    const stompable = descending && verticalWindow && centerAbove;
+
+    if (stompable) {
+      const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
+      if (b.invuln <= 0 && b.hp > 0) {
+        b.hp = Math.max(0, b.hp - 1);
+        b.invuln = 22;
+        b.vx += dir * 0.72;
+        b.vy = Math.min(b.vy, -2.2);
+        player.vy = -6.4;
+        player.onGround = false;
+        hitStopTimer = Math.max(hitStopTimer, 4.2);
+        const hitX = b.x + b.w * 0.5;
+        const hitY = b.y + b.h * 0.25;
+        triggerKickBurst(hitX, hitY, 2.9);
+        triggerImpact(3.0, hitX, hitY, 4.6);
+        spawnHitSparks(hitX, hitY, "#fff2bc", "#ffb26a");
+        playKickSfx(1.74);
+        hudMessage = "神を踏みつけ!";
+        hudTimer = 28;
+        if (b.hp <= 0) {
+          defeatBoss();
+        }
+      } else {
+        player.vy = -5.2;
+        player.onGround = false;
+      }
+      return;
+    }
+
     const rage = stage.boss.hp <= Math.ceil(stage.boss.maxHp * 0.55);
     if (stage.boss.mode === "dash") {
       killPlayer("神の突進に被弾");
@@ -1992,8 +2029,24 @@
   function startBossBattle() {
     if (stage.boss.started) return;
 
+    // Boss arena should be a flat duel zone.
+    stage.solids = stage.solids.filter((s) => {
+      const inArena = s.x < BOSS_ARENA.maxX && s.x + s.w > BOSS_ARENA.minX;
+      const isGround = s.y >= stage.groundY;
+      return !inArena || isGround;
+    });
+    const arenaFloorX = BOSS_ARENA.minX - 4;
+    const arenaFloorW = BOSS_ARENA.maxX - BOSS_ARENA.minX + 8;
+    const hasArenaFloor = stage.solids.some(
+      (s) => s.y === stage.groundY && s.x <= arenaFloorX + 4 && s.x + s.w >= arenaFloorX + arenaFloorW - 4
+    );
+    if (!hasArenaFloor) {
+      stage.solids.push({ x: arenaFloorX, y: stage.groundY, w: arenaFloorW, h: 24, kind: "solid", state: "solid", timer: 0 });
+    }
+
     stage.boss.started = true;
     stage.boss.active = true;
+    stage.boss.maxHp = 12;
     stage.boss.hp = stage.boss.maxHp;
     stage.boss.x = 7100;
     stage.boss.y = 124;
