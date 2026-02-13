@@ -1029,6 +1029,32 @@
     };
   }
 
+  function createPartyGoon(x, minX, maxX, dir = 1) {
+    return {
+      kind: "partygoon",
+      x,
+      y: 144,
+      w: 13,
+      h: 16,
+      vx: 0,
+      vy: 0,
+      dir,
+      speed: 0.32,
+      minX,
+      maxX,
+      kicked: false,
+      onGround: false,
+      alive: true,
+      hop: false,
+      hopTimer: 0,
+      hopInterval: 0,
+      shooter: false,
+      shootInterval: 0,
+      shootCooldown: 0,
+      flash: 0,
+    };
+  }
+
   function collectSolids() {
     const list = [];
 
@@ -1888,18 +1914,23 @@
   function resolveEnemyContactDamage() {
     for (const enemy of stage.enemies) {
       if (!enemy.alive) continue;
+
+      const weakPartyGuest = enemy.kind === "partygoon";
+      const sideGrace = weakPartyGuest ? STOMP_SIDE_GRACE + 5 : STOMP_SIDE_GRACE;
+      const verticalGrace = weakPartyGuest ? STOMP_VERTICAL_GRACE + 11 : STOMP_VERTICAL_GRACE;
+
       const touchingBody = overlap(player, enemy);
       const feetBox = {
-        x: player.x - STOMP_SIDE_GRACE,
+        x: player.x - sideGrace,
         y: player.y + player.h - 6,
-        w: player.w + STOMP_SIDE_GRACE * 2,
-        h: 10 + STOMP_VERTICAL_GRACE,
+        w: player.w + sideGrace * 2,
+        h: 10 + verticalGrace,
       };
       const stompTarget = {
-        x: enemy.x - STOMP_SIDE_GRACE,
+        x: enemy.x - sideGrace,
         y: enemy.y - 2,
-        w: enemy.w + STOMP_SIDE_GRACE * 2,
-        h: enemy.h + STOMP_VERTICAL_GRACE + 4,
+        w: enemy.w + sideGrace * 2,
+        h: enemy.h + verticalGrace + 4,
       };
       const stompTouch = overlap(feetBox, stompTarget);
       if (!touchingBody && !stompTouch) continue;
@@ -1907,15 +1938,15 @@
       const playerBottom = player.y + player.h;
       const enemyTop = enemy.y;
       const enemyMidY = enemy.y + enemy.h * 0.5;
-      const verticalWindow = playerBottom >= enemyTop - 4 && playerBottom <= enemyTop + STOMP_VERTICAL_GRACE;
-      const centerAbove = player.y + player.h * 0.42 <= enemyMidY + 5;
-      const descending = player.vy > STOMP_DESCEND_MIN;
+      const verticalWindow = playerBottom >= enemyTop - 4 && playerBottom <= enemyTop + verticalGrace;
+      const centerAbove = player.y + player.h * 0.42 <= enemyMidY + (weakPartyGuest ? 10 : 5);
+      const descending = player.vy > (weakPartyGuest ? STOMP_DESCEND_MIN - 0.75 : STOMP_DESCEND_MIN);
       const stompable = stompTouch && verticalWindow && centerAbove && descending;
 
       if (stompable) {
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
         const pLv = proteinLevel();
-        const stompPower = 1.45 + pLv * 0.045;
+        const stompPower = (weakPartyGuest ? 1.28 : 1.45) + pLv * 0.045;
         kickEnemy(enemy, dir, stompPower + 0.35);
         player.vy = -6.35 - Math.min(0.45, Math.abs(player.vx) * 0.08);
         player.vx += dir * 0.12;
@@ -1943,6 +1974,16 @@
       }
 
       if (!touchingBody) continue;
+
+      if (weakPartyGuest) {
+        const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
+        kickEnemy(enemy, dir, 0.96);
+        player.vx -= dir * 0.22;
+        triggerKickBurst(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.55, 1.2);
+        triggerImpact(1.15, enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.55, 1.8);
+        playKickSfx(1.46);
+        return;
+      }
 
       if (enemy.kind === "peacock") {
         killPlayer("孔雀に接触");
@@ -1981,6 +2022,13 @@
     stage.boss.attackCycle = 0;
     stage.boss.invuln = 24;
     stage.bossShots = [];
+    stage.hazardBullets = [];
+    stage.enemies = [];
+    stage.enemies.push(
+      createPartyGoon(6932, 6888, 6994, 1),
+      createPartyGoon(7008, 6960, 7064, -1),
+      createPartyGoon(7072, 7022, 7132, 1)
+    );
     openingThemeActive = false;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
@@ -1997,7 +2045,7 @@
 
     triggerImpact(2.4, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.55, 3.4);
     playKickSfx(1.8);
-    hudMessage = "ホームパーティー会場で神が降臨! 回避しつつ戦え";
+    hudMessage = "ホームパーティー会場突入! 雑魚を踏みつつ神を倒せ";
     hudTimer = 120;
   }
 
@@ -2369,7 +2417,10 @@
     updateWeaponItems(dt);
     updateBoss(dt, solids);
     updateBossShots(dt, solids);
+    updateEnemies(dt, solids);
+    updateHazardBullets(dt, solids);
     updatePlayerAttack(dt, actions);
+    resolveEnemyContactDamage();
     resolveBossContactDamage();
     resolveBreakWalls(dt);
     resolveHazards();
@@ -2604,6 +2655,80 @@
     }
   }
 
+  function drawMansionInteriorBackdrop() {
+    const wall = ctx.createLinearGradient(0, 0, 0, H);
+    wall.addColorStop(0, "#191320");
+    wall.addColorStop(0.56, "#35253f");
+    wall.addColorStop(1, "#201b2c");
+    ctx.fillStyle = wall;
+    ctx.fillRect(0, 0, W, H);
+
+    const panelShift = -Math.floor(cameraX * 0.22) % 48;
+    for (let x = panelShift - 48; x < W + 48; x += 48) {
+      ctx.fillStyle = "#2c1f36";
+      ctx.fillRect(x + 2, 6, 44, 116);
+      ctx.fillStyle = "#412d4e";
+      ctx.fillRect(x + 4, 8, 40, 3);
+      ctx.fillStyle = "rgba(255, 214, 152, 0.06)";
+      ctx.fillRect(x + 6, 12, 1, 105);
+      ctx.fillRect(x + 42, 12, 1, 105);
+    }
+
+    const windowShift = -Math.floor(cameraX * 0.1) % 104;
+    for (let i = -1; i < 4; i += 1) {
+      const wx = i * 104 + 24 + windowShift;
+      const wy = 18;
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(wx, wy, 40, 54);
+      ctx.fillStyle = "#223b63";
+      ctx.fillRect(wx + 2, wy + 2, 36, 50);
+      ctx.fillStyle = "rgba(122, 196, 255, 0.35)";
+      for (let y = wy + 7; y < wy + 48; y += 8) {
+        ctx.fillRect(wx + 4, y, 6, 2);
+        ctx.fillRect(wx + 30, y + 2, 6, 2);
+      }
+      ctx.fillStyle = "#9d7a58";
+      ctx.fillRect(wx - 2, wy - 2, 44, 2);
+      ctx.fillRect(wx - 2, wy + 54, 44, 2);
+      ctx.fillStyle = "#6a4e38";
+      ctx.fillRect(wx - 3, wy, 2, 54);
+      ctx.fillRect(wx + 41, wy, 2, 54);
+    }
+
+    const sway = Math.sin(player.anim * 0.08) * 1.4;
+    const chainX = Math.floor(160 + sway);
+    ctx.fillStyle = "#c9a46f";
+    ctx.fillRect(chainX - 1, 0, 2, 20);
+    ctx.fillRect(chainX - 9, 19, 18, 2);
+    ctx.fillStyle = "#daba86";
+    ctx.fillRect(chainX - 16, 21, 32, 3);
+    ctx.fillStyle = "rgba(255, 232, 170, 0.42)";
+    ctx.fillRect(chainX - 24, 24, 48, 8);
+    ctx.fillStyle = "#fff2c8";
+    ctx.fillRect(chainX - 14, 24, 4, 4);
+    ctx.fillRect(chainX - 2, 24, 4, 4);
+    ctx.fillRect(chainX + 10, 24, 4, 4);
+
+    ctx.fillStyle = "#382533";
+    ctx.fillRect(0, 130, W, 50);
+    ctx.fillStyle = "#4f3344";
+    ctx.fillRect(0, 130, W, 6);
+    ctx.fillStyle = "#251a26";
+    for (let y = 138; y < H; y += 10) {
+      ctx.fillRect(0, y, W, 1);
+    }
+
+    ctx.fillStyle = "#6e2f45";
+    ctx.fillRect(34, 136, W - 68, 42);
+    ctx.fillStyle = "#9f4f68";
+    ctx.fillRect(36, 138, W - 72, 3);
+    ctx.fillStyle = "rgba(255, 204, 220, 0.1)";
+    for (let x = 48; x < W - 48; x += 28) {
+      ctx.fillRect(x, 148, 12, 1);
+      ctx.fillRect(x + 6, 160, 10, 1);
+    }
+  }
+
   function drawSolid(s) {
     let body = "#434956";
     let top = "#6c7484";
@@ -2811,6 +2936,50 @@
   }
 
   function drawEnemy(enemy) {
+    if (enemy.kind === "partygoon") {
+      const x = Math.floor(enemy.x - cameraX);
+      const y = Math.floor(enemy.y);
+      const blink = Math.floor((player.anim + enemy.x) * 0.12) % 2 === 0;
+
+      ctx.fillStyle = "#171220";
+      ctx.fillRect(x + 1, y, 11, 1);
+      ctx.fillRect(x, y + 1, 13, 7);
+
+      ctx.fillStyle = "#a64464";
+      ctx.fillRect(x + 2, y + 1, 9, 3);
+      ctx.fillStyle = "#7d3551";
+      ctx.fillRect(x + 3, y + 3, 7, 1);
+
+      ctx.fillStyle = "#f0c9b4";
+      ctx.fillRect(x + 3, y + 4, 7, 4);
+      ctx.fillStyle = "#201d27";
+      ctx.fillRect(x + 4, y + 5, 1, 1);
+      ctx.fillRect(x + 8, y + 5, 1, 1);
+      ctx.fillStyle = "#8a574a";
+      ctx.fillRect(x + 5, y + 6, 3, 1);
+
+      ctx.fillStyle = "#3f2c3c";
+      ctx.fillRect(x + 2, y + 8, 9, 6);
+      ctx.fillStyle = "#5d4157";
+      ctx.fillRect(x + 3, y + 9, 7, 2);
+      ctx.fillStyle = "#8ea2c4";
+      ctx.fillRect(x + 6, y + 9, 1, 4);
+
+      ctx.fillStyle = "#2a2d3b";
+      ctx.fillRect(x + 2, y + 14, 3, 2);
+      ctx.fillRect(x + 8, y + 14, 3, 2);
+      ctx.fillStyle = "#16161f";
+      ctx.fillRect(x + 2, y + 16, 3, 1);
+      ctx.fillRect(x + 8, y + 16, 3, 1);
+
+      if (blink) {
+        ctx.fillStyle = "#b8efff";
+        const sx = enemy.dir > 0 ? x + 12 : x - 2;
+        ctx.fillRect(sx, y + 5, 1, 1);
+      }
+      return;
+    }
+
     if (enemy.kind === "peacock") {
       const x = Math.floor(enemy.x - cameraX);
       const y = Math.floor(enemy.y);
@@ -3456,8 +3625,12 @@
   }
 
   function drawWorld() {
-    drawSkyGradient();
-    drawParallax();
+    if (gameState === STATE.BOSS) {
+      drawMansionInteriorBackdrop();
+    } else {
+      drawSkyGradient();
+      drawParallax();
+    }
 
     ctx.save();
 
@@ -3677,132 +3850,151 @@
 
   function drawPreBossCutscene() {
     const t = preBossCutsceneTimer;
-    const approach = clamp(t / 150, 0, 1);
-    const party = clamp((t - 120) / 180, 0, 1);
-    const descend = clamp((t - 244) / 170, 0, 1);
+    const showInterior = t >= 230;
+    const approach = clamp(t / 156, 0, 1);
+    const doorOpen = clamp((t - 114) / 42, 0, 1);
+    const enter = clamp((t - 166) / 58, 0, 1);
+    const party = clamp((t - 246) / 138, 0, 1);
+    const descend = clamp((t - 322) / 128, 0, 1);
 
-    ctx.fillStyle = "#0b1120";
-    ctx.fillRect(0, 0, W, H);
+    if (!showInterior) {
+      ctx.fillStyle = "#0b1120";
+      ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = "#1a2746";
-    for (let i = 0; i < W; i += 16) {
-      const h = 36 + ((i / 16) % 5) * 12;
-      ctx.fillRect(i, 124 - h, 11, h);
-      if ((i / 16) % 2 === 0) {
-        ctx.fillStyle = "#7ce2ff";
-        ctx.fillRect(i + 2, 124 - h + 8, 2, 2);
-        ctx.fillStyle = "#1a2746";
+      ctx.fillStyle = "#1a2746";
+      for (let i = 0; i < W; i += 16) {
+        const h = 36 + ((i / 16) % 5) * 12;
+        ctx.fillRect(i, 124 - h, 11, h);
+        if ((i / 16) % 2 === 0) {
+          ctx.fillStyle = "#7ce2ff";
+          ctx.fillRect(i + 2, 124 - h + 8, 2, 2);
+          ctx.fillStyle = "#1a2746";
+        }
       }
-    }
 
-    const mx = 172;
-    const my = 48;
-    ctx.fillStyle = "#22293b";
-    ctx.fillRect(mx, my, 104, 112);
-    ctx.fillStyle = "#2f3952";
-    ctx.fillRect(mx + 4, my + 4, 96, 104);
-    ctx.fillStyle = "#455173";
-    ctx.fillRect(mx + 10, my + 10, 84, 18);
-    ctx.fillStyle = "#6ad7ff";
-    for (let i = 0; i < 7; i += 1) {
-      ctx.fillRect(mx + 14 + i * 12, my + 16, 4, 4);
-    }
+      const mx = 172;
+      const my = 48;
+      ctx.fillStyle = "#22293b";
+      ctx.fillRect(mx, my, 104, 112);
+      ctx.fillStyle = "#2f3952";
+      ctx.fillRect(mx + 4, my + 4, 96, 104);
+      ctx.fillStyle = "#455173";
+      ctx.fillRect(mx + 10, my + 10, 84, 18);
+      ctx.fillStyle = "#6ad7ff";
+      for (let i = 0; i < 7; i += 1) {
+        ctx.fillRect(mx + 14 + i * 12, my + 16, 4, 4);
+      }
 
-    ctx.fillStyle = "#2a1e24";
-    ctx.fillRect(mx + 39, my + 64, 26, 40);
-    ctx.fillStyle = "#8f2b58";
-    ctx.fillRect(mx + 37, my + 62, 30, 3);
+      ctx.fillStyle = "#2a1e24";
+      ctx.fillRect(mx + 39, my + 64, 26, 40);
+      ctx.fillStyle = "#8f2b58";
+      ctx.fillRect(mx + 37, my + 62, 30, 3);
 
-    ctx.fillStyle = "#262d3b";
-    ctx.fillRect(0, 132, W, 48);
-    ctx.fillStyle = "#4f5d73";
-    for (let i = 0; i < W; i += 18) ctx.fillRect(i, 140, 10, 1);
+      ctx.fillStyle = "#262d3b";
+      ctx.fillRect(0, 132, W, 48);
+      ctx.fillStyle = "#4f5d73";
+      for (let i = 0; i < W; i += 18) ctx.fillRect(i, 140, 10, 1);
 
-    const heroX = 38 + approach * 122;
-    drawHero(heroX, 112, 1, t * 1.3);
+      const heroX = 36 + approach * 122 + enter * 16;
+      const heroY = 112 - enter * 4;
+      drawHero(heroX, heroY, 1, t * 1.3);
 
-    if (t > 128) {
-      const open = clamp((t - 128) / 34, 0, 1);
-      const doorW = Math.max(8, Math.floor(26 - open * 16));
+      const doorW = Math.max(7, Math.floor(26 - doorOpen * 18));
       ctx.fillStyle = "#11141d";
       ctx.fillRect(mx + 39, my + 64, doorW, 40);
       ctx.fillStyle = "rgba(255, 220, 170, 0.18)";
       ctx.fillRect(mx + 39 + doorW, my + 64, 26 - doorW, 40);
-    }
 
-    if (party > 0.02) {
-      const roomX = mx + 12;
-      const roomY = my + 40;
-      const roomW = 80;
-      const roomH = 54;
-      ctx.fillStyle = `rgba(72, 30, 84, ${0.48 + party * 0.3})`;
+      ctx.fillStyle = "rgba(255, 223, 184, 0.16)";
+      ctx.fillRect(mx + 46, my + 72, 14, 28);
+    } else {
+      drawMansionInteriorBackdrop();
+
+      const roomX = 100;
+      const roomY = 62;
+      const roomW = 136;
+      const roomH = 70;
+      ctx.fillStyle = `rgba(62, 25, 80, ${0.46 + party * 0.28})`;
       ctx.fillRect(roomX, roomY, roomW, roomH);
 
-      const pulse = 0.18 + (Math.sin(t * 0.24) * 0.5 + 0.5) * 0.22;
-      ctx.fillStyle = `rgba(255, 116, 198, ${pulse})`;
-      ctx.fillRect(roomX + 2, roomY + 3, roomW - 4, 2);
-      ctx.fillStyle = `rgba(112, 208, 255, ${pulse * 0.9})`;
-      ctx.fillRect(roomX + 2, roomY + 9, roomW - 4, 1);
+      const pulse = 0.18 + (Math.sin(t * 0.24) * 0.5 + 0.5) * 0.24;
+      ctx.fillStyle = `rgba(255, 123, 196, ${pulse})`;
+      ctx.fillRect(roomX + 4, roomY + 4, roomW - 8, 2);
+      ctx.fillStyle = `rgba(124, 214, 255, ${pulse * 0.86})`;
+      ctx.fillRect(roomX + 4, roomY + 10, roomW - 8, 1);
 
-      // Party silhouettes.
-      const guests = [roomX + 10, roomX + 24, roomX + 55, roomX + 68];
-      for (const gx of guests) {
-        ctx.fillStyle = "#1d2032";
-        ctx.fillRect(gx, roomY + 26, 8, 20);
-        ctx.fillStyle = "#2f3350";
-        ctx.fillRect(gx + 1, roomY + 25, 6, 2);
+      const guests = [roomX + 14, roomX + 36, roomX + 62, roomX + 82, roomX + 110];
+      for (let i = 0; i < guests.length; i += 1) {
+        const gx = guests[i];
+        const bob = Math.sin(t * 0.16 + i * 0.8) * 1;
+        ctx.fillStyle = i % 2 === 0 ? "#5f3f5e" : "#3d3856";
+        ctx.fillRect(gx, roomY + 34 + bob, 9, 18);
+        ctx.fillStyle = "#f0c7b5";
+        ctx.fillRect(gx + 1, roomY + 30 + bob, 7, 4);
+        ctx.fillStyle = "#201f2d";
+        ctx.fillRect(gx + 2, roomY + 31 + bob, 1, 1);
+        ctx.fillRect(gx + 6, roomY + 31 + bob, 1, 1);
+        if (i <= 1) {
+          // Clearly weak party guests.
+          ctx.fillStyle = "#a0d6ff";
+          ctx.fillRect(gx + 8, roomY + 35 + bob, 1, 1);
+        }
       }
 
       ctx.fillStyle = "#3a2f28";
-      ctx.fillRect(roomX + 28, roomY + 36, 24, 6);
+      ctx.fillRect(roomX + 46, roomY + 46, 34, 7);
       ctx.fillStyle = "#bb8e67";
-      ctx.fillRect(roomX + 30, roomY + 34, 20, 2);
+      ctx.fillRect(roomX + 48, roomY + 44, 30, 2);
       ctx.fillStyle = "#f2d5a8";
-      ctx.fillRect(roomX + 33, roomY + 33, 2, 1);
-      ctx.fillRect(roomX + 45, roomY + 33, 2, 1);
-    }
+      ctx.fillRect(roomX + 51, roomY + 43, 2, 1);
+      ctx.fillRect(roomX + 73, roomY + 43, 2, 1);
 
-    if (descend > 0.01) {
-      const beamX = mx + 52;
-      const beamTop = 0;
-      const beamBottom = my + 90;
-      const beamW = 12 + Math.sin(t * 0.35) * 2;
-      ctx.fillStyle = `rgba(236, 246, 255, ${0.16 + descend * 0.28})`;
-      ctx.fillRect(beamX - beamW, beamTop, beamW * 2, beamBottom);
-      ctx.fillStyle = `rgba(255, 242, 196, ${0.14 + descend * 0.22})`;
-      ctx.fillRect(beamX - 4, beamTop, 8, beamBottom);
+      drawHero(66, 112, 1, t * 1.2);
 
-      for (let i = 0; i < 4; i += 1) {
-        const lx = beamX - 18 + i * 12 + Math.sin((t + i * 22) * 0.2) * 2;
-        ctx.fillStyle = "rgba(210, 236, 255, 0.42)";
-        ctx.fillRect(Math.floor(lx), Math.floor(26 + i * 10), 2, 8);
+      if (descend > 0.01) {
+        const beamX = roomX + 102;
+        const beamTop = 0;
+        const beamBottom = roomY + 60;
+        const beamW = 13 + Math.sin(t * 0.35) * 2;
+        ctx.fillStyle = `rgba(236, 246, 255, ${0.16 + descend * 0.28})`;
+        ctx.fillRect(beamX - beamW, beamTop, beamW * 2, beamBottom);
+        ctx.fillStyle = `rgba(255, 242, 196, ${0.14 + descend * 0.22})`;
+        ctx.fillRect(beamX - 4, beamTop, 8, beamBottom);
+
+        for (let i = 0; i < 4; i += 1) {
+          const lx = beamX - 18 + i * 12 + Math.sin((t + i * 22) * 0.2) * 2;
+          ctx.fillStyle = "rgba(210, 236, 255, 0.42)";
+          ctx.fillRect(Math.floor(lx), Math.floor(24 + i * 10), 2, 8);
+        }
+
+        const godY = roomY - 28 + descend * 42;
+        ctx.fillStyle = "#f6f8ff";
+        ctx.fillRect(beamX - 8, Math.floor(godY), 16, 8);
+        ctx.fillStyle = "#e5ebf9";
+        ctx.fillRect(beamX - 7, Math.floor(godY + 1), 14, 5);
+        ctx.fillStyle = "#f2dec5";
+        ctx.fillRect(beamX - 4, Math.floor(godY + 7), 8, 6);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(beamX - 6, Math.floor(godY + 11), 12, 6);
+        ctx.fillStyle = "#d7dff2";
+        ctx.fillRect(beamX - 4, Math.floor(godY + 12), 8, 2);
+        ctx.fillStyle = "#f8fbff";
+        ctx.fillRect(beamX - 7, Math.floor(godY + 15), 14, 8);
+        ctx.fillStyle = "#dee6f8";
+        ctx.fillRect(beamX - 5, Math.floor(godY + 16), 10, 4);
+        ctx.fillStyle = "#f5d785";
+        ctx.fillRect(beamX - 5, Math.floor(godY - 3), 10, 2);
       }
-
-      const godY = my - 22 + descend * 42;
-      ctx.fillStyle = "#f6f8ff";
-      ctx.fillRect(beamX - 8, Math.floor(godY), 16, 8);
-      ctx.fillStyle = "#e5ebf9";
-      ctx.fillRect(beamX - 7, Math.floor(godY + 1), 14, 5);
-      ctx.fillStyle = "#f2dec5";
-      ctx.fillRect(beamX - 4, Math.floor(godY + 7), 8, 6);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(beamX - 6, Math.floor(godY + 11), 12, 6);
-      ctx.fillStyle = "#d7dff2";
-      ctx.fillRect(beamX - 4, Math.floor(godY + 12), 8, 2);
-      ctx.fillStyle = "#f8fbff";
-      ctx.fillRect(beamX - 7, Math.floor(godY + 15), 14, 8);
-      ctx.fillStyle = "#dee6f8";
-      ctx.fillRect(beamX - 5, Math.floor(godY + 16), 10, 4);
-      ctx.fillStyle = "#f5d785";
-      ctx.fillRect(beamX - 5, Math.floor(godY - 3), 10, 2);
     }
 
-    if (t < 180) {
-      drawTextPanel(["マンションのホームパーティー会場に到着。"]);
+    if (t < 138) {
+      drawTextPanel(["マンション前に到着。"]);
+    } else if (t < 230) {
+      drawTextPanel(["扉が開いた。りらは会場へ突入。"]);
     } else if (t < 330) {
-      drawTextPanel(["会場では怪しい勧誘会が始まっていた。"]);
+      drawTextPanel(["会場には勧誘された雑魚もいる。"]);
     } else {
-      drawTextPanel(["ホームパーティーで白ヒゲの神が降臨。"], 136);
+      drawTextPanel(["ホームパーティーで白ヒゲの神が降臨。"]);
     }
 
     ctx.fillStyle = "rgba(0,0,0,0.44)";
