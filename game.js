@@ -26,6 +26,7 @@
     maxX: 7180,
   };
   const MAX_HEARTS = 3;
+  const START_LIVES = 3;
 
   const input = {
     left: false,
@@ -57,6 +58,7 @@
   let stage = buildStage();
   let player = createPlayer(stage.checkpoints[0].x, stage.checkpoints[0].y);
   let playerHearts = MAX_HEARTS;
+  let playerLives = START_LIVES;
   let damageInvulnTimer = 0;
   let hurtFlashTimer = 0;
   let proteinRushTimer = 0;
@@ -83,6 +85,9 @@
   let hitSparks = [];
   let deathFlashTimer = 0;
   let deathShakeTimer = 0;
+  let deathJumpVy = 0;
+  let deathPauseTimer = 0;
+  let deathAnimActive = false;
   let deadReason = "";
   let audioCtx = null;
   let bgmMaster = null;
@@ -123,7 +128,8 @@
   const STAGE_BGM_PATH = "assets/stage_bgm.mp3";
   const INVINCIBLE_BGM_PATH = "assets/invincible_bgm.mp3";
   const WEAPON_DURATION = 600;
-  const PRE_BOSS_CUTSCENE_DURATION = 320;
+  const OPENING_CUTSCENE_DURATION = 760;
+  const PRE_BOSS_CUTSCENE_DURATION = 460;
 
   function proteinLevel() {
     return collectedProteinIds.size;
@@ -330,7 +336,8 @@
   }
 
   function startOpeningTheme() {
-    if (openingThemeActive || gameState !== STATE.CUTSCENE) return;
+    if (openingThemeActive) return;
+    if (gameState !== STATE.CUTSCENE && gameState !== STATE.PRE_BOSS) return;
     if (!audioCtx || audioCtx.state !== "running") return;
     ensureInvincibleMusic();
     if (!invincibleMusic) return;
@@ -510,6 +517,42 @@
     }
   }
 
+  function playDeathJingle() {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+    const step = 0.12;
+    const notes = [76, 72, 69, 64, 57];
+
+    for (let i = 0; i < notes.length; i += 1) {
+      const t = now + i * step;
+      const freq = midiToFreq(notes[i]);
+
+      const lead = audioCtx.createOscillator();
+      const leadGain = audioCtx.createGain();
+      lead.type = "square";
+      lead.frequency.setValueAtTime(freq, t);
+      leadGain.gain.setValueAtTime(0.0001, t);
+      leadGain.gain.exponentialRampToValueAtTime(0.1, t + 0.008);
+      leadGain.gain.exponentialRampToValueAtTime(0.0001, t + step * 0.95);
+      lead.connect(leadGain);
+      leadGain.connect(audioCtx.destination);
+      lead.start(t);
+      lead.stop(t + step);
+
+      const bass = audioCtx.createOscillator();
+      const bassGain = audioCtx.createGain();
+      bass.type = "triangle";
+      bass.frequency.setValueAtTime(freq * 0.5, t);
+      bassGain.gain.setValueAtTime(0.0001, t);
+      bassGain.gain.exponentialRampToValueAtTime(0.06, t + 0.01);
+      bassGain.gain.exponentialRampToValueAtTime(0.0001, t + step * 0.9);
+      bass.connect(bassGain);
+      bassGain.connect(audioCtx.destination);
+      bass.start(t);
+      bass.stop(t + step * 0.92);
+    }
+  }
+
   function playDamageSfx() {
     if (!audioCtx || audioCtx.state !== "running") return;
     const now = audioCtx.currentTime;
@@ -673,7 +716,7 @@
 
   function scheduleBGM() {
     if (!bgmStarted || !stageMusic) return;
-    const stageActive = gameState === STATE.PLAY || gameState === STATE.BOSS || gameState === STATE.DEAD;
+    const stageActive = gameState === STATE.PLAY || gameState === STATE.BOSS;
     if (!stageActive) return;
     if (invincibleTimer > 0 || openingThemeActive) return;
     if (!stageMusic.paused) return;
@@ -823,17 +866,7 @@
       { x: 7000, y: 146, w: 18, h: 14 }
     );
 
-    popSpikes.push(
-      { x: 272, y: 146, w: 20, h: 14, triggerX: 250, delay: 30, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 1108, y: 146, w: 28, h: 14, triggerX: 1080, delay: 28, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 2010, y: 146, w: 28, h: 14, triggerX: 1980, delay: 27, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 3010, y: 146, w: 26, h: 14, triggerX: 2980, delay: 25, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 3950, y: 146, w: 26, h: 14, triggerX: 3920, delay: 25, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 4448, y: 146, w: 30, h: 14, triggerX: 4410, delay: 25, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 5410, y: 146, w: 28, h: 14, triggerX: 5380, delay: 24, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 6260, y: 146, w: 26, h: 14, triggerX: 6230, delay: 23, armed: false, active: false, raise: 0, warningPulse: 0 },
-      { x: 6680, y: 146, w: 28, h: 14, triggerX: 6650, delay: 22, armed: false, active: false, raise: 0, warningPulse: 0 }
-    );
+    // Pop spikes removed per latest balance request.
 
     fallBlocks.push(
       { x: 690, y: 16, w: 20, h: 38, triggerX: 640, state: "idle", vy: 0, timer: 0, warnDuration: 44 },
@@ -1108,14 +1141,22 @@
       triggerImpact(1.6, player.x + player.w * 0.5, player.y + player.h * 0.5, 2.4);
     }
 
+    playerLives = Math.max(0, playerLives - 1);
     gameState = STATE.DEAD;
-    deadTimer = 85;
+    deadTimer = playerLives > 0 ? 132 : 152;
     deathFlashTimer = 26;
     deathShakeTimer = 22;
+    deathPauseTimer = 20;
+    deathAnimActive = false;
+    deathJumpVy = 0;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = false;
     deadReason = reason;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     stopInvincibleMusic();
+    stopStageMusic(true);
     proteinRushTimer = 0;
     kickCombo = 0;
     kickComboTimer = 0;
@@ -1133,10 +1174,10 @@
     attackEffectPhase = 0;
     attackEffectMode = "kick";
     deaths += 1;
-    hudMessage = reason;
+    hudMessage = playerLives > 0 ? `${reason} / 残機 x${playerLives}` : `${reason} / 残機 0`;
     hudTimer = 80;
-    setBgmVolume(BGM_DEAD_VOL, 0.05);
     playDeathSfx();
+    playDeathJingle();
   }
 
   function startGameplay(resetDeaths) {
@@ -1154,6 +1195,7 @@
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     playerHearts = MAX_HEARTS;
+    playerLives = START_LIVES;
     damageInvulnTimer = 0;
     hurtFlashTimer = 0;
     impactShakeTimer = 0;
@@ -1175,6 +1217,9 @@
     hitSparks = [];
     deathFlashTimer = 0;
     deathShakeTimer = 0;
+    deathPauseTimer = 0;
+    deathAnimActive = false;
+    deathJumpVy = 0;
     deadReason = "";
     openingThemeActive = false;
     stopInvincibleMusic();
@@ -1217,6 +1262,9 @@
     hitSparks = [];
     deathFlashTimer = 0;
     deathShakeTimer = 0;
+    deathPauseTimer = 0;
+    deathAnimActive = false;
+    deathJumpVy = 0;
     deadReason = "";
     stopInvincibleMusic();
     gameState = STATE.PLAY;
@@ -1571,7 +1619,7 @@
     const px = player.x + player.w * 0.5;
     const dir = player.facing;
 
-    let hitBox = { x: px - 6, y: player.y + 5, w: 12, h: 16 };
+    let hitBox = { x: px - 6, y: player.y + 10, w: 12, h: 10 };
     let power = 1.06 + pLv * 0.05;
     let burstPower = 1.3 + pLv * 0.04;
     let cooldown = 10;
@@ -1595,7 +1643,7 @@
     } else {
       const range = 19 + pLv * 0.25;
       const hitX = dir > 0 ? player.x + player.w - 1 : player.x - range;
-      hitBox = { x: hitX, y: player.y + 5, w: range, h: 15 };
+      hitBox = { x: hitX, y: player.y + 10, w: range, h: 10 };
     }
 
     attackCooldown = cooldown;
@@ -1690,8 +1738,35 @@
 
   function resolveEnemyContactDamage() {
     for (const enemy of stage.enemies) {
-      if (!enemy.alive || enemy.kicked) continue;
+      if (!enemy.alive) continue;
       if (!overlap(player, enemy)) continue;
+
+      const playerBottom = player.y + player.h;
+      const enemyTop = enemy.y;
+      const fromAbove = playerBottom - enemyTop <= 8 && player.y < enemy.y;
+      const descending = player.vy > 0.7;
+
+      if (fromAbove && descending) {
+        const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
+        const pLv = proteinLevel();
+        const stompPower = 1.2 + pLv * 0.04;
+        kickEnemy(enemy, dir, stompPower);
+        player.vy = -5.25;
+        player.onGround = false;
+
+        if (kickComboTimer > 0) {
+          kickCombo = Math.min(99, kickCombo + 1);
+        } else {
+          kickCombo = 1;
+        }
+        kickComboTimer = 44;
+        triggerKickBurst(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 1.35 + stompPower * 0.4);
+        playKickSfx(1.32 + stompPower * 0.1);
+        hudMessage = kickCombo > 1 ? `踏みつけ x${kickCombo}!` : "踏みつけ!";
+        hudTimer = 26;
+        return;
+      }
+
       if (enemy.kind === "peacock") {
         killPlayer("孔雀に接触");
       } else {
@@ -1729,6 +1804,13 @@
     stage.boss.attackCycle = 0;
     stage.boss.invuln = 24;
     stage.bossShots = [];
+    openingThemeActive = false;
+    invincibleTimer = 0;
+    invincibleHitCooldown = 0;
+    stopInvincibleMusic();
+    startStageMusic(true);
+    setBgmVolume(0, 0);
+    setBgmVolume(BGM_NORMAL_VOL, 0.12);
 
     gameState = STATE.BOSS;
     cameraX = clamp(BOSS_ARENA.minX - 96, 0, stage.width - W);
@@ -1977,6 +2059,8 @@
     if (gameState !== STATE.PLAY) return;
     gameState = STATE.PRE_BOSS;
     preBossCutsceneTimer = 0;
+    invincibleTimer = 0;
+    invincibleHitCooldown = 0;
     player.vx = 0;
     player.vy = 0;
     hudMessage = "";
@@ -2126,27 +2210,69 @@
       return;
     }
 
-    if (cutsceneTime > 560) {
+    if (cutsceneTime > OPENING_CUTSCENE_DURATION) {
       startGameplay(true);
     }
   }
 
   function updatePreBossCutscene(dt, actions) {
     preBossCutsceneTimer += dt;
+    startOpeningTheme();
     if (actions.startPressed || actions.jumpPressed || preBossCutsceneTimer > PRE_BOSS_CUTSCENE_DURATION) {
       startBossBattle();
     }
   }
 
+  function returnToTitle() {
+    deadReason = "";
+    deathPauseTimer = 0;
+    deathAnimActive = false;
+    deathJumpVy = 0;
+    deadTimer = 0;
+    cutsceneTime = 0;
+    preBossCutsceneTimer = 0;
+    cameraX = 0;
+    stopInvincibleMusic();
+    stopStageMusic(true);
+    gameState = STATE.CUTSCENE;
+  }
+
   function updateDead(dt, actions) {
-    deadTimer -= dt;
+    deadTimer = Math.max(0, deadTimer - dt);
     deathFlashTimer = Math.max(0, deathFlashTimer - dt);
     deathShakeTimer = Math.max(0, deathShakeTimer - dt);
-    if (actions.startPressed || actions.jumpPressed) {
-      deadTimer = 0;
+
+    if (deathPauseTimer > 0) {
+      deathPauseTimer = Math.max(0, deathPauseTimer - dt);
+      if (deathPauseTimer <= 0 && !deathAnimActive) {
+        deathAnimActive = true;
+        deathJumpVy = -5.6;
+      }
     }
-    if (deadTimer <= 0) {
+
+    if (deathAnimActive) {
+      player.y += deathJumpVy * dt;
+      deathJumpVy = Math.min(MAX_FALL + 2.2, deathJumpVy + GRAVITY * 1.08 * dt);
+      player.anim += dt * 0.45;
+    }
+
+    if (actions.startPressed || actions.jumpPressed || actions.attackPressed) {
+      deathPauseTimer = 0;
+      if (!deathAnimActive) {
+        deathAnimActive = true;
+        deathJumpVy = -5.6;
+      }
+      deadTimer = Math.min(deadTimer, playerLives > 0 ? 12 : 24);
+    }
+
+    if (deadTimer > 0) {
+      return;
+    }
+
+    if (playerLives > 0) {
       respawnFromCheckpoint();
+    } else {
+      returnToTitle();
     }
   }
 
@@ -2363,7 +2489,7 @@
     }
   }
 
-  function drawHero(x, y, facing, animFrame, scale = 1) {
+  function drawHero(x, y, facing, animFrame, scale = 1, kickPose = 0) {
     const px = Math.floor(x);
     const py = Math.floor(y);
     const step = Math.sin(animFrame * 0.28);
@@ -2371,6 +2497,8 @@
     const legB = -legA;
     const armA = -Math.round(step * 1.2);
     const armB = -armA;
+    const kp = clamp(kickPose, 0, 1);
+    const armKickLift = Math.round(kp * 2);
     const s = clamp(scale, 1, 1.8);
     const spriteW = 14;
     const spriteH = 25;
@@ -2389,19 +2517,20 @@
       ctx.fillRect(dx, dy, w, h);
     };
 
-    // Hair: black bob with soft highlights and center bangs.
-    paint("#08090d", 1, 0, 12, 1);
-    paint("#08090d", 0, 1, 14, 8);
-    paint("#0f1320", 1, 2, 12, 7);
-    paint("#151a2b", 2, 3, 10, 3);
-    paint("#1d2338", 3, 2, 8, 1);
-    paint("#2b3348", 4, 2, 6, 1);
-    paint("#0a0b10", 5, 4, 4, 4);
-    paint("#07080d", 6, 5, 2, 4);
-    paint("#0d111d", 0, 7, 2, 3);
-    paint("#0d111d", 12, 7, 2, 3);
-    paint("#101626", 1, 9, 3, 2);
-    paint("#101626", 10, 9, 3, 2);
+    // Hair: fluffy side bob with bangs.
+    paint("#07080d", 2, 0, 10, 1);
+    paint("#08090d", 1, 1, 12, 1);
+    paint("#090b11", 0, 2, 14, 2);
+    paint("#0e1220", 0, 4, 14, 4);
+    paint("#141a2c", 1, 5, 12, 3);
+    paint("#1f2740", 2, 4, 10, 2);
+    paint("#2a344e", 3, 3, 8, 1);
+    paint("#12182a", 0, 8, 3, 2);
+    paint("#12182a", 11, 8, 3, 2);
+    paint("#1a2136", 1, 9, 4, 2);
+    paint("#1a2136", 9, 9, 4, 2);
+    paint("#0a0c13", 5, 4, 4, 4);
+    paint("#07090f", 6, 5, 2, 4);
 
     // Face: softer cute look, larger eyes, small blush.
     paint("#f8e9e1", 4, 6, 6, 6);
@@ -2432,22 +2561,43 @@
     paint("#8e99ad", 4, 19, 6, 1);
 
     // Arms (jacket sleeves).
-    paint("#0e121d", 0, 13 + armA, 2, 6);
-    paint("#2b3447", 1, 14 + armA, 1, 3);
-    paint("#f4e0d3", 0, 19 + armA, 2, 1);
-    paint("#0e121d", 12, 13 + armB, 2, 6);
-    paint("#2b3447", 12, 14 + armB, 1, 3);
-    paint("#f4e0d3", 12, 19 + armB, 2, 1);
+    paint("#0e121d", 0, 13 + armA + armKickLift, 2, 6);
+    paint("#2b3447", 1, 14 + armA + armKickLift, 1, 3);
+    paint("#f4e0d3", 0, 19 + armA + armKickLift, 2, 1);
+    paint("#0e121d", 12, 13 + armB - armKickLift, 2, 6);
+    paint("#2b3447", 12, 14 + armB - armKickLift, 1, 3);
+    paint("#f4e0d3", 12, 19 + armB - armKickLift, 2, 1);
 
     // Legs and boots.
-    paint("#24345a", 3, 20, 4, 3 + legA);
-    paint("#324975", 4, 20, 2, 2);
-    paint("#24345a", 7, 20, 4, 3 + legB);
-    paint("#324975", 8, 20, 2, 2);
-    paint("#161118", 3, 23 + legA, 4, 1);
-    paint("#161118", 7, 23 + legB, 4, 1);
-    paint("#2b1f27", 3, 24 + legA, 4, 1);
-    paint("#2b1f27", 7, 24 + legB, 4, 1);
+    if (kp > 0.04) {
+      const backLift = Math.round(kp * 1.2);
+      const frontReach = Math.round(kp * 3);
+      const frontRaise = Math.round(kp * 2);
+      const frontLen = Math.round(kp * 2);
+      const backH = Math.max(2, 3 + legA - backLift);
+      const frontY = 19 - frontRaise;
+      const frontH = Math.max(3, 4 + legB + frontLen);
+
+      paint("#24345a", 3, 20, 4, backH);
+      paint("#324975", 4, 20, 2, 2);
+      paint("#161118", 3, 20 + backH, 4, 1);
+      paint("#2b1f27", 3, 21 + backH, 4, 1);
+
+      paint("#24345a", 7 + frontReach, frontY, 4, frontH);
+      paint("#324975", 8 + frontReach, frontY, 2, 2);
+      paint("#161118", 8 + frontReach, frontY + frontH, 4, 1);
+      paint("#2b1f27", 8 + frontReach, frontY + frontH + 1, 4, 1);
+      paint("#efe8dd", 11 + frontReach, frontY + frontH, 1, 1);
+    } else {
+      paint("#24345a", 3, 20, 4, 3 + legA);
+      paint("#324975", 4, 20, 2, 2);
+      paint("#24345a", 7, 20, 4, 3 + legB);
+      paint("#324975", 8, 20, 2, 2);
+      paint("#161118", 3, 23 + legA, 4, 1);
+      paint("#161118", 7, 23 + legB, 4, 1);
+      paint("#2b1f27", 3, 24 + legA, 4, 1);
+      paint("#2b1f27", 7, 24 + legB, 4, 1);
+    }
 
     ctx.restore();
   }
@@ -2460,19 +2610,35 @@
       ctx.fillRect(px + dx, py + dy, w, h);
     };
 
-    paint("#11141d", 1, 0, 10, 1);
-    paint("#d63a3a", 2, 1, 8, 3);
-    paint("#aa2323", 2, 3, 9, 1);
-    paint("#7f1919", 8, 2, 3, 3);
-    paint("#1a1f2a", 3, 4, 8, 6);
-    paint("#0d1118", 4, 4, 6, 3);
-    paint("#222a39", 5, 7, 4, 1);
-    paint("#3b5e89", 3, 10, 8, 8);
-    paint("#597aa8", 4, 11, 6, 3);
-    paint("#29354a", 3, 18, 3, 5);
-    paint("#29354a", 8, 18, 3, 5);
-    paint("#17181d", 3, 23, 3, 1);
-    paint("#17181d", 8, 23, 3, 1);
+    // Red cap + side shadowed face.
+    paint("#151a24", 1, 0, 10, 1);
+    paint("#da3f3f", 2, 1, 8, 3);
+    paint("#b72e2e", 2, 3, 9, 1);
+    paint("#8e2020", 8, 2, 3, 3);
+    paint("#f2d8c7", 4, 4, 6, 5);
+    paint("#dfbea9", 4, 8, 6, 1);
+    paint("#1d2332", 4, 4, 3, 2);
+    paint("#2f3748", 7, 5, 3, 2);
+    paint("#f9eee6", 8, 5, 1, 1);
+    paint("#7d5445", 6, 8, 2, 1);
+
+    // Hoodie + jacket.
+    paint("#212939", 3, 9, 8, 2);
+    paint("#3d5f8e", 3, 11, 8, 8);
+    paint("#5c80b1", 4, 12, 6, 3);
+    paint("#2a3d5a", 6, 12, 1, 7);
+    paint("#17202f", 1, 10, 2, 6);
+    paint("#17202f", 11, 10, 2, 6);
+    paint("#f2d8c7", 2, 15, 1, 2);
+    paint("#f2d8c7", 11, 15, 1, 2);
+
+    // Pants + shoes.
+    paint("#2b3549", 3, 19, 3, 4);
+    paint("#2b3549", 8, 19, 3, 4);
+    paint("#202736", 4, 19, 1, 3);
+    paint("#202736", 9, 19, 1, 3);
+    paint("#191b24", 3, 23, 3, 1);
+    paint("#191b24", 8, 23, 3, 1);
   }
 
   function drawEnemy(enemy) {
@@ -2918,14 +3084,24 @@
     }
 
     const dir = player.facing;
-    const sx = dir > 0 ? cx + 6 : cx - 12;
-    const sy = cy - 1;
-    ctx.fillStyle = "rgba(255,238,180,0.45)";
-    ctx.fillRect(sx, sy - 1, 10, 5);
+    const t = 1 - clamp(attackEffectTimer / 9, 0, 1);
+    const arc = Math.sin(t * Math.PI);
+    const kx = Math.floor((dir > 0 ? cx + 8 : cx - 12) + dir * arc * 9);
+    const ky = Math.floor(cy + 6 - arc * 5);
+
+    ctx.fillStyle = "rgba(255,238,180,0.42)";
+    ctx.fillRect(kx - 2, ky - 2, 8, 5);
     ctx.fillStyle = "#ffeec0";
-    ctx.fillRect(sx + 2, sy, 6, 3);
+    ctx.fillRect(kx, ky - 1, 6, 3);
     ctx.fillStyle = "#ffb06d";
-    ctx.fillRect(sx + (dir > 0 ? 8 : 0), sy + 1, 2, 1);
+    ctx.fillRect(kx + (dir > 0 ? 5 : 0), ky, 2, 2);
+
+    ctx.fillStyle = "rgba(255, 215, 138, 0.36)";
+    for (let i = 0; i < 4; i += 1) {
+      const mx = Math.floor(kx - dir * (4 + i * 3));
+      const my = Math.floor(ky + i - 1);
+      ctx.fillRect(mx, my, 3, 1);
+    }
   }
 
   function drawCannon(c) {
@@ -3097,7 +3273,10 @@
     drawInvincibleBikeRide();
     const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (!hurtBlink) {
-      drawHero(player.x - cameraX, player.y, player.facing, player.anim);
+      const kickPose = attackEffectTimer > 0 && attackEffectMode === "kick"
+        ? Math.sin((1 - clamp(attackEffectTimer / 9, 0, 1)) * Math.PI)
+        : 0;
+      drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1, kickPose);
     }
 
     ctx.restore();
@@ -3143,7 +3322,7 @@
     ctx.fillStyle = "#110f17";
     ctx.fillRect(0, 0, W, H);
 
-    if (t < 220) {
+    if (t < 260) {
       ctx.fillStyle = "#12182a";
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = "#25365b";
@@ -3170,7 +3349,7 @@
         "シュークリームで元気回復、プロテインはバニラ派!",
       ]);
     } else {
-      const k = clamp((t - 220) / 320, 0, 1);
+      const k = clamp((t - 260) / 430, 0, 1);
       const kidnapX = 120 + k * 120;
 
       ctx.fillStyle = "#161b2f";
@@ -3199,15 +3378,20 @@
       ctx.fillStyle = "#1a1f2a";
       ctx.fillRect(kidnapX + 16, 111, 6, 4);
 
-      if (t < 430) {
+      if (t < 470) {
         drawTextPanel([
           "悪の組織が彼氏に権利収入と不労所得を甘く勧誘。",
           "断った彼氏はホームパーティー会場へ連行された。",
         ]);
-      } else {
+      } else if (t < 650) {
         drawTextPanel([
           "彼氏がさらわれた! りらは会場へ全力ダッシュ。",
           "今すぐ追いかけて救出だ!",
+        ]);
+      } else {
+        drawTextPanel([
+          "ターゲットはマンション最上階のホームパーティー会場。",
+          "りらの救出作戦が今、始まる。",
         ]);
       }
     }
@@ -3222,9 +3406,9 @@
 
   function drawPreBossCutscene() {
     const t = preBossCutsceneTimer;
-    const approach = clamp(t / 110, 0, 1);
-    const party = clamp((t - 90) / 120, 0, 1);
-    const descend = clamp((t - 156) / 110, 0, 1);
+    const approach = clamp(t / 150, 0, 1);
+    const party = clamp((t - 120) / 180, 0, 1);
+    const descend = clamp((t - 244) / 170, 0, 1);
 
     ctx.fillStyle = "#0b1120";
     ctx.fillRect(0, 0, W, H);
@@ -3266,8 +3450,8 @@
     const heroX = 38 + approach * 122;
     drawHero(heroX, 112, 1, t * 1.3);
 
-    if (t > 96) {
-      const open = clamp((t - 96) / 24, 0, 1);
+    if (t > 128) {
+      const open = clamp((t - 128) / 34, 0, 1);
       const doorW = Math.max(8, Math.floor(26 - open * 16));
       ctx.fillStyle = "#11141d";
       ctx.fillRect(mx + 39, my + 64, doorW, 40);
@@ -3342,9 +3526,9 @@
       ctx.fillRect(beamX - 5, Math.floor(godY - 3), 10, 2);
     }
 
-    if (t < 130) {
+    if (t < 180) {
       drawTextPanel(["マンションのホームパーティー会場に到着。"]);
-    } else if (t < 226) {
+    } else if (t < 330) {
       drawTextPanel(["会場では怪しい勧誘会が始まっていた。"]);
     } else {
       drawTextPanel(["ホームパーティーで白ヒゲの神が降臨。"], 136);
@@ -3368,6 +3552,7 @@
     ctx.textBaseline = "top";
     ctx.fillText(`D${deaths}`, 5, 4);
     ctx.fillText(`P${collectedProteinIds.size}`, 24, 4);
+    ctx.fillText(`L${playerLives}`, 41, 4);
 
     for (let i = 0; i < MAX_HEARTS; i += 1) {
       drawHeartIcon(50 + i * 10, 5, i < playerHearts);
@@ -3406,7 +3591,7 @@
 
   function drawDeadOverlay() {
     const flashRatio = clamp(deathFlashTimer / 26, 0, 1);
-    const blink = Math.floor(deadTimer / 5) % 2 === 0;
+    const blink = Math.floor((deadTimer + 12) / 5) % 2 === 0;
 
     ctx.fillStyle = `rgba(140, 0, 24, ${0.35 + flashRatio * 0.35})`;
     ctx.fillRect(0, 0, W, H);
@@ -3440,8 +3625,15 @@
     ctx.fillStyle = "#ffd8d8";
     ctx.font = "9px monospace";
     ctx.fillText(`原因: ${deadReason || "ダメージ"}`, 48, 84);
-    ctx.fillText("チェックポイントから再開", 88, 100);
-    ctx.fillText("タップ/ジャンプ/Enterで即リトライ", 62, 114);
+    ctx.fillText(`残機 x${playerLives}`, 126, 100);
+
+    if (playerLives > 0) {
+      const c = Math.max(1, Math.ceil(deadTimer / 60));
+      ctx.fillText(`再開まで ${c}...`, 120, 114);
+    } else {
+      ctx.fillStyle = blink ? "#ffe5b6" : "#cda977";
+      ctx.fillText("GAME OVER", 122, 114);
+    }
   }
 
   function drawClearOverlay() {
@@ -3676,7 +3868,12 @@
     }
 
     if (gameState === STATE.DEAD) {
-      deadTimer = 0;
+      deathPauseTimer = 0;
+      if (!deathAnimActive) {
+        deathAnimActive = true;
+        deathJumpVy = -5.6;
+      }
+      deadTimer = Math.min(deadTimer, playerLives > 0 ? 12 : 24);
     }
   });
 
