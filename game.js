@@ -105,6 +105,9 @@
   let invincibleMusicFadeTimer = 0;
   let invincibleMusicFadeDuration = 0;
   let openingThemeActive = false;
+  let pendingStageResumeAfterInvincible = false;
+  let audioUnlockedByUser = false;
+  let openingThemeMutedAutoplayTried = false;
   let rilaVoiceNextAt = 0;
   let robotVoiceCurve = null;
   let bgmStarted = false;
@@ -278,14 +281,25 @@
     invincibleMusic.preload = "auto";
   }
 
-  function stopInvincibleMusic() {
+  function resumeStageMusicAfterInvincible() {
+    if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
+    startStageMusic(true);
+    setBgmVolume(0, 0);
+    setBgmVolume(BGM_NORMAL_VOL, INVINCIBLE_BGM_FADE_SEC);
+  }
+
+  function stopInvincibleMusic(clearPendingResume = true) {
     if (!invincibleMusic) return;
     openingThemeActive = false;
     invincibleMusicFadeTimer = 0;
     invincibleMusicFadeDuration = 0;
+    if (clearPendingResume) {
+      pendingStageResumeAfterInvincible = false;
+    }
     try {
       invincibleMusic.pause();
       invincibleMusic.currentTime = 0;
+      invincibleMusic.muted = false;
       invincibleMusic.volume = INVINCIBLE_BGM_VOL;
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
@@ -294,7 +308,12 @@
 
   function startInvincibleMusicFadeOut(seconds = INVINCIBLE_BGM_FADE_SEC) {
     if (!invincibleMusic || invincibleMusic.paused) {
-      stopInvincibleMusic();
+      const shouldResume = pendingStageResumeAfterInvincible;
+      stopInvincibleMusic(false);
+      pendingStageResumeAfterInvincible = false;
+      if (shouldResume) {
+        resumeStageMusicAfterInvincible();
+      }
       return;
     }
 
@@ -316,7 +335,12 @@
     }
 
     if (invincibleMusicFadeTimer <= 0) {
-      stopInvincibleMusic();
+      const shouldResume = pendingStageResumeAfterInvincible;
+      stopInvincibleMusic(false);
+      pendingStageResumeAfterInvincible = false;
+      if (shouldResume) {
+        resumeStageMusicAfterInvincible();
+      }
     }
   }
 
@@ -324,6 +348,7 @@
     if (invincibleTimer > 0) return false;
     invincibleTimer = duration;
     openingThemeActive = false;
+    pendingStageResumeAfterInvincible = false;
     stopStageMusic(false);
     ensureInvincibleMusic();
     if (!invincibleMusic) return true;
@@ -343,18 +368,15 @@
 
   function endInvincibleMode() {
     if (invincibleTimer > 0) return;
+    pendingStageResumeAfterInvincible = gameState === STATE.PLAY || gameState === STATE.BOSS;
     startInvincibleMusicFadeOut(INVINCIBLE_BGM_FADE_SEC);
-    if (gameState === STATE.PLAY || gameState === STATE.BOSS) {
-      startStageMusic(true);
-      setBgmVolume(0, 0);
-      setBgmVolume(BGM_NORMAL_VOL, INVINCIBLE_BGM_FADE_SEC);
-    }
   }
 
   function startOpeningTheme() {
     if (gameState !== STATE.CUTSCENE && gameState !== STATE.PRE_BOSS) return;
     ensureInvincibleMusic();
     if (!invincibleMusic) return;
+    if (!audioUnlockedByUser && openingThemeMutedAutoplayTried && invincibleMusic.paused) return;
     if (openingThemeActive && !invincibleMusic.paused) return;
 
     openingThemeActive = true;
@@ -363,12 +385,50 @@
     stopStageMusic(true);
 
     try {
+      invincibleMusic.muted = false;
       invincibleMusic.volume = INVINCIBLE_BGM_VOL;
       invincibleMusic.currentTime = 0;
       const starting = invincibleMusic.play();
       if (starting && typeof starting.then === "function") {
         starting.catch(() => {
-          openingThemeActive = false;
+          if (!audioUnlockedByUser && !openingThemeMutedAutoplayTried) {
+            openingThemeMutedAutoplayTried = true;
+            try {
+              invincibleMusic.currentTime = 0;
+              invincibleMusic.muted = true;
+              invincibleMusic.volume = INVINCIBLE_BGM_VOL;
+              const mutedStart = invincibleMusic.play();
+              if (mutedStart && typeof mutedStart.then === "function") {
+                mutedStart.then(() => {
+                  try {
+                    invincibleMusic.muted = false;
+                    invincibleMusic.volume = INVINCIBLE_BGM_VOL;
+                  } catch (_e) {
+                    // Ignore media errors and keep gameplay responsive.
+                  }
+                }).catch(() => {
+                  openingThemeActive = false;
+                  try {
+                    invincibleMusic.muted = false;
+                  } catch (_e) {
+                    // Ignore media errors and keep gameplay responsive.
+                  }
+                });
+              } else {
+                invincibleMusic.muted = false;
+                invincibleMusic.volume = INVINCIBLE_BGM_VOL;
+              }
+            } catch (_e) {
+              openingThemeActive = false;
+              try {
+                invincibleMusic.muted = false;
+              } catch (_e2) {
+                // Ignore media errors and keep gameplay responsive.
+              }
+            }
+          } else {
+            openingThemeActive = false;
+          }
         });
       }
     } catch (_e) {
@@ -419,6 +479,8 @@
   function unlockAudio() {
     const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtxClass) return;
+    audioUnlockedByUser = true;
+    openingThemeMutedAutoplayTried = false;
 
     if (!audioCtx) {
       audioCtx = new AudioCtxClass();
@@ -4160,7 +4222,7 @@
 
       if (t < 470) {
         drawTextPanel([
-          "悪の組織が彼氏に権利収入と不労所得を甘く勧誘。",
+          "悪の組織が彼氏に甘い儲け話とラクな稼ぎ話を持ちかけた。",
           "断った彼氏はホームパーティー会場へ連行された。",
         ]);
       } else if (t < 650) {
@@ -4648,12 +4710,12 @@
     unlockAudio();
 
     if (gameState === STATE.CUTSCENE) {
-      startGameplay(true);
+      startOpeningTheme();
       return;
     }
 
     if (gameState === STATE.PRE_BOSS) {
-      startBossBattle();
+      startOpeningTheme();
       return;
     }
 
