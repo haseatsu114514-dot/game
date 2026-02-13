@@ -1225,12 +1225,18 @@
     player.onGround = false;
   }
 
-  function kickEnemy(enemy, dir, power = 1) {
+  function kickEnemy(enemy, dir, power = 1, options = {}) {
+    const immediateRemove = options.immediateRemove !== false;
+    const flyLifetime = options.flyLifetime || 42;
     enemy.kicked = true;
     enemy.vx = dir * (4.3 + power * 1.55);
     enemy.vy = -(3.6 + power * 1.05);
     enemy.onGround = false;
-    enemy.alive = false;
+    enemy.kickDespawn = immediateRemove ? 0 : Math.max(1, flyLifetime);
+    enemy.alive = true;
+    if (immediateRemove) {
+      enemy.alive = false;
+    }
   }
 
   function triggerKickBurst(x, y, power = 1) {
@@ -1560,6 +1566,13 @@
       enemy.flash = Math.max(0, (enemy.flash || 0) - dt);
 
       if (enemy.kicked) {
+        if ((enemy.kickDespawn || 0) > 0) {
+          enemy.kickDespawn -= dt;
+          if (enemy.kickDespawn <= 0) {
+            enemy.alive = false;
+            continue;
+          }
+        }
         enemy.vy = Math.min(enemy.vy + GRAVITY * dt, MAX_FALL);
         enemy.vx *= Math.pow(0.97, dt);
         moveWithCollisions(enemy, solids, dt);
@@ -1914,7 +1927,7 @@
 
   function resolveEnemyContactDamage() {
     for (const enemy of stage.enemies) {
-      if (!enemy.alive) continue;
+      if (!enemy.alive || enemy.kicked) continue;
 
       const weakPartyGuest = enemy.kind === "partygoon";
       const sideGrace = weakPartyGuest ? STOMP_SIDE_GRACE + 5 : STOMP_SIDE_GRACE;
@@ -1935,6 +1948,26 @@
       };
       const stompTouch = overlap(feetBox, stompTarget);
       if (!touchingBody && !stompTouch) continue;
+
+      if (invincibleTimer > 0 && (touchingBody || stompTouch)) {
+        const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
+        const speedBoost = Math.min(2.2, Math.abs(player.vx) * 0.5);
+        const blastPower = 3.4 + speedBoost;
+        kickEnemy(enemy, dir, blastPower, { immediateRemove: false, flyLifetime: 48 });
+        enemy.vx = dir * (9.4 + blastPower * 1.2);
+        enemy.vy = -(6.6 + blastPower * 0.7);
+        enemy.flash = 14;
+        const ex = enemy.x + enemy.w * 0.5;
+        const ey = enemy.y + enemy.h * 0.5;
+        triggerKickBurst(ex, ey, 4.6);
+        triggerImpact(5.4, ex, ey, 8.0);
+        spawnHitSparks(ex, ey, "#fff7d1", "#ffb16d");
+        spawnHitSparks(ex, ey, "#ffecc0", "#ff6d58");
+        playKickSfx(2.06);
+        hudMessage = "無敵クラッシュ!";
+        hudTimer = 20;
+        return;
+      }
 
       const playerBottom = player.y + player.h;
       const enemyTop = enemy.y;
