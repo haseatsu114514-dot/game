@@ -1890,8 +1890,8 @@
       if (!enemy.alive || enemy.kicked) continue;
 
       const weakPartyGuest = enemy.kind === "partygoon";
-      const sideGrace = Math.max(2, STOMP_SIDE_GRACE - 2);
-      const verticalGrace = Math.max(6, STOMP_VERTICAL_GRACE - 8);
+      const sideGrace = STOMP_SIDE_GRACE;
+      const verticalGrace = STOMP_VERTICAL_GRACE;
 
       const touchingBody = overlap(player, enemy);
       const feetBox = {
@@ -1902,41 +1902,20 @@
       };
       const stompTarget = {
         x: enemy.x - sideGrace,
-        y: enemy.y - 2,
+        y: enemy.y - 6,
         w: enemy.w + sideGrace * 2,
-        h: enemy.h + verticalGrace + 4,
+        h: Math.max(9, Math.floor(enemy.h * 0.68)) + verticalGrace,
       };
       const stompTouch = overlap(feetBox, stompTarget);
       if (!touchingBody && !stompTouch) continue;
 
-      if (invincibleTimer > 0 && (touchingBody || stompTouch)) {
-        const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
-        const speedBoost = Math.min(2.2, Math.abs(player.vx) * 0.5);
-        const blastPower = 3.4 + speedBoost;
-        kickEnemy(enemy, dir, blastPower, { immediateRemove: false, flyLifetime: 48 });
-        enemy.vx = dir * (9.4 + blastPower * 1.2);
-        enemy.vy = -(6.6 + blastPower * 0.7);
-        enemy.flash = 14;
-        const ex = enemy.x + enemy.w * 0.5;
-        const ey = enemy.y + enemy.h * 0.5;
-        triggerKickBurst(ex, ey, 4.6);
-        triggerImpact(5.4, ex, ey, 8.0);
-        spawnHitSparks(ex, ey, "#fff7d1", "#ffb16d");
-        spawnHitSparks(ex, ey, "#ffecc0", "#ff6d58");
-        playKickSfx(2.06);
-        hudMessage = "無敵クラッシュ!";
-        hudTimer = 20;
-        return;
-      }
-
       const playerBottom = player.y + player.h;
       const enemyTop = enemy.y;
       const enemyMidY = enemy.y + enemy.h * 0.5;
-      const verticalWindow = playerBottom >= enemyTop - 3 && playerBottom <= enemyTop + verticalGrace;
-      const centerAbove = player.y + player.h * 0.5 <= enemyMidY - 2;
-      const descending = player.vy > 0.42;
-      const strictAbove = playerBottom <= enemyTop + 5;
-      const stompable = stompTouch && verticalWindow && centerAbove && descending && strictAbove;
+      const verticalWindow = playerBottom >= enemyTop - 5 && playerBottom <= enemyTop + Math.max(9, enemy.h * 0.72);
+      const centerAbove = player.y + player.h * 0.54 <= enemyMidY + 1;
+      const descending = player.vy > 0.22;
+      const stompable = stompTouch && verticalWindow && centerAbove && descending;
 
       if (stompable) {
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
@@ -1969,6 +1948,26 @@
       }
 
       if (!touchingBody) continue;
+
+      if (invincibleTimer > 0) {
+        const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
+        const speedBoost = Math.min(2.2, Math.abs(player.vx) * 0.5);
+        const blastPower = 3.4 + speedBoost;
+        kickEnemy(enemy, dir, blastPower, { immediateRemove: false, flyLifetime: 48 });
+        enemy.vx = dir * (9.4 + blastPower * 1.2);
+        enemy.vy = -(6.6 + blastPower * 0.7);
+        enemy.flash = 14;
+        const ex = enemy.x + enemy.w * 0.5;
+        const ey = enemy.y + enemy.h * 0.5;
+        triggerKickBurst(ex, ey, 4.6);
+        triggerImpact(5.4, ex, ey, 8.0);
+        spawnHitSparks(ex, ey, "#fff7d1", "#ffb16d");
+        spawnHitSparks(ex, ey, "#ffecc0", "#ff6d58");
+        playKickSfx(2.06);
+        hudMessage = "無敵クラッシュ!";
+        hudTimer = 20;
+        return;
+      }
 
       if (enemy.kind === "peacock") {
         killPlayer("孔雀に接触");
