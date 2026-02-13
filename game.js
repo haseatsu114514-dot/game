@@ -1013,6 +1013,7 @@
         modeTimer: 0,
         shotCooldown: 56,
         attackCycle: 0,
+        spiralAngle: 0,
         invuln: 0,
       },
     };
@@ -2056,6 +2057,7 @@
     stage.boss.modeTimer = 42;
     stage.boss.shotCooldown = 28;
     stage.boss.attackCycle = 0;
+    stage.boss.spiralAngle = 0;
     stage.boss.invuln = 24;
     stage.bossShots = [];
     stage.hazardBullets = [];
@@ -2081,7 +2083,7 @@
 
     triggerImpact(2.4, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.55, 3.4);
     playKickSfx(1.8);
-    hudMessage = "ホームパーティー会場突入! 雑魚を踏みつつ神を倒せ";
+    hudMessage = "ホームパーティー会場突入! 構成員を避けつつ神を倒せ";
     hudTimer = 120;
   }
 
@@ -2101,16 +2103,146 @@
     clearTimer = 0;
   }
 
+  function emitBossGroundWave(boss, rage) {
+    const baseY = stage.groundY - 6;
+    const speed = rage ? 2.48 : 2.16;
+    const dirs = rage ? [-1, 1, -0.82, 0.82] : [-1, 1];
+    for (const d of dirs) {
+      stage.bossShots.push({
+        kind: "wave",
+        x: boss.x + boss.w * 0.5 - 5,
+        y: baseY,
+        baseY,
+        w: 10,
+        h: 5,
+        vx: speed * d,
+        vy: 0,
+        ttl: rage ? 126 : 108,
+        seed: Math.random() * Math.PI * 2,
+        reason: "神の衝撃波に被弾",
+      });
+    }
+    triggerImpact(2.8, boss.x + boss.w * 0.5, boss.y + boss.h, 4.8);
+    playKickSfx(1.66);
+  }
+
+  function emitBossRingShots(boss, rage) {
+    const cx = boss.x + boss.w * 0.5 - 2;
+    const cy = boss.y + 12;
+    const angles = rage
+      ? [0, 45, 90, 135, 180, 225, 270, 315]
+      : [0, 60, 120, 180, 240, 300];
+    for (const deg of angles) {
+      const rad = (deg * Math.PI) / 180;
+      stage.bossShots.push({
+        kind: "ring",
+        x: cx,
+        y: cy,
+        w: 5,
+        h: 5,
+        vx: Math.cos(rad) * (rage ? 1.82 : 1.56),
+        vy: Math.sin(rad) * (rage ? 1.44 : 1.22),
+        ttl: rage ? 132 : 116,
+        reason: "神の結界弾に被弾",
+      });
+    }
+    playKickSfx(1.52);
+  }
+
+  function emitBossRainBurst(boss, rage) {
+    const arenaPad = 16;
+    const minX = BOSS_ARENA.minX + arenaPad;
+    const maxX = BOSS_ARENA.maxX - arenaPad;
+    const playerCenter = clamp(player.x + player.w * 0.5, minX, maxX);
+    const offset = (Math.random() * 2 - 1) * (rage ? 88 : 66);
+    const targetA = clamp(playerCenter + offset, minX, maxX);
+    const targetB = clamp(boss.x + boss.w * 0.5 - offset * 0.46, minX, maxX);
+    const targetC = clamp((targetA + targetB) * 0.5 + (Math.random() * 2 - 1) * 18, minX, maxX);
+    const targets = rage ? [targetA, targetB, targetC] : [targetA, targetB];
+    for (const tx of targets) {
+      stage.bossShots.push({
+        kind: "rain_warn",
+        x: tx - 3,
+        y: stage.groundY - 22,
+        w: 6,
+        h: 20,
+        ttl: rage ? 24 : 28,
+        wind: (Math.random() * 2 - 1) * (rage ? 0.1 : 0.08),
+        rainVy: rage ? 2.34 : 2.02,
+        reason: "神の落下弾に被弾",
+      });
+    }
+    playKickSfx(1.42);
+  }
+
+  function emitBossSpiralShots(boss, rage) {
+    const cx = boss.x + boss.w * 0.5 - 2;
+    const cy = boss.y + 10;
+    const count = rage ? 7 : 5;
+    const speed = rage ? 1.88 : 1.58;
+    const base = ((boss.spiralAngle || 0) * Math.PI) / 180;
+    for (let i = 0; i < count; i += 1) {
+      const ang = base + (Math.PI * 2 * i) / count;
+      stage.bossShots.push({
+        kind: "spiral",
+        x: cx,
+        y: cy,
+        w: 5,
+        h: 5,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed * 0.76,
+        ttl: rage ? 136 : 120,
+        reason: "神の螺旋弾に被弾",
+      });
+    }
+    playKickSfx(1.48);
+  }
+
   function updateBossShots(dt, solids) {
+    const spawned = [];
     for (const shot of stage.bossShots) {
       if (shot.dead) continue;
-      shot.x += shot.vx * dt;
-      shot.y += shot.vy * dt;
-      shot.vy += 0.1 * dt;
-      shot.ttl -= dt;
+
+      if (shot.kind === "rain_warn") {
+        shot.ttl -= dt;
+        if (shot.ttl <= 0) {
+          spawned.push({
+            kind: "rain",
+            x: shot.x,
+            y: -18,
+            w: 6,
+            h: 13,
+            vx: shot.wind || 0,
+            vy: shot.rainVy || 2.1,
+            ttl: 104,
+            reason: shot.reason || "神の落下弾に被弾",
+          });
+          shot.dead = true;
+        }
+        continue;
+      } else if (shot.kind === "wave") {
+        shot.x += shot.vx * dt;
+        shot.ttl -= dt;
+        shot.phase = (shot.phase || 0) + dt * 0.22;
+        shot.y = shot.baseY + Math.sin((shot.phase || 0) + (shot.seed || 0)) * 0.8;
+      } else if (shot.kind === "spiral") {
+        shot.x += shot.vx * dt;
+        shot.y += shot.vy * dt;
+        shot.ttl -= dt;
+      } else if (shot.kind === "rain") {
+        shot.x += shot.vx * dt;
+        shot.y += shot.vy * dt;
+        shot.vy += 0.16 * dt;
+        shot.ttl -= dt;
+      } else {
+        shot.x += shot.vx * dt;
+        shot.y += shot.vy * dt;
+        shot.vy += shot.kind === "ring" ? 0.04 * dt : 0.1 * dt;
+        shot.ttl -= dt;
+      }
 
       if (overlap(player, shot)) {
-        killPlayer("ボス弾に被弾");
+        killPlayer(shot.reason || "ボス弾に被弾");
       }
 
       if (shot.ttl <= 0 || shot.x < BOSS_ARENA.minX - 60 || shot.x > BOSS_ARENA.maxX + 60 || shot.y > H + 30) {
@@ -2121,12 +2253,18 @@
       for (const s of solids) {
         if (overlap(shot, s)) {
           shot.dead = true;
+          if (shot.kind === "rain") {
+            triggerImpact(1.2, shot.x + shot.w * 0.5, shot.y + shot.h * 0.5, 2.1);
+          }
           break;
         }
       }
     }
 
     stage.bossShots = stage.bossShots.filter((s) => !s.dead);
+    if (spawned.length > 0) {
+      stage.bossShots.push(...spawned);
+    }
   }
 
   function updateBoss(dt, solids) {
@@ -2157,14 +2295,35 @@
       }
 
       if (boss.modeTimer <= 0) {
-        if (boss.attackCycle % 2 === 0) {
+        const pattern = boss.attackCycle % 6;
+        if (pattern === 0) {
           boss.mode = "windup";
           boss.modeTimer = rage ? 20 : 28;
           boss.vx = 0;
-        } else {
+        } else if (pattern === 1) {
           boss.mode = "shoot";
           boss.modeTimer = rage ? 78 : 66;
           boss.shotCooldown = rage ? 10 : 14;
+        } else if (pattern === 2) {
+          boss.mode = "leap_prep";
+          boss.modeTimer = rage ? 20 : 26;
+          boss.vx *= 0.5;
+        } else if (pattern === 3) {
+          boss.mode = "ring";
+          boss.modeTimer = rage ? 82 : 68;
+          boss.shotCooldown = rage ? 13 : 17;
+          boss.vx *= 0.42;
+        } else if (pattern === 4) {
+          boss.mode = "rain";
+          boss.modeTimer = rage ? 94 : 80;
+          boss.shotCooldown = rage ? 12 : 16;
+          boss.vx *= 0.4;
+        } else {
+          boss.mode = "spiral";
+          boss.modeTimer = rage ? 88 : 74;
+          boss.shotCooldown = rage ? 11 : 15;
+          boss.spiralAngle = (boss.spiralAngle + (rage ? 22 : 16)) % 360;
+          boss.vx *= 0.35;
         }
         boss.attackCycle += 1;
       }
@@ -2209,18 +2368,89 @@
           });
         }
         boss.shotCooldown = rage ? 11 : 16;
-        boss.attackCycle += 1;
       }
 
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
         boss.modeTimer = rage ? 34 : 46;
       }
+    } else if (boss.mode === "leap_prep") {
+      boss.vx *= Math.pow(rage ? 0.66 : 0.72, dt);
+      if (boss.modeTimer <= 0) {
+        const targetX = clamp(
+          player.x + player.w * 0.5 + player.vx * 14,
+          BOSS_ARENA.minX + 20,
+          BOSS_ARENA.maxX - 20
+        );
+        const cx = boss.x + boss.w * 0.5;
+        boss.leapTargetX = targetX;
+        boss.mode = "leap_air";
+        boss.modeTimer = rage ? 82 : 70;
+        boss.dir = targetX >= cx ? 1 : -1;
+        const dist = Math.abs(targetX - cx);
+        boss.vx = boss.dir * clamp(1.65 + dist * 0.012, 1.65, rage ? 3.2 : 2.8);
+        boss.vy = rage ? -7.35 : -6.85;
+      }
+    } else if (boss.mode === "leap_air") {
+      if (!boss.onGround) {
+        const cx = boss.x + boss.w * 0.5;
+        const toward = (boss.leapTargetX || cx) - cx;
+        boss.vx += clamp(toward * 0.004, -0.05, 0.05) * dt;
+        boss.vx = clamp(boss.vx, -(rage ? 3.2 : 2.8), rage ? 3.2 : 2.8);
+      }
+      if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 30 : 42;
+      }
+    } else if (boss.mode === "ring") {
+      boss.vx *= Math.pow(rage ? 0.76 : 0.82, dt);
+      if (boss.shotCooldown <= 0) {
+        emitBossRingShots(boss, rage);
+        boss.shotCooldown = rage ? 16 : 22;
+      }
+      if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 32 : 44;
+      }
+    } else if (boss.mode === "rain") {
+      const target = player.x + player.w * 0.5 >= boss.x + boss.w * 0.5 ? 1 : -1;
+      boss.vx += target * (rage ? 0.022 : 0.016) * dt;
+      boss.vx *= Math.pow(rage ? 0.84 : 0.88, dt);
+      boss.vx = clamp(boss.vx, -0.72, 0.72);
+      if (boss.shotCooldown <= 0) {
+        emitBossRainBurst(boss, rage);
+        boss.shotCooldown = rage ? 15 : 21;
+      }
+      if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 30 : 42;
+      }
+    } else if (boss.mode === "spiral") {
+      const target = player.x + player.w * 0.5 >= boss.x + boss.w * 0.5 ? 1 : -1;
+      boss.vx += target * (rage ? 0.03 : 0.022) * dt;
+      boss.vx *= Math.pow(rage ? 0.86 : 0.9, dt);
+      boss.vx = clamp(boss.vx, -0.9, 0.9);
+      if (boss.shotCooldown <= 0) {
+        emitBossSpiralShots(boss, rage);
+        boss.spiralAngle = (boss.spiralAngle + (rage ? 36 : 27)) % 360;
+        boss.shotCooldown = rage ? 10 : 14;
+      }
+      if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 28 : 40;
+      }
     }
 
     boss.vy = Math.min(boss.vy + GRAVITY * dt, MAX_FALL);
     moveWithCollisions(boss, solids, dt);
     boss.x = clamp(boss.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - boss.w - 2);
+    if (boss.mode === "leap_air" && boss.onGround) {
+      emitBossGroundWave(boss, rage);
+      boss.mode = "idle";
+      boss.modeTimer = rage ? 30 : 42;
+      boss.vx *= 0.28;
+      boss.vy = 0;
+    }
   }
 
   function updateImpactEffects(dt) {
@@ -3133,6 +3363,7 @@
     const x = Math.floor(b.x - cameraX);
     const y = Math.floor(b.y);
     const warn = b.mode === "windup" || b.mode === "dash";
+    const cast = b.mode === "shoot" || b.mode === "ring" || b.mode === "rain" || b.mode === "spiral";
     const rage = b.hp <= Math.ceil(b.maxHp * 0.35);
 
     ctx.fillStyle = "#11131a";
@@ -3155,7 +3386,7 @@
     ctx.fillRect(x + 7, y + 8, 10, 6);
     ctx.fillStyle = "#d2b29a";
     ctx.fillRect(x + 8, y + 13, 8, 1);
-    ctx.fillStyle = warn || rage ? "#ffd6a6" : "#b6e1ff";
+    ctx.fillStyle = warn || cast || rage ? "#ffd6a6" : "#b6e1ff";
     ctx.fillRect(x + 9, y + 10, 2, 1);
     ctx.fillRect(x + 13, y + 10, 2, 1);
 
@@ -3186,7 +3417,7 @@
     ctx.fillRect(x + 4, y + 35, 6, 1);
     ctx.fillRect(x + 14, y + 35, 6, 1);
 
-    if (b.mode === "shoot" || warn) {
+    if (cast || warn) {
       ctx.fillStyle = "#d1b36b";
       ctx.fillRect(x + 19, y + 11, 2, 14);
       ctx.fillStyle = "#f3e7bb";
@@ -3742,10 +3973,48 @@
 
     for (const bs of stage.bossShots) {
       if (bs.dead) continue;
-      ctx.fillStyle = "#ff8d6a";
-      ctx.fillRect(Math.floor(bs.x - cameraX), Math.floor(bs.y), bs.w, bs.h);
-      ctx.fillStyle = "#ffd6a8";
-      ctx.fillRect(Math.floor(bs.x - cameraX + 1), Math.floor(bs.y + 1), bs.w - 2, bs.h - 2);
+      const sx = Math.floor(bs.x - cameraX);
+      const sy = Math.floor(bs.y);
+      if (bs.kind === "wave") {
+        ctx.fillStyle = "rgba(255, 156, 108, 0.44)";
+        ctx.fillRect(sx - 2, sy - 1, bs.w + 4, bs.h + 2);
+        ctx.fillStyle = "#ff9f5b";
+        ctx.fillRect(sx, sy, bs.w, bs.h);
+        ctx.fillStyle = "#ffe0b4";
+        ctx.fillRect(sx + 2, sy + 1, Math.max(2, bs.w - 4), Math.max(2, bs.h - 2));
+      } else if (bs.kind === "ring") {
+        ctx.fillStyle = "rgba(196, 165, 255, 0.42)";
+        ctx.fillRect(sx - 1, sy - 1, bs.w + 2, bs.h + 2);
+        ctx.fillStyle = "#c5a3ff";
+        ctx.fillRect(sx, sy, bs.w, bs.h);
+        ctx.fillStyle = "#efe2ff";
+        ctx.fillRect(sx + 1, sy + 1, Math.max(2, bs.w - 2), Math.max(2, bs.h - 2));
+      } else if (bs.kind === "spiral") {
+        ctx.fillStyle = "rgba(121, 223, 255, 0.38)";
+        ctx.fillRect(sx - 1, sy - 1, bs.w + 2, bs.h + 2);
+        ctx.fillStyle = "#7ee0ff";
+        ctx.fillRect(sx, sy, bs.w, bs.h);
+        ctx.fillStyle = "#e8fcff";
+        ctx.fillRect(sx + 1, sy + 1, Math.max(2, bs.w - 2), Math.max(2, bs.h - 2));
+      } else if (bs.kind === "rain_warn") {
+        const blink = Math.floor((bs.ttl || 0) * 0.32) % 2 === 0;
+        ctx.fillStyle = blink ? "rgba(255, 219, 127, 0.4)" : "rgba(255, 170, 94, 0.26)";
+        ctx.fillRect(sx, sy, bs.w, bs.h);
+        ctx.fillStyle = blink ? "#ffd885" : "#ffb36c";
+        ctx.fillRect(sx + 2, sy + 1, Math.max(1, bs.w - 4), Math.max(1, bs.h - 2));
+      } else if (bs.kind === "rain") {
+        ctx.fillStyle = "rgba(255, 116, 103, 0.45)";
+        ctx.fillRect(sx - 1, sy - 2, bs.w + 2, bs.h + 4);
+        ctx.fillStyle = "#ff896a";
+        ctx.fillRect(sx, sy, bs.w, bs.h);
+        ctx.fillStyle = "#ffd8b6";
+        ctx.fillRect(sx + 1, sy + 2, Math.max(2, bs.w - 2), Math.max(2, bs.h - 4));
+      } else {
+        ctx.fillStyle = "#ff8d6a";
+        ctx.fillRect(sx, sy, bs.w, bs.h);
+        ctx.fillStyle = "#ffd6a8";
+        ctx.fillRect(sx + 1, sy + 1, bs.w - 2, bs.h - 2);
+      }
     }
 
     for (const b of stage.hazardBullets) {
@@ -4059,7 +4328,7 @@
     } else if (t < 230) {
       drawTextPanel(["扉が開いた。りらは会場へ突入。"]);
     } else if (t < 330) {
-      drawTextPanel(["会場には勧誘された雑魚もいる。"]);
+      drawTextPanel(["会場には勧誘された構成員もいる。"]);
     } else {
       drawTextPanel(["ホームパーティーで白ヒゲの神が降臨。"]);
     }
