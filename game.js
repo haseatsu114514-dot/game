@@ -747,6 +747,7 @@
     const proteins = [];
     const bikes = [];
     const weaponItems = [];
+    const checkpointTokens = [];
     const staticSpikes = [];
     const popSpikes = [];
     const fallBlocks = [];
@@ -795,6 +796,17 @@
         collected: false,
       });
     };
+
+    const checkpoints = [
+      { x: 34, y: 136, label: "START" },
+      { x: 980, y: 136, label: "CP-0" },
+      { x: 2200, y: 136, label: "CP-1" },
+      { x: 3380, y: 136, label: "CP-2" },
+      { x: 4300, y: 136, label: "CP-3" },
+      { x: 5200, y: 136, label: "CP-4" },
+      { x: 6040, y: 136, label: "CP-5" },
+      { x: 6680, y: 136, label: "CP-6" },
+    ];
 
     const groundSegments = [
       [0, 560],
@@ -953,6 +965,30 @@
     addWeaponItem(10, "glove", 6120, 104);
     addWeaponItem(11, "hammer", 6690, 98);
 
+    const checkpointTokenAnchors = {
+      1: { x: 1020, y: 104 },
+      2: { x: 2340, y: 102 },
+      3: { x: 3710, y: 102 },
+      4: { x: 4590, y: 100 },
+      5: { x: 5460, y: 102 },
+      6: { x: 6340, y: 98 },
+      7: { x: 6760, y: 88 },
+    };
+
+    for (let i = 1; i < checkpoints.length; i += 1) {
+      const cp = checkpoints[i];
+      const anchor = checkpointTokenAnchors[i] || { x: cp.x + 2, y: cp.y - 18 };
+      checkpointTokens.push({
+        id: i,
+        x: anchor.x,
+        y: anchor.y,
+        w: 12,
+        h: 12,
+        bob: (i * 1.29) % (Math.PI * 2),
+        collected: i <= checkpointIndex,
+      });
+    }
+
     return {
       width: 7400,
       groundY,
@@ -961,6 +997,7 @@
       proteins,
       bikes,
       weaponItems,
+      checkpointTokens,
       staticSpikes,
       popSpikes,
       fallBlocks,
@@ -968,16 +1005,7 @@
       breakWalls,
       hazardBullets: [],
       bossShots: [],
-      checkpoints: [
-        { x: 34, y: 136, label: "START" },
-        { x: 980, y: 136, label: "CP-0" },
-        { x: 2200, y: 136, label: "CP-1" },
-        { x: 3380, y: 136, label: "CP-2" },
-        { x: 4300, y: 136, label: "CP-3" },
-        { x: 5200, y: 136, label: "CP-4" },
-        { x: 6040, y: 136, label: "CP-5" },
-        { x: 6680, y: 136, label: "CP-6" },
-      ],
+      checkpoints,
       goal: { x: 7044, y: 112, w: 24, h: 48 },
       boss: {
         started: false,
@@ -1372,14 +1400,22 @@
     setBgmVolume(BGM_NORMAL_VOL, 0.08);
   }
 
-  function updateCheckpoints() {
-    const next = stage.checkpoints[checkpointIndex + 1];
-    if (!next) return;
+  function updateCheckpointTokens(dt) {
+    for (const token of stage.checkpointTokens) {
+      token.bob += 0.09 * dt;
+      if (token.collected) continue;
 
-    if (player.x >= next.x) {
-      checkpointIndex += 1;
-      hudMessage = `${next.label} 到達`;
+      const floatY = token.y + Math.sin(token.bob) * 1.6;
+      const hit = { x: token.x, y: floatY, w: token.w, h: token.h };
+      if (!overlap(player, hit)) continue;
+
+      token.collected = true;
+      checkpointIndex = Math.max(checkpointIndex, token.id);
+      const cp = stage.checkpoints[token.id];
+      hudMessage = `${cp.label} セーブ`;
       hudTimer = 90;
+      playPowerupSfx();
+      triggerImpact(1.2, token.x + token.w * 0.5, floatY + token.h * 0.5, 2.0);
     }
   }
 
@@ -1658,8 +1694,15 @@
       const pLv = proteinLevel();
       const speedPct = Math.round(pLv * 2.2);
       proteinRushTimer = Math.min(90, proteinRushTimer + 44);
-      hudMessage = `PROTEIN BOOST! SPD +${speedPct}%`;
-      hudTimer = 64;
+      const lifeUp = pLv % 30 === 0;
+      if (lifeUp) {
+        playerLives = Math.min(99, playerLives + 1);
+        hudMessage = `PROTEIN ${pLv}! 1UP`;
+        hudTimer = 90;
+      } else {
+        hudMessage = `PROTEIN BOOST! SPD +${speedPct}%`;
+        hudTimer = 64;
+      }
       playPowerupSfx();
       triggerImpact(0.9, protein.x + protein.w * 0.5, floatY + protein.h * 0.5, 1.4);
     }
@@ -2261,12 +2304,12 @@
     updateProteins(dt);
     updateBikes(dt);
     updateWeaponItems(dt);
+    updateCheckpointTokens(dt);
     updatePlayerAttack(dt, actions);
     resolveEnemyContactDamage();
     resolveBreakWalls(dt);
     resolveHazards();
     resolveGoal();
-    updateCheckpoints();
 
     cameraX = clamp(player.x + player.w * 0.5 - W * 0.45, 0, stage.width - W);
   }
@@ -2957,24 +3000,63 @@
     const x = Math.floor(protein.x - cameraX);
     const y = Math.floor(protein.y + Math.sin(protein.bob) * 1.7);
 
-    ctx.fillStyle = "#121623";
-    ctx.fillRect(x, y, 10, 12);
-    ctx.fillStyle = "#e9d59f";
-    ctx.fillRect(x + 1, y + 1, 8, 2);
-    ctx.fillStyle = "#c5a068";
-    ctx.fillRect(x + 2, y + 2, 6, 1);
-    ctx.fillStyle = "#f7f8fd";
-    ctx.fillRect(x + 1, y + 3, 8, 8);
-    ctx.fillStyle = "#cdd6e8";
-    ctx.fillRect(x + 1, y + 10, 8, 1);
-    ctx.fillStyle = "#4770b8";
-    ctx.fillRect(x + 2, y + 6, 6, 3);
-    ctx.fillStyle = "#eaf4ff";
-    ctx.fillRect(x + 3, y + 6, 1, 3);
+    ctx.fillStyle = "rgba(120, 220, 255, 0.18)";
+    ctx.fillRect(x - 2, y - 2, 14, 16);
+
+    // Cap
+    ctx.fillStyle = "#0f1320";
+    ctx.fillRect(x + 2, y + 0, 6, 2);
+    ctx.fillStyle = "#d9b473";
+    ctx.fillRect(x + 3, y + 0, 4, 1);
+
+    // Bottle body
+    ctx.fillStyle = "#11182a";
+    ctx.fillRect(x + 1, y + 2, 8, 10);
+    ctx.fillStyle = "#f6f9ff";
+    ctx.fillRect(x + 2, y + 3, 6, 8);
+    ctx.fillStyle = "#d9e1ef";
+    ctx.fillRect(x + 2, y + 10, 6, 1);
+
+    // Blue label with clear P icon
+    ctx.fillStyle = "#2f7de0";
+    ctx.fillRect(x + 2, y + 5, 6, 4);
+    ctx.fillStyle = "#b9deff";
+    ctx.fillRect(x + 3, y + 6, 1, 2);
     ctx.fillRect(x + 4, y + 6, 2, 1);
-    ctx.fillRect(x + 5, y + 7, 1, 1);
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.fillRect(x + 2, y + 4, 1, 2);
+    ctx.fillRect(x + 4, y + 7, 1, 1);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x + 3, y + 4, 1, 1);
+    ctx.fillRect(x + 7, y + 4, 1, 1);
+  }
+
+  function drawCheckpointToken(token) {
+    if (token.collected) return;
+    const x = Math.floor(token.x - cameraX);
+    const y = Math.floor(token.y + Math.sin(token.bob) * 1.6);
+    const blink = Math.floor((player.anim + token.id * 9) * 0.2) % 2 === 0;
+
+    ctx.fillStyle = "rgba(255, 245, 170, 0.2)";
+    ctx.fillRect(x - 3, y - 3, 18, 18);
+
+    ctx.fillStyle = "#1a2032";
+    ctx.fillRect(x + 1, y + 1, 10, 10);
+    ctx.fillStyle = "#ffe489";
+    ctx.fillRect(x + 2, y + 2, 8, 8);
+    ctx.fillStyle = "#fff5cc";
+    ctx.fillRect(x + 3, y + 3, 6, 6);
+    ctx.fillStyle = "#d08f2b";
+    ctx.fillRect(x + 4, y + 4, 1, 4);
+    ctx.fillRect(x + 5, y + 4, 2, 1);
+    ctx.fillRect(x + 5, y + 7, 2, 1);
+    ctx.fillRect(x + 5, y + 5, 1, 1);
+
+    if (blink) {
+      ctx.fillStyle = "#fff8dc";
+      ctx.fillRect(x - 1, y + 5, 2, 1);
+      ctx.fillRect(x + 11, y + 6, 2, 1);
+      ctx.fillRect(x + 5, y - 1, 1, 2);
+      ctx.fillRect(x + 6, y + 11, 1, 2);
+    }
   }
 
   function drawBikePickup(bike) {
@@ -3407,6 +3489,10 @@
 
     for (const item of stage.weaponItems) {
       drawWeaponItem(item);
+    }
+
+    for (const token of stage.checkpointTokens) {
+      drawCheckpointToken(token);
     }
 
     for (const e of stage.enemies) {
