@@ -135,6 +135,8 @@
   const WEAPON_DURATION = 600;
   const OPENING_CUTSCENE_DURATION = 760;
   const PRE_BOSS_CUTSCENE_DURATION = 460;
+  const PRE_BOSS_ENTRY_DURATION = 78;
+  const PRE_BOSS_MOVIE_START_AT = 230;
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
   const CANNON_EXTRA_COOLDOWN = 26;
@@ -2616,14 +2618,20 @@
     if (stage.boss.started) return;
     if (gameState !== STATE.PLAY) return;
     gameState = STATE.PRE_BOSS;
-    preBossCutsceneTimer = 0;
+    preBossCutsceneTimer = -PRE_BOSS_ENTRY_DURATION;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
+    stopInvincibleMusic();
+    const entryStartX = stage.goal.x - player.w - 16;
+    player.x = Math.min(player.x, entryStartX);
+    player.y = stage.groundY - player.h;
+    player.facing = 1;
+    player.onGround = true;
     player.vx = 0;
     player.vy = 0;
+    player.anim = 0;
     hudMessage = "";
     hudTimer = 0;
-    startOpeningTheme();
   }
 
   function sampleActions() {
@@ -2790,9 +2798,31 @@
   }
 
   function updatePreBossCutscene(dt, actions) {
+    if (actions.startPressed || actions.jumpPressed) {
+      startBossBattle();
+      return;
+    }
+
+    if (preBossCutsceneTimer < 0) {
+      const targetX = stage.goal.x + 4;
+      player.facing = 1;
+      player.vx = 0;
+      player.vy = 0;
+      player.onGround = true;
+      player.x = Math.min(targetX, player.x + 0.94 * dt);
+      player.anim += dt * 0.7;
+      cameraX = clamp(stage.goal.x + stage.goal.w * 0.5 - W * 0.56, 0, stage.width - W);
+      preBossCutsceneTimer += dt;
+      if (preBossCutsceneTimer >= 0) {
+        preBossCutsceneTimer = 0;
+        startOpeningTheme();
+      }
+      return;
+    }
+
     preBossCutsceneTimer += dt;
     startOpeningTheme();
-    if (actions.startPressed || actions.jumpPressed || preBossCutsceneTimer > PRE_BOSS_CUTSCENE_DURATION) {
+    if (preBossCutsceneTimer > PRE_BOSS_CUTSCENE_DURATION) {
       startBossBattle();
     }
   }
@@ -4274,7 +4304,27 @@
   }
 
   function drawPreBossCutscene() {
-    const t = preBossCutsceneTimer;
+    const rawT = preBossCutsceneTimer;
+    if (rawT < 0) {
+      drawWorld();
+      const enterRatio = clamp((rawT + PRE_BOSS_ENTRY_DURATION) / PRE_BOSS_ENTRY_DURATION, 0, 1);
+      const fade = clamp(0.42 + enterRatio * 0.38, 0.42, 0.8);
+      const gx = Math.floor(stage.goal.x - cameraX);
+      const gy = Math.floor(stage.goal.y);
+      ctx.fillStyle = `rgba(8,10,16,${fade})`;
+      ctx.fillRect(gx - 4, gy + 3, stage.goal.w + 8, stage.goal.h - 3);
+      drawTextPanel(["りらはマンションの扉を開き、会場へ入る。"]);
+
+      ctx.fillStyle = "rgba(0,0,0,0.44)";
+      ctx.fillRect(90, 8, 140, 14);
+      ctx.fillStyle = "#f4f3ff";
+      ctx.font = "9px monospace";
+      ctx.textBaseline = "top";
+      ctx.fillText("タップ / Enter でスキップ", 101, 11);
+      return;
+    }
+
+    const t = rawT + PRE_BOSS_MOVIE_START_AT;
     const showInterior = t >= 230;
     const approach = clamp(t / 156, 0, 1);
     const doorOpen = clamp((t - 114) / 42, 0, 1);
