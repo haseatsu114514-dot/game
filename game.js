@@ -1890,8 +1890,8 @@
       if (!enemy.alive || enemy.kicked) continue;
 
       const weakPartyGuest = enemy.kind === "partygoon";
-      const sideGrace = weakPartyGuest ? STOMP_SIDE_GRACE + 5 : STOMP_SIDE_GRACE;
-      const verticalGrace = weakPartyGuest ? STOMP_VERTICAL_GRACE + 11 : STOMP_VERTICAL_GRACE;
+      const sideGrace = Math.max(2, STOMP_SIDE_GRACE - 2);
+      const verticalGrace = Math.max(6, STOMP_VERTICAL_GRACE - 8);
 
       const touchingBody = overlap(player, enemy);
       const feetBox = {
@@ -1932,10 +1932,11 @@
       const playerBottom = player.y + player.h;
       const enemyTop = enemy.y;
       const enemyMidY = enemy.y + enemy.h * 0.5;
-      const verticalWindow = playerBottom >= enemyTop - 4 && playerBottom <= enemyTop + verticalGrace;
-      const centerAbove = player.y + player.h * 0.42 <= enemyMidY + (weakPartyGuest ? 10 : 5);
-      const descending = player.vy > (weakPartyGuest ? STOMP_DESCEND_MIN - 0.75 : STOMP_DESCEND_MIN);
-      const stompable = stompTouch && verticalWindow && centerAbove && descending;
+      const verticalWindow = playerBottom >= enemyTop - 3 && playerBottom <= enemyTop + verticalGrace;
+      const centerAbove = player.y + player.h * 0.5 <= enemyMidY - 2;
+      const descending = player.vy > 0.42;
+      const strictAbove = playerBottom <= enemyTop + 5;
+      const stompable = stompTouch && verticalWindow && centerAbove && descending && strictAbove;
 
       if (stompable) {
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
@@ -1968,16 +1969,6 @@
       }
 
       if (!touchingBody) continue;
-
-      if (weakPartyGuest) {
-        const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
-        kickEnemy(enemy, dir, 0.96);
-        player.vx -= dir * 0.22;
-        triggerKickBurst(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.55, 1.2);
-        triggerImpact(1.15, enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.55, 1.8);
-        playKickSfx(1.46);
-        return;
-      }
 
       if (enemy.kind === "peacock") {
         killPlayer("孔雀に接触");
