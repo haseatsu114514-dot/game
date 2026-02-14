@@ -6631,7 +6631,8 @@
     const cy = Math.floor(player.y + 11);
     const dir = player.facing;
 
-    if (input.attack && attackCooldown <= 0 && attackChargeTimer > 0) {
+    const showingChargeReach = input.attack && attackCooldown <= 0 && attackChargeTimer > ATTACK_COMBO_TAP_MAX;
+    if (showingChargeReach) {
       const chargeRatio = clamp(attackChargeTimer / ATTACK_CHARGE_MAX, 0, 1);
       const waveReady = attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN;
       const spearReady = attackChargeTimer >= ATTACK_SPEAR_CHARGE_MIN && attackChargeTimer < ATTACK_WAVE_CHARGE_MIN;
@@ -8440,11 +8441,12 @@
     const full = proteinBurstGauge >= PROTEIN_BURST_REQUIRE;
     burstButton.style.setProperty("--burst-fill", `${Math.round(chargeRatio * 100)}%`);
     burstButton.style.setProperty("--burst-alpha", (0.12 + chargeRatio * 0.62).toFixed(3));
-    burstButton.disabled = !ready;
+    burstButton.disabled = !playable;
+    burstButton.classList.toggle("not-ready", playable && !ready);
     burstButton.classList.toggle("ready", ready);
     burstButton.classList.toggle("full", full);
     burstButton.textContent = full ? "BURST!" : "BURST";
-    if (!ready) {
+    if (!playable) {
       input.special = false;
       burstButton.classList.remove("is-down");
     }
