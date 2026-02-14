@@ -98,6 +98,7 @@
   let dashJumpAssistTimer = 0;
   let attackCooldown = 0;
   let attackChargeTimer = 0;
+  let attackMaxHoldTimer = 0;
   let attackChargeReadyPlayed = false;
   let attackMashCount = 0;
   let attackMashTimer = 0;
@@ -206,6 +207,7 @@
   const HYAKURETSU_DURATION = 40;
   const HYAKURETSU_HIT_INTERVAL = 2;
   const HYAKURETSU_POST_COOLDOWN = 10;
+  const HYAKURETSU_HOLD_AFTER_MAX = 18;
   const STOMP_VERTICAL_GRACE = 16;
   const STOMP_SIDE_GRACE = 6;
   const STOMP_DESCEND_MIN = -0.25;
@@ -3359,6 +3361,7 @@
     hyakuretsuTimer = HYAKURETSU_DURATION;
     hyakuretsuHitTimer = 0;
     hyakuretsuLaneTick = 0;
+    attackMaxHoldTimer = 0;
     attackMashCount = 0;
     attackMashTimer = 0;
     attackCooldown = 0;
@@ -3478,6 +3481,7 @@
   function updatePlayerAttack(dt, actions) {
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
     if (!playable) {
+      attackMaxHoldTimer = 0;
       if (!input.attack) {
         attackChargeTimer = 0;
         attackChargeReadyPlayed = false;
@@ -3491,15 +3495,19 @@
 
     if (hyakuretsuTimer > 0) {
       attackChargeTimer = 0;
+      attackMaxHoldTimer = 0;
       attackChargeReadyPlayed = false;
-      hyakuretsuTimer = Math.max(0, hyakuretsuTimer - dt);
+      if (!input.attack) {
+        hyakuretsuTimer = 0;
+        hyakuretsuHitTimer = 0;
+        attackCooldown = Math.max(attackCooldown, HYAKURETSU_POST_COOLDOWN);
+        return;
+      }
+      hyakuretsuTimer = HYAKURETSU_DURATION;
       hyakuretsuHitTimer = Math.max(0, hyakuretsuHitTimer - dt);
       if (hyakuretsuHitTimer <= 0) {
         performHyakuretsuStrike();
         hyakuretsuHitTimer = HYAKURETSU_HIT_INTERVAL;
-      }
-      if (hyakuretsuTimer <= 0) {
-        attackCooldown = Math.max(attackCooldown, HYAKURETSU_POST_COOLDOWN);
       }
       return;
     }
@@ -3507,6 +3515,7 @@
     if (attackCooldown > 0) {
       if (!input.attack) {
         attackChargeTimer = 0;
+        attackMaxHoldTimer = 0;
         attackChargeReadyPlayed = false;
       }
       return;
@@ -3515,6 +3524,15 @@
     if (input.attack) {
       const beforeCharge = attackChargeTimer;
       attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt);
+      if (attackChargeTimer >= ATTACK_CHARGE_MAX - 0.01) {
+        attackMaxHoldTimer += dt;
+        if (attackMaxHoldTimer >= HYAKURETSU_HOLD_AFTER_MAX) {
+          startHyakuretsuMode();
+          return;
+        }
+      } else {
+        attackMaxHoldTimer = 0;
+      }
       if (
         !attackChargeReadyPlayed &&
         attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN &&
@@ -3529,13 +3547,9 @@
     if (actions.attackReleased && attackChargeTimer > 0) {
       const quickTapCombo = attackChargeTimer <= ATTACK_COMBO_TAP_MAX;
       if (quickTapCombo) {
-        attackMashCount = attackMashTimer > 0 ? Math.min(ATTACK_MASH_TRIGGER, attackMashCount + 1) : 1;
+        attackMashCount = attackMashTimer > 0 ? Math.min(ATTACK_MASH_TRIGGER - 1, attackMashCount + 1) : 1;
         attackMashTimer = ATTACK_MASH_WINDOW;
-        if (attackMashCount >= ATTACK_MASH_TRIGGER && hyakuretsuTimer <= 0) {
-          startHyakuretsuMode();
-        } else {
-          releaseChargeAttack(attackChargeTimer, { forcePunch: true, comboStage: attackMashCount });
-        }
+        releaseChargeAttack(attackChargeTimer, { forcePunch: true, comboStage: attackMashCount });
       } else {
         attackMashCount = 0;
         attackMashTimer = 0;
@@ -3543,6 +3557,7 @@
       }
     }
     attackChargeTimer = 0;
+    attackMaxHoldTimer = 0;
     attackChargeReadyPlayed = false;
   }
 
