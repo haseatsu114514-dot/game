@@ -7956,6 +7956,22 @@
     ctx.font = "8px monospace";
     ctx.fillText(`STAGE ${currentStageNumber}`, W - 56, 6);
 
+    if (invincibleTimer > 0) {
+      const sec = Math.max(0, invincibleTimer / 60);
+      const text = `無敵 ${sec.toFixed(1)}s`;
+      const textW = Math.ceil(ctx.measureText(text).width);
+      const padX = 3;
+      const boxW = textW + padX * 2 + 1;
+      const boxX = W - boxW - 3;
+      const boxY = 12;
+      ctx.fillStyle = "rgba(10, 26, 40, 0.88)";
+      ctx.fillRect(boxX, boxY, boxW, 8);
+      ctx.fillStyle = "rgba(116, 231, 255, 0.95)";
+      ctx.fillRect(boxX, boxY + 7, Math.max(1, Math.floor((boxW - 1) * clamp(invincibleTimer / INVINCIBLE_DURATION, 0, 1))), 1);
+      ctx.fillStyle = "#dcfbff";
+      ctx.fillText(text, boxX + padX, boxY + 1);
+    }
+
     if (hurtFlashTimer > 0 && (gameState === STATE.PLAY || gameState === STATE.BOSS)) {
       const flash = clamp(hurtFlashTimer / 24, 0, 1);
       ctx.fillStyle = `rgba(255, 130, 130, ${0.18 * flash})`;
@@ -8502,12 +8518,12 @@
     const full = proteinBurstGauge >= PROTEIN_BURST_REQUIRE;
     burstButton.style.setProperty("--burst-fill", `${Math.round(chargeRatio * 100)}%`);
     burstButton.style.setProperty("--burst-alpha", (0.12 + chargeRatio * 0.62).toFixed(3));
-    burstButton.disabled = !playable;
+    burstButton.disabled = !ready;
     burstButton.classList.toggle("not-ready", playable && !ready);
     burstButton.classList.toggle("ready", ready);
     burstButton.classList.toggle("full", full);
     burstButton.textContent = full ? "BURST!" : "BURST";
-    if (!playable) {
+    if (!ready) {
       input.special = false;
       burstButton.classList.remove("is-down");
     }
