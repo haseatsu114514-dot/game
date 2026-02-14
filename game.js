@@ -65,6 +65,9 @@
   let damageInvulnTimer = 0;
   let hurtFlashTimer = 0;
   let proteinRushTimer = 0;
+  let proteinBurstGauge = 0;
+  let proteinBurstTimer = 0;
+  let proteinBurstBlastDone = false;
   let invincibleTimer = 0;
   let invincibleHitCooldown = 0;
   let impactShakeTimer = 0;
@@ -139,6 +142,9 @@
   const STAGE_BGM_PATH = "assets/stage_bgm.mp3";
   const INVINCIBLE_BGM_PATH = "assets/invincible_bgm.mp3";
   const WEAPON_DURATION = 600;
+  const PROTEIN_BURST_REQUIRE = 15;
+  const PROTEIN_BURST_DURATION = 62;
+  const PROTEIN_BURST_BLAST_AT = 0.38;
   const OPENING_CUTSCENE_DURATION = 760;
   const PRE_BOSS_CUTSCENE_DURATION = 460;
   const PRE_BOSS_ENTRY_DURATION = 78;
@@ -997,6 +1003,109 @@
     spawnHitSparks(x, y);
   }
 
+  function triggerProteinBurst() {
+    if (proteinBurstTimer > 0) return false;
+    if (proteinBurstGauge < PROTEIN_BURST_REQUIRE) return false;
+
+    proteinBurstGauge = 0;
+    proteinBurstTimer = PROTEIN_BURST_DURATION;
+    proteinBurstBlastDone = false;
+    player.vx *= 0.38;
+    player.vy = Math.min(player.vy, -8.9);
+    player.onGround = false;
+    attackCooldown = 0;
+    attackChargeTimer = 0;
+    attackEffectTimer = 0;
+    attackEffectPhase = 0;
+    attackEffectMode = "none";
+    stage.playerWaves = [];
+    playPowerupSfx();
+    playKickSfx(2.04);
+    triggerImpact(2.8, player.x + player.w * 0.5, player.y + player.h * 0.55, 4.2);
+    hudMessage = "PROTEIN BURST!";
+    hudTimer = 58;
+    return true;
+  }
+
+  function performProteinBurstSweep() {
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.5;
+
+    let swept = 0;
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive) continue;
+      enemy.alive = false;
+      enemy.kicked = true;
+      enemy.vx = 0;
+      enemy.vy = 0;
+      swept += 1;
+    }
+
+    for (const bullet of stage.hazardBullets) {
+      if (bullet.dead) continue;
+      bullet.dead = true;
+      swept += 1;
+    }
+
+    for (const shot of stage.bossShots) {
+      if (shot.dead) continue;
+      shot.dead = true;
+      swept += 1;
+    }
+
+    stage.enemies = stage.enemies.filter((e) => e.alive);
+    stage.hazardBullets = stage.hazardBullets.filter((b) => !b.dead);
+    stage.bossShots = stage.bossShots.filter((s) => !s.dead);
+
+    if (stage.boss.active && stage.boss.hp > 0 && stage.boss.invuln <= 0) {
+      stage.boss.hp = Math.max(0, stage.boss.hp - 1);
+      stage.boss.invuln = 20;
+      stage.boss.vx += player.facing * 0.5;
+      stage.boss.vy = Math.min(stage.boss.vy, -2.0);
+      if (stage.boss.hp <= 0) {
+        defeatBoss();
+      }
+    }
+
+    triggerImpact(5.4, px, py - 24, 7.0);
+    spawnHitSparks(px, py - 24, "#fff0b8", "#ff8d68");
+    spawnHitSparks(px, py - 24, "#d7f7ff", "#87b2ff");
+    playKickSfx(2.28);
+    hudMessage = swept > 0 ? `PROTEIN BURST x${swept}` : "PROTEIN BURST!";
+    hudTimer = 34;
+  }
+
+  function updateProteinBurst(dt, solids, minX, maxX) {
+    if (proteinBurstTimer <= 0) return false;
+
+    const elapsed = PROTEIN_BURST_DURATION - proteinBurstTimer;
+    const progress = clamp(elapsed / PROTEIN_BURST_DURATION, 0, 1);
+    if (!proteinBurstBlastDone && progress >= PROTEIN_BURST_BLAST_AT) {
+      proteinBurstBlastDone = true;
+      performProteinBurstSweep();
+    }
+
+    player.vx *= Math.pow(0.86, dt);
+    if (progress < 0.42) {
+      player.vy = Math.min(player.vy - 0.28 * dt, -4.3);
+    } else {
+      player.vy = Math.min(player.vy + GRAVITY * 0.88 * dt, MAX_FALL);
+    }
+
+    moveWithCollisions(player, solids, dt, triggerCrumble);
+    player.x = clamp(player.x, minX, maxX);
+    player.anim += dt * 1.2;
+
+    proteinBurstTimer = Math.max(0, proteinBurstTimer - dt);
+    if (proteinBurstTimer <= 0) {
+      proteinBurstBlastDone = false;
+      player.vy = Math.min(player.vy, -2.7);
+      hudMessage = "BURST END";
+      hudTimer = 22;
+    }
+    return true;
+  }
+
   function scheduleBGM() {
     if (!bgmStarted || !stageMusic) return;
     const stageActive = gameState === STATE.PLAY;
@@ -1014,6 +1123,7 @@
     const solids = [];
     const enemies = [];
     const proteins = [];
+    const heartItems = [];
     const bikes = [];
     const weaponItems = [];
     const checkpointTokens = [];
@@ -1049,6 +1159,18 @@
         w: 18,
         h: 14,
         bob: (id * 1.57) % (Math.PI * 2),
+        collected: false,
+      });
+    };
+
+    const addHeartItem = (id, x, y) => {
+      heartItems.push({
+        id,
+        x,
+        y,
+        w: 12,
+        h: 12,
+        bob: (id * 1.73) % (Math.PI * 2),
         collected: false,
       });
     };
@@ -1231,6 +1353,18 @@
     addBike(1, 3360, 102);
     addBike(2, 5660, 106);
 
+    // Mid-route heart recovery pickups.
+    addHeartItem(1, 820, 104);
+    addHeartItem(2, 1480, 110);
+    addHeartItem(3, 2140, 104);
+    addHeartItem(4, 2920, 102);
+    addHeartItem(5, 3720, 104);
+    addHeartItem(6, 4480, 102);
+    addHeartItem(7, 5280, 104);
+    addHeartItem(8, 6120, 104);
+    addHeartItem(9, 6880, 102);
+    addHeartItem(10, 7360, 94);
+
     // Weapon items removed.
 
     const checkpointTokenAnchors = {
@@ -1265,6 +1399,7 @@
       solids,
       enemies,
       proteins,
+      heartItems,
       bikes,
       weaponItems,
       checkpointTokens,
@@ -1529,10 +1664,11 @@
     const instantGameOver = options.instantGameOver === true;
 
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
-    if (invincibleTimer > 0 && !ignoreInvincible) {
+    const burstGuard = proteinBurstTimer > 0;
+    if ((invincibleTimer > 0 || burstGuard) && !ignoreInvincible) {
       if (invincibleHitCooldown > 0) return;
       invincibleHitCooldown = 8;
-      hudMessage = "バイク無敵! ノーダメージ";
+      hudMessage = burstGuard ? "PROTEIN BURST中!" : "バイク無敵! ノーダメージ";
       hudTimer = 28;
       triggerImpact(0.9, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.2);
       return;
@@ -1584,6 +1720,8 @@
     stopInvincibleMusic();
     stopStageMusic(true);
     proteinRushTimer = 0;
+    proteinBurstTimer = 0;
+    proteinBurstBlastDone = false;
     kickCombo = 0;
     kickComboTimer = 0;
     damageInvulnTimer = 0;
@@ -1621,6 +1759,9 @@
     placePlayerAtCheckpoint(cp);
     cameraX = 0;
     proteinRushTimer = 0;
+    proteinBurstGauge = 0;
+    proteinBurstTimer = 0;
+    proteinBurstBlastDone = false;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     playerHearts = MAX_HEARTS;
@@ -1671,6 +1812,8 @@
     placePlayerAtCheckpoint(cp);
     cameraX = clamp(player.x - 120, 0, stage.width - W);
     proteinRushTimer = 0;
+    proteinBurstTimer = 0;
+    proteinBurstBlastDone = false;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     playerHearts = MAX_HEARTS;
@@ -2014,6 +2157,7 @@
       const pLv = proteinLevel();
       const speedPct = Math.round(pLv * 2.2);
       proteinRushTimer = Math.min(90, proteinRushTimer + 44);
+      proteinBurstGauge = clamp(proteinBurstGauge + 1, 0, PROTEIN_BURST_REQUIRE);
       const lifeUp = pLv % 30 === 0;
       if (lifeUp) {
         playerLives = Math.min(99, playerLives + 1);
@@ -2026,6 +2170,33 @@
       }
       playPowerupSfx();
       triggerImpact(0.9, protein.x + protein.w * 0.5, floatY + protein.h * 0.5, 1.4);
+      if (proteinBurstGauge >= PROTEIN_BURST_REQUIRE && proteinBurstTimer <= 0) {
+        triggerProteinBurst();
+      }
+    }
+  }
+
+  function updateHeartItems(dt) {
+    for (const item of stage.heartItems) {
+      item.bob += 0.09 * dt;
+      if (item.collected) continue;
+
+      const floatY = item.y + Math.sin(item.bob) * 1.5;
+      const hit = { x: item.x, y: floatY, w: item.w, h: item.h };
+      if (!overlap(player, hit)) continue;
+
+      item.collected = true;
+      const before = playerHearts;
+      playerHearts = Math.min(MAX_HEARTS, playerHearts + 1);
+      playCheckpointSfx();
+      triggerImpact(0.85, item.x + item.w * 0.5, floatY + item.h * 0.5, 1.2);
+      if (playerHearts > before) {
+        hudMessage = "ハート回復!";
+        hudTimer = 56;
+      } else {
+        hudMessage = "ハート満タン";
+        hudTimer = 38;
+      }
     }
   }
 
@@ -2306,10 +2477,11 @@
 
       if (!touchingBody) continue;
 
-      if (invincibleTimer > 0) {
+      if (invincibleTimer > 0 || proteinBurstTimer > 0) {
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
         const speedBoost = Math.min(2.2, Math.abs(player.vx) * 0.5);
-        const blastPower = 3.4 + speedBoost;
+        const burstBonus = proteinBurstTimer > 0 ? 2.0 : 0;
+        const blastPower = 3.4 + speedBoost + burstBonus;
         kickEnemy(enemy, dir, blastPower, { immediateRemove: false, flyLifetime: 48 });
         enemy.vx = dir * (9.4 + blastPower * 1.2);
         enemy.vy = -(6.6 + blastPower * 0.7);
@@ -2321,7 +2493,7 @@
         spawnHitSparks(ex, ey, "#fff7d1", "#ffb16d");
         spawnHitSparks(ex, ey, "#ffecc0", "#ff6d58");
         playKickSfx(2.06);
-        hudMessage = "無敵クラッシュ!";
+        hudMessage = proteinBurstTimer > 0 ? "BURSTクラッシュ!" : "無敵クラッシュ!";
         hudTimer = 20;
         return;
       }
@@ -2447,6 +2619,8 @@
       createPartyGoon(7518, 7472, 7586, 1)
     );
     openingThemeActive = false;
+    proteinBurstTimer = 0;
+    proteinBurstBlastDone = false;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     attackCooldown = 0;
@@ -2481,6 +2655,8 @@
     attackEffectTimer = 0;
     attackEffectMode = "none";
     attackEffectPhase = 0;
+    proteinBurstTimer = 0;
+    proteinBurstBlastDone = false;
     hitStopTimer = Math.max(hitStopTimer, 4);
     triggerImpact(3.1, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.5, 4.4);
     playKickSfx(2.2);
@@ -2922,6 +3098,8 @@
     if (gameState !== STATE.PLAY) return;
     gameState = STATE.PRE_BOSS;
     preBossCutsceneTimer = -PRE_BOSS_ENTRY_DURATION;
+    proteinBurstTimer = 0;
+    proteinBurstBlastDone = false;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     stopInvincibleMusic();
@@ -2970,38 +3148,40 @@
     const jumpPower = 6.35 + pLv * 0.046 + rush * 0.16;
 
     const solids = collectSolids();
+    const bursting = updateProteinBurst(dt, solids, 0, stage.width - player.w);
 
-    let move = 0;
-    if (input.left) move -= 1;
-    if (input.right) move += 1;
+    if (!bursting) {
+      let move = 0;
+      if (input.left) move -= 1;
+      if (input.right) move += 1;
 
-    if (move !== 0) {
-      player.vx += move * accel * dt;
-      player.facing = move > 0 ? 1 : -1;
-    } else {
-      player.vx *= Math.pow(friction, dt);
-    }
-
-    const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
-    player.vx = clamp(player.vx, -speedCap, speedCap);
-
-    if (actions.jumpPressed && player.onGround) {
-      player.vy = -jumpPower;
-      const runningJump = move !== 0 && Math.abs(player.vx) >= DASH_JUMP_MIN_SPEED && Math.sign(player.vx) === move;
-      if (runningJump) {
-        player.vx = clamp(player.vx + move * DASH_JUMP_VX_BONUS, -maxSpeed * DASH_JUMP_SPEED_CAP_MULT, maxSpeed * DASH_JUMP_SPEED_CAP_MULT);
-        player.vy -= DASH_JUMP_VY_BONUS;
-        dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
+      if (move !== 0) {
+        player.vx += move * accel * dt;
+        player.facing = move > 0 ? 1 : -1;
+      } else {
+        player.vx *= Math.pow(friction, dt);
       }
-      player.onGround = false;
+
+      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
+      player.vx = clamp(player.vx, -speedCap, speedCap);
+
+      if (actions.jumpPressed && player.onGround) {
+        player.vy = -jumpPower;
+        const runningJump = move !== 0 && Math.abs(player.vx) >= DASH_JUMP_MIN_SPEED && Math.sign(player.vx) === move;
+        if (runningJump) {
+          player.vx = clamp(player.vx + move * DASH_JUMP_VX_BONUS, -maxSpeed * DASH_JUMP_SPEED_CAP_MULT, maxSpeed * DASH_JUMP_SPEED_CAP_MULT);
+          player.vy -= DASH_JUMP_VY_BONUS;
+          dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
+        }
+        player.onGround = false;
+      }
+
+      const gravityMult = dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1;
+      player.vy = Math.min(player.vy + GRAVITY * gravityMult * dt, MAX_FALL);
+      moveWithCollisions(player, solids, dt, triggerCrumble);
+      player.x = clamp(player.x, 0, stage.width - player.w);
+      player.anim += dt;
     }
-
-    const gravityMult = dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1;
-    player.vy = Math.min(player.vy + GRAVITY * gravityMult * dt, MAX_FALL);
-    moveWithCollisions(player, solids, dt, triggerCrumble);
-
-    player.x = clamp(player.x, 0, stage.width - player.w);
-    player.anim += dt;
 
     updateCrumble(dt);
     updatePopSpikes(dt);
@@ -3012,9 +3192,15 @@
     updateEnemies(dt, solidsAfter);
     updateHazardBullets(dt, solidsAfter);
     updateProteins(dt);
+    if (proteinBurstGauge >= PROTEIN_BURST_REQUIRE && proteinBurstTimer <= 0) {
+      triggerProteinBurst();
+    }
+    updateHeartItems(dt);
     updateBikes(dt);
     updateCheckpointTokens(dt);
-    updatePlayerAttack(dt, actions);
+    if (proteinBurstTimer <= 0) {
+      updatePlayerAttack(dt, actions);
+    }
     updatePlayerWaves(dt, solidsAfter);
     resolveEnemyContactDamage();
     resolveBreakWalls(dt);
@@ -3042,45 +3228,54 @@
     const jumpPower = 6.35 + pLv * 0.046 + rush * 0.16;
 
     const solids = collectSolids();
+    const bursting = updateProteinBurst(dt, solids, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
 
-    let move = 0;
-    if (input.left) move -= 1;
-    if (input.right) move += 1;
+    if (!bursting) {
+      let move = 0;
+      if (input.left) move -= 1;
+      if (input.right) move += 1;
 
-    if (move !== 0) {
-      player.vx += move * accel * dt;
-      player.facing = move > 0 ? 1 : -1;
-    } else {
-      player.vx *= Math.pow(friction, dt);
-    }
-
-    const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
-    player.vx = clamp(player.vx, -speedCap, speedCap);
-
-    if (actions.jumpPressed && player.onGround) {
-      player.vy = -jumpPower;
-      const runningJump = move !== 0 && Math.abs(player.vx) >= DASH_JUMP_MIN_SPEED && Math.sign(player.vx) === move;
-      if (runningJump) {
-        player.vx = clamp(player.vx + move * DASH_JUMP_VX_BONUS, -maxSpeed * DASH_JUMP_SPEED_CAP_MULT, maxSpeed * DASH_JUMP_SPEED_CAP_MULT);
-        player.vy -= DASH_JUMP_VY_BONUS;
-        dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
+      if (move !== 0) {
+        player.vx += move * accel * dt;
+        player.facing = move > 0 ? 1 : -1;
+      } else {
+        player.vx *= Math.pow(friction, dt);
       }
-      player.onGround = false;
-    }
 
-    const gravityMult = dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1;
-    player.vy = Math.min(player.vy + GRAVITY * gravityMult * dt, MAX_FALL);
-    moveWithCollisions(player, solids, dt, triggerCrumble);
-    player.x = clamp(player.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
-    player.anim += dt;
+      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
+      player.vx = clamp(player.vx, -speedCap, speedCap);
+
+      if (actions.jumpPressed && player.onGround) {
+        player.vy = -jumpPower;
+        const runningJump = move !== 0 && Math.abs(player.vx) >= DASH_JUMP_MIN_SPEED && Math.sign(player.vx) === move;
+        if (runningJump) {
+          player.vx = clamp(player.vx + move * DASH_JUMP_VX_BONUS, -maxSpeed * DASH_JUMP_SPEED_CAP_MULT, maxSpeed * DASH_JUMP_SPEED_CAP_MULT);
+          player.vy -= DASH_JUMP_VY_BONUS;
+          dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
+        }
+        player.onGround = false;
+      }
+
+      const gravityMult = dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1;
+      player.vy = Math.min(player.vy + GRAVITY * gravityMult * dt, MAX_FALL);
+      moveWithCollisions(player, solids, dt, triggerCrumble);
+      player.x = clamp(player.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
+      player.anim += dt;
+    }
 
     updateProteins(dt);
+    if (proteinBurstGauge >= PROTEIN_BURST_REQUIRE && proteinBurstTimer <= 0) {
+      triggerProteinBurst();
+    }
+    updateHeartItems(dt);
     updateBikes(dt);
     updateBoss(dt, solids);
     updateBossShots(dt, solids);
     updateEnemies(dt, solids);
     updateHazardBullets(dt, solids);
-    updatePlayerAttack(dt, actions);
+    if (proteinBurstTimer <= 0) {
+      updatePlayerAttack(dt, actions);
+    }
     updatePlayerWaves(dt, solids);
     resolveEnemyContactDamage();
     resolveBossContactDamage();
@@ -3172,6 +3367,9 @@
     attackEffectTimer = 0;
     attackEffectMode = "none";
     attackEffectPhase = 0;
+    proteinBurstGauge = 0;
+    proteinBurstTimer = 0;
+    proteinBurstBlastDone = false;
     stage.playerWaves = [];
     stopInvincibleMusic();
     stopStageMusic(true);
@@ -3938,6 +4136,35 @@
     ctx.fillRect(x + 7, y + 4, 1, 1);
   }
 
+  function drawHeartPickup(item) {
+    if (item.collected) return;
+    const x = Math.floor(item.x - cameraX);
+    const y = Math.floor(item.y + Math.sin(item.bob) * 1.5);
+    const pulse = Math.floor((player.anim + item.id * 9) * 0.2) % 2 === 0;
+
+    ctx.fillStyle = "rgba(255, 132, 168, 0.2)";
+    ctx.fillRect(x - 2, y - 2, 16, 16);
+    ctx.fillStyle = "#261824";
+    ctx.fillRect(x + 1, y + 1, 10, 10);
+    ctx.fillStyle = "#d63f66";
+    ctx.fillRect(x + 2, y + 1, 2, 2);
+    ctx.fillRect(x + 6, y + 1, 2, 2);
+    ctx.fillRect(x + 1, y + 2, 8, 4);
+    ctx.fillRect(x + 2, y + 6, 6, 2);
+    ctx.fillRect(x + 3, y + 8, 4, 1);
+    ctx.fillStyle = "#ff86a3";
+    ctx.fillRect(x + 3, y + 2, 1, 1);
+    ctx.fillRect(x + 7, y + 2, 1, 1);
+
+    if (pulse) {
+      ctx.fillStyle = "#ffe1e8";
+      ctx.fillRect(x - 1, y + 4, 1, 1);
+      ctx.fillRect(x + 12, y + 5, 1, 1);
+      ctx.fillRect(x + 5, y - 1, 1, 1);
+      ctx.fillRect(x + 6, y + 11, 1, 1);
+    }
+  }
+
   function drawCheckpointToken(token) {
     if (token.collected) return;
     const x = Math.floor(token.x - cameraX);
@@ -4058,9 +4285,10 @@
   }
 
   function drawRushAura() {
-    if (proteinRushTimer <= 0 && invincibleTimer <= 0) return;
+    if (proteinRushTimer <= 0 && invincibleTimer <= 0 && proteinBurstTimer <= 0) return;
     const r = clamp(proteinRushTimer / 90, 0, 1);
     const i = clamp(invincibleTimer / INVINCIBLE_DURATION, 0, 1);
+    const b = clamp(proteinBurstTimer / PROTEIN_BURST_DURATION, 0, 1);
     const px = Math.floor(player.x - cameraX);
     const py = Math.floor(player.y);
     const pulse = 0.25 + Math.sin(player.anim * 0.45) * 0.12;
@@ -4088,6 +4316,16 @@
       ctx.fillRect(px - 6, py + 9, player.w + 12, 2);
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.26 * i})`;
       ctx.strokeRect(px - 5, py - 5, player.w + 10, player.h + 10);
+    }
+
+    if (b > 0) {
+      const glow = 0.16 + Math.sin(player.anim * 0.92) * 0.05;
+      ctx.fillStyle = `rgba(130, 244, 255, ${glow + b * 0.2})`;
+      ctx.fillRect(px - 10, py - 18, player.w + 20, player.h + 16);
+      ctx.fillStyle = `rgba(255, 246, 182, ${0.12 + b * 0.12})`;
+      ctx.fillRect(px - 8, py - 14, player.w + 16, player.h + 8);
+      ctx.strokeStyle = `rgba(216, 252, 255, ${0.24 + b * 0.28})`;
+      ctx.strokeRect(px - 9, py - 16, player.w + 18, player.h + 12);
     }
   }
 
@@ -4489,6 +4727,10 @@
 
     for (const protein of stage.proteins) {
       drawProtein(protein);
+    }
+
+    for (const item of stage.heartItems) {
+      drawHeartPickup(item);
     }
 
     for (const bike of stage.bikes) {
@@ -4965,10 +5207,25 @@
       drawHeartIcon(50 + i * 10, 5, i < playerHearts);
     }
 
+    const burstBarX = 84;
+    const burstBarY = 6;
+    const burstBarW = 28;
+    const burstRatio = clamp(proteinBurstGauge / PROTEIN_BURST_REQUIRE, 0, 1);
+    ctx.fillStyle = "#1d2436";
+    ctx.fillRect(burstBarX, burstBarY, burstBarW, 6);
+    ctx.fillStyle = proteinBurstGauge >= PROTEIN_BURST_REQUIRE ? "#ffd979" : "#78e7ff";
+    ctx.fillRect(burstBarX + 1, burstBarY + 1, Math.floor((burstBarW - 2) * burstRatio), 4);
+    if (proteinBurstTimer > 0) {
+      ctx.fillStyle = "#fff0c2";
+      ctx.fillRect(burstBarX + 1, burstBarY + 1, burstBarW - 2, 1);
+    }
+    ctx.fillStyle = "#f7f1ff";
+    ctx.fillText("B", burstBarX - 8, 4);
+
     if (gameState === STATE.BOSS && stage.boss.active) {
-      const barX = 116;
+      const barX = 124;
       const barY = 6;
-      const barW = 86;
+      const barW = 78;
       const ratio = clamp(stage.boss.hp / stage.boss.maxHp, 0, 1);
       ctx.fillStyle = "#2a1314";
       ctx.fillRect(barX, barY, barW, 6);
