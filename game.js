@@ -3177,11 +3177,11 @@
     const forcePunch = options.forcePunch === true;
     const chargeRatio = clamp(chargeFrames / ATTACK_CHARGE_MAX, 0, 1);
     const strongWave = !forcePunch && chargeFrames >= ATTACK_WAVE_CHARGE_MIN - 0.01;
-    const spearThrust = !forcePunch && !comboPunch && !strongWave && chargeFrames >= ATTACK_SPEAR_CHARGE_MIN;
+    const morningStarStrike = !forcePunch && !comboPunch && !strongWave && chargeFrames >= ATTACK_SPEAR_CHARGE_MIN;
     const comboYOffset = comboType === "kick" ? 5 : comboType === "upper" ? -2 : 2;
     const comboBaseY = comboType === "kick" ? 11 : comboType === "upper" ? 4 : 6;
-    const strikeYOffset = strongWave ? 0 : spearThrust ? 1 : comboPunch ? comboYOffset : 2;
-    const strikeBaseY = spearThrust ? 8 : comboPunch ? comboBaseY : strongWave ? 4 : 6;
+    const strikeYOffset = strongWave ? 0 : morningStarStrike ? 0 : comboPunch ? comboYOffset : 2;
+    const strikeBaseY = morningStarStrike ? 8 : comboPunch ? comboBaseY : strongWave ? 4 : 6;
     const comboHitH = comboType === "kick" ? 10 + Math.floor(chargeRatio * 2) : comboType === "upper" ? 13 + Math.floor(chargeRatio * 2) : 10 + Math.floor(chargeRatio * 2);
     const comboReachBonus = comboType === "kick" ? 3 : comboType === "upper" ? 1 : 0;
     const comboPowerBonus = comboType === "kick" ? 0.16 : comboType === "upper" ? 0.22 : comboType === "punch" ? 0.08 : 0;
@@ -3192,24 +3192,47 @@
     const px = player.x + player.w * 0.5;
     const reach = strongWave
       ? 22 + Math.floor(chargeRatio * 40)
-      : spearThrust
-        ? 26 + Math.floor(chargeRatio * 30)
+      : morningStarStrike
+        ? 22 + Math.floor(chargeRatio * 28)
       : comboPunch
         ? 12 + comboStage * 4 + comboReachBonus + Math.floor(chargeRatio * 4)
         : 12 + Math.floor(chargeRatio * 50);
-    const hitBox = {
+    let hitBox = {
       x: dir > 0 ? player.x + player.w - 1 : player.x - reach + 1,
       y: player.y + strikeBaseY + strikeYOffset,
       w: reach,
-      h: spearThrust ? 8 + Math.floor(chargeRatio * 3) : comboPunch ? comboHitH : 13 + Math.floor(chargeRatio * 8),
+      h: morningStarStrike ? 12 + Math.floor(chargeRatio * 4) : comboPunch ? comboHitH : 13 + Math.floor(chargeRatio * 8),
     };
+    const hitBoxes = [hitBox];
+    if (morningStarStrike) {
+      const overheadBox = {
+        x: dir > 0 ? player.x + player.w - 4 : player.x - 6,
+        y: player.y - 8,
+        w: 10,
+        h: 16,
+      };
+      hitBox = {
+        x: dir > 0 ? player.x + player.w - 1 : player.x - reach + 1,
+        y: player.y + 8,
+        w: reach,
+        h: 12 + Math.floor(chargeRatio * 3),
+      };
+      hitBoxes.length = 0;
+      hitBoxes.push(overheadBox, hitBox);
+    }
+    const overlapsAny = (target) => hitBoxes.some((box) => overlap(box, target));
 
     let hits = 0;
     let parryHits = 0;
-    let hitX = px + dir * (12 + reach * 0.48);
+    let hitX = morningStarStrike
+      ? (dir > 0 ? hitBox.x + hitBox.w - 2 : hitBox.x + 2)
+      : px + dir * (12 + reach * 0.48);
     let hitY = hitBox.y + hitBox.h * 0.5;
-    const hitPower = 0.94 + chargeRatio * 0.68 + comboStage * 0.14 + comboPowerBonus + (spearThrust ? 0.22 : 0) + pLv * 0.01;
-    const gimmickBreaks = hitBreakableGimmicks(hitBox, 1 + chargeRatio * 0.8);
+    const hitPower = 0.94 + chargeRatio * 0.68 + comboStage * 0.14 + comboPowerBonus + (morningStarStrike ? 0.28 : 0) + pLv * 0.01;
+    let gimmickBreaks = 0;
+    for (const box of hitBoxes) {
+      gimmickBreaks += hitBreakableGimmicks(box, 1 + chargeRatio * 0.8);
+    }
     if (gimmickBreaks > 0) {
       hitX = hitBox.x + hitBox.w * 0.5;
       hitY = hitBox.y + hitBox.h * 0.5;
@@ -3218,47 +3241,47 @@
 
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
-      if (!overlap(hitBox, enemy)) continue;
+      if (!overlapsAny(enemy)) continue;
       kickEnemy(enemy, dir, hitPower + 0.2, { immediateRemove: false, flyLifetime: 32 + Math.round(chargeRatio * 16) });
-      enemy.vx = dir * (3.8 + hitPower * 0.95 + comboStage * 0.2 + comboVxBonus + (spearThrust ? 0.45 : 0));
+      enemy.vx = dir * (3.8 + hitPower * 0.95 + comboStage * 0.2 + comboVxBonus + (morningStarStrike ? 0.8 : 0));
       enemy.vy = Math.min(
         enemy.vy,
         -(
-          spearThrust
-            ? 2.5 + chargeRatio * 0.95
+          morningStarStrike
+            ? 2.8 + chargeRatio * 0.9
             : 3.4 + chargeRatio * 1.3 + comboStage * 0.14 + comboVyBonus
         )
       );
       enemy.flash = 12;
       hitX = enemy.x + enemy.w * 0.5;
-      hitY = enemy.y + enemy.h * 0.42;
+      hitY = enemy.y + enemy.h * (morningStarStrike ? 0.34 : 0.42);
       hits += 1;
     }
 
     for (const b of stage.hazardBullets) {
-      if (!overlap(hitBox, b)) continue;
+      if (!overlapsAny(b)) continue;
       b.dead = true;
       hits += 1;
       parryHits += 1;
     }
 
     for (const bs of stage.bossShots) {
-      if (!overlap(hitBox, bs)) continue;
+      if (!overlapsAny(bs)) continue;
       bs.dead = true;
       hits += 1;
       parryHits += 1;
     }
 
-    if (stage.boss.active && stage.boss.hp > 0 && overlap(hitBox, stage.boss) && stage.boss.invuln <= 0) {
+    if (stage.boss.active && stage.boss.hp > 0 && overlapsAny(stage.boss) && stage.boss.invuln <= 0) {
       const bossDamage = 1 + bossDamageBonus();
       stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
-      stage.boss.invuln = spearThrust
+      stage.boss.invuln = morningStarStrike
         ? (bossDamageBonus() > 0 ? 9 : 13)
         : (bossDamageBonus() > 0 ? 11 : 15);
-      stage.boss.vx += dir * (0.62 + chargeRatio * 0.38 + comboVxBonus * 0.45 + (spearThrust ? 0.28 : 0));
-      stage.boss.vy = Math.min(stage.boss.vy, -(spearThrust ? 1.55 + chargeRatio * 0.26 : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5));
+      stage.boss.vx += dir * (0.62 + chargeRatio * 0.38 + comboVxBonus * 0.45 + (morningStarStrike ? 0.34 : 0));
+      stage.boss.vy = Math.min(stage.boss.vy, -(morningStarStrike ? 1.72 + chargeRatio * 0.24 : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5));
       hitX = stage.boss.x + stage.boss.w * 0.5;
-      hitY = stage.boss.y + stage.boss.h * 0.45;
+      hitY = stage.boss.y + stage.boss.h * (morningStarStrike ? 0.34 : 0.45);
       hits += 1;
       handleBossHpZero();
     }
@@ -3300,17 +3323,17 @@
 
     triggerKickBurst(hitX, hitY, 1.6 + chargeRatio * 1.2 + comboStage * 0.32 + hits * 0.08);
     triggerImpact(
-      1.9 + chargeRatio * 1.4 + comboStage * 0.28 + (spearThrust ? 0.44 : 0) + (strongWave ? 0.9 : 0),
+      1.9 + chargeRatio * 1.4 + comboStage * 0.28 + (morningStarStrike ? 0.5 : 0) + (strongWave ? 0.9 : 0),
       hitX,
       hitY,
-      3.1 + chargeRatio * 1.1 + comboStage * 0.35 + (spearThrust ? 0.46 : 0) + (strongWave ? 1.3 : 0)
+      3.1 + chargeRatio * 1.1 + comboStage * 0.35 + (morningStarStrike ? 0.62 : 0) + (strongWave ? 1.3 : 0)
     );
     if (strongWave) {
       spawnWaveBurst(hitX, hitY, 1.0 + chargeRatio * 0.8);
-    } else if (spearThrust) {
-      spawnWaveBurst(hitX, hitY, 0.7 + chargeRatio * 0.46);
+    } else if (morningStarStrike) {
+      spawnWaveBurst(hitX, hitY, 0.95 + chargeRatio * 0.5);
     }
-    playKickSfx(1.2 + chargeRatio * 0.5 + comboStage * 0.08 + (comboType === "kick" ? 0.08 : comboType === "upper" ? 0.16 : 0) + (spearThrust ? 0.14 : 0));
+    playKickSfx(1.16 + chargeRatio * 0.42 + comboStage * 0.08 + (comboType === "kick" ? 0.08 : comboType === "upper" ? 0.16 : 0) + (morningStarStrike ? 0.04 : 0));
     if (parryHits > 0) playParrySfx();
     playRilaRobotVoice("attack");
     if (comboPunch) {
@@ -3322,13 +3345,13 @@
       ? ATTACK_WAVE_COOLDOWN
       : comboPunch
         ? Math.max(4, ATTACK_PUNCH_COOLDOWN - comboStage * 2)
-        : spearThrust
-          ? ATTACK_PUNCH_COOLDOWN + 2
+        : morningStarStrike
+          ? ATTACK_PUNCH_COOLDOWN + 4
         : ATTACK_PUNCH_COOLDOWN;
-    attackEffectTimer = strongWave ? 16 : comboPunch ? 8 + comboStage * 2 : spearThrust ? 13 : 11;
-    attackEffectMode = strongWave ? "wave" : comboPunch ? `combo${comboStage}` : spearThrust ? "spear" : "punch";
-    attackEffectPhase = comboPunch ? comboStage * 0.75 + chargeRatio * 0.8 : spearThrust ? 0.8 + chargeRatio * 1.6 : chargeRatio * 2.6;
-    attackEffectPower = comboPunch ? clamp(0.32 + comboStage * 0.24 + chargeRatio * 0.2, 0, 1) : spearThrust ? clamp(0.46 + chargeRatio * 0.5, 0, 1) : chargeRatio;
+    attackEffectTimer = strongWave ? 16 : comboPunch ? 8 + comboStage * 2 : morningStarStrike ? 16 : 11;
+    attackEffectMode = strongWave ? "wave" : comboPunch ? `combo${comboStage}` : morningStarStrike ? "morningstar" : "punch";
+    attackEffectPhase = comboPunch ? comboStage * 0.75 + chargeRatio * 0.8 : morningStarStrike ? 0.4 + chargeRatio * 1.7 : chargeRatio * 2.6;
+    attackEffectPower = comboPunch ? clamp(0.32 + comboStage * 0.24 + chargeRatio * 0.2, 0, 1) : morningStarStrike ? clamp(0.5 + chargeRatio * 0.55, 0, 1) : chargeRatio;
   }
 
   function startHyakuretsuMode() {
@@ -6665,7 +6688,7 @@
     if (showingChargeReach) {
       const chargeRatio = clamp(attackChargeTimer / ATTACK_CHARGE_MAX, 0, 1);
       const waveReady = attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN;
-      const spearReady = attackChargeTimer >= ATTACK_SPEAR_CHARGE_MIN && attackChargeTimer < ATTACK_WAVE_CHARGE_MIN;
+      const morningStarReady = attackChargeTimer >= ATTACK_SPEAR_CHARGE_MIN && attackChargeTimer < ATTACK_WAVE_CHARGE_MIN;
       const auraA = 0.12 + chargeRatio * 0.2;
       const auraB = 0.1 + chargeRatio * 0.18;
       const pulse = 0.5 + Math.sin(player.anim * 0.3) * 0.5;
@@ -6682,18 +6705,18 @@
       const barY = Math.floor(player.y - 7);
       ctx.fillStyle = "rgba(8, 14, 25, 0.84)";
       ctx.fillRect(barX, barY, barW, 4);
-      ctx.fillStyle = chargeRatio >= ATTACK_WAVE_CHARGE_MIN / ATTACK_CHARGE_MAX ? "#ffcf72" : spearReady ? "#d6f5ff" : "#89e4ff";
+      ctx.fillStyle = chargeRatio >= ATTACK_WAVE_CHARGE_MIN / ATTACK_CHARGE_MAX ? "#ffcf72" : morningStarReady ? "#d6f5ff" : "#89e4ff";
       ctx.fillRect(barX + 1, barY + 1, Math.max(1, Math.floor((barW - 2) * chargeRatio)), 2);
 
       // Thin, translucent reach preview while charging.
       const previewReach = waveReady
         ? 22 + Math.floor(chargeRatio * 40)
-        : spearReady
-          ? 26 + Math.floor(chargeRatio * 30)
+        : morningStarReady
+          ? 22 + Math.floor(chargeRatio * 28)
           : 12 + Math.floor(chargeRatio * 50);
-      const previewY = player.y + (spearReady ? 9 : waveReady ? 4 : 6);
-      const previewH = spearReady
-        ? 8 + Math.floor(chargeRatio * 3)
+      const previewY = player.y + (morningStarReady ? -2 : waveReady ? 4 : 6);
+      const previewH = morningStarReady
+        ? 22 + Math.floor(chargeRatio * 2)
         : 13 + Math.floor(chargeRatio * 8);
       const previewX = dir > 0
         ? player.x + player.w - 1
@@ -6708,7 +6731,7 @@
       const midAlpha = 0.08 + chargeRatio * 0.06;
       const previewTone = waveReady
         ? "255, 214, 135"
-        : spearReady
+        : morningStarReady
           ? "176, 234, 255"
           : "162, 226, 255";
 
@@ -6742,20 +6765,20 @@
       : 0;
     const isWave = mode === "wave";
     const isHyakuretsu = mode === "hyakuretsu";
-    const isSpear = mode === "spear";
+    const isMorningStar = mode === "morningstar";
     const isCombo = comboStage > 0;
     const comboMove = isCombo
       ? (comboStage === 1 ? "punch" : comboStage === 2 ? "kick" : "upper")
       : "none";
-    const effectDuration = isWave ? 16 : isHyakuretsu ? 6 : isSpear ? 13 : isCombo ? 8 + comboStage * 2 : 11;
+    const effectDuration = isWave ? 16 : isHyakuretsu ? 6 : isMorningStar ? 16 : isCombo ? 8 + comboStage * 2 : 11;
     const ratio = clamp(attackEffectTimer / effectDuration, 0, 1);
     const effectPower = clamp(attackEffectPower, 0, 1);
     const reach = isWave
       ? 34 + effectPower * 18
       : isHyakuretsu
         ? 14 + effectPower * 10
-        : isSpear
-          ? 24 + effectPower * 34
+        : isMorningStar
+          ? 22 + effectPower * 28
         : isCombo
           ? 12 + comboStage * 4 + (comboMove === "kick" ? 3 : comboMove === "upper" ? 1 : 0) + effectPower * 6
           : 10 + effectPower * 50;
@@ -6765,12 +6788,12 @@
       : isCombo
         ? (comboMove === "kick" ? cy + 4 : comboMove === "upper" ? cy - 2 : cy + 1)
         : cy + 1;
-    const lineCount = isHyakuretsu ? 9 : isSpear ? 5 : isCombo ? (comboMove === "upper" ? 5 : 4) : 4;
+    const lineCount = isHyakuretsu ? 9 : isMorningStar ? 6 : isCombo ? (comboMove === "upper" ? 5 : 4) : 4;
 
     for (let i = 0; i < lineCount; i += 1) {
       const spread = isHyakuretsu
         ? Math.floor(i / 3) * 4 + ((hyakuretsuLaneTick + i) % 2)
-        : isSpear
+        : isMorningStar
           ? i
           : isCombo
             ? comboMove === "kick"
@@ -6781,7 +6804,7 @@
             : i * 2 + Math.floor((1 - ratio) * 5);
       const lenBase = isHyakuretsu
         ? reach - Math.floor(i / 3) * 2
-        : isSpear
+        : isMorningStar
           ? reach - i * 2
           : isCombo
             ? comboMove === "kick"
@@ -6790,13 +6813,13 @@
                 ? reach - i * 2
                 : reach - i * 4
             : reach - i * 4;
-      const len = lenBase + Math.sin((attackEffectPhase + i) * (isHyakuretsu ? 1.4 : isSpear ? 1.05 : 0.8)) * 2;
-      const alpha = isHyakuretsu ? 0.68 - Math.floor(i / 3) * 0.08 : isSpear ? 0.64 - i * 0.08 : 0.55 - i * 0.1;
+      const len = lenBase + Math.sin((attackEffectPhase + i) * (isHyakuretsu ? 1.4 : isMorningStar ? 1.0 : 0.8)) * 2;
+      const alpha = isHyakuretsu ? 0.68 - Math.floor(i / 3) * 0.08 : isMorningStar ? 0.62 - i * 0.07 : 0.55 - i * 0.1;
       const sx = dir > 0 ? frontX + spread : frontX - len - spread;
       const sy = baseY - 3 + (
         isHyakuretsu
           ? (i % 3) * 4 + ((hyakuretsuLaneTick + i) % 2)
-          : isSpear
+          : isMorningStar
             ? i
             : isCombo
               ? comboMove === "kick"
@@ -6811,7 +6834,7 @@
       } else if (isHyakuretsu) {
         const laneTone = i % 3 === 0 ? "255, 199, 148" : i % 3 === 1 ? "255, 179, 136" : "255, 162, 130";
         ctx.fillStyle = `rgba(${laneTone}, ${alpha})`;
-      } else if (isSpear) {
+      } else if (isMorningStar) {
         ctx.fillStyle = `rgba(182, 238, 255, ${alpha})`;
       } else if (isCombo) {
         const comboTone = comboStage >= 3 ? "255, 182, 144" : comboStage === 2 ? "255, 207, 152" : "255, 235, 176";
@@ -6836,86 +6859,62 @@
       ctx.fillStyle = "rgba(255, 246, 203, 0.7)";
       ctx.fillRect(flareX - 2, baseY - 4, 4, 8);
       ctx.fillRect(flareX - 6, baseY - 1, 12, 2);
-    } else if (isSpear) {
-      const shaftLen = Math.floor(20 + effectPower * 30 + (1 - ratio) * 5);
-      const shaftY = baseY - 1;
-      const shaftX = dir > 0 ? frontX + 3 : frontX - shaftLen - 3;
-      const tipBase = dir > 0 ? shaftX + shaftLen - 1 : shaftX;
-      const buttX = dir > 0 ? shaftX - 2 : shaftX + shaftLen + 1;
-      const pulse = 0.5 + Math.sin((attackEffectPhase + effectPower * 3) * 0.8) * 0.5;
+    } else if (isMorningStar) {
+      const swing = clamp(1 - ratio, 0, 1);
+      const pulse = 0.5 + Math.sin((attackEffectPhase + effectPower * 3.2) * 0.9) * 0.5;
+      const chainLen = Math.floor(18 + effectPower * 24 + swing * 6);
+      const anchorX = dir > 0 ? frontX + 4 : frontX - 4;
+      const anchorY = baseY - 6;
+      const travelX = 6 + chainLen;
+      const travelY = -14 + Math.floor(swing * 18);
+      const tipX = dir > 0 ? anchorX + travelX : anchorX - travelX;
+      const tipY = anchorY + travelY;
 
-      for (let i = 0; i < 3; i += 1) {
-        const trailAlpha = 0.16 + (1 - ratio) * 0.12 - i * 0.04 + pulse * 0.03;
-        const tw = Math.max(6, Math.floor(shaftLen * (0.42 - i * 0.1)));
-        const tx = dir > 0
-          ? shaftX + Math.floor(shaftLen * 0.24) - i * 2
-          : shaftX + shaftLen - Math.floor(shaftLen * 0.24) - tw + i * 2;
-        const ty = shaftY - 3 + i * 2;
-        ctx.fillStyle = `rgba(150, 220, 255, ${Math.max(0.05, trailAlpha)})`;
-        ctx.fillRect(tx, ty, tw, 1);
+      for (let i = 0; i < 2; i += 1) {
+        const ghostT = clamp(swing - 0.14 * (i + 1), 0, 1);
+        if (ghostT <= 0.01) continue;
+        const gx = dir > 0 ? anchorX + (6 + chainLen * ghostT) : anchorX - (6 + chainLen * ghostT);
+        const gy = anchorY + (-14 + Math.floor(ghostT * 18));
+        const alpha = 0.22 - i * 0.08;
+        ctx.strokeStyle = `rgba(140, 212, 255, ${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(anchorX, anchorY);
+        ctx.lineTo(gx, gy);
+        ctx.stroke();
       }
 
-      ctx.fillStyle = "#7a5735";
-      ctx.fillRect(shaftX, shaftY, shaftLen, 3);
-      ctx.fillStyle = "#a27b4c";
-      ctx.fillRect(shaftX, shaftY, shaftLen, 1);
-      ctx.fillStyle = "#5a4129";
-      ctx.fillRect(shaftX, shaftY + 2, shaftLen, 1);
-
-      const gripW = Math.min(9, Math.max(5, Math.floor(shaftLen * 0.22)));
-      const gripX = dir > 0 ? shaftX + 2 : shaftX + shaftLen - gripW - 2;
-      ctx.fillStyle = "#33261a";
-      ctx.fillRect(gripX, shaftY, gripW, 3);
-      ctx.fillStyle = "rgba(209, 186, 142, 0.55)";
-      for (let i = 1; i < gripW - 1; i += 2) {
-        ctx.fillRect(gripX + i, shaftY, 1, 3);
+      const chainLinks = 6;
+      for (let i = 0; i <= chainLinks; i += 1) {
+        const t = i / chainLinks;
+        const lx = Math.round(anchorX + (tipX - anchorX) * t);
+        const ly = Math.round(anchorY + (tipY - anchorY) * t);
+        ctx.fillStyle = i % 2 === 0 ? "#c4d7eb" : "#90a7c4";
+        ctx.fillRect(lx, ly, 2, 1);
       }
 
-      ctx.fillStyle = "#91a8c3";
-      ctx.fillRect(buttX, shaftY, 2, 3);
-      ctx.fillStyle = "#d8e7f9";
-      ctx.fillRect(buttX, shaftY, 1, 1);
+      const ballX = tipX - 3;
+      const ballY = tipY - 3;
+      ctx.fillStyle = "#5f748f";
+      ctx.fillRect(ballX, ballY, 7, 7);
+      ctx.fillStyle = "#8199b8";
+      ctx.fillRect(ballX + 1, ballY + 1, 5, 5);
+      ctx.fillStyle = "#d5e4f3";
+      ctx.fillRect(ballX + 2, ballY + 1, 2, 1);
 
-      if (dir > 0) {
-        const hx = tipBase;
-        ctx.fillStyle = "#7088a8";
-        ctx.fillRect(hx - 2, shaftY - 2, 2, 7);
-        ctx.fillStyle = "#8ca6c4";
-        ctx.fillRect(hx - 3, shaftY - 2, 4, 1);
-        ctx.fillRect(hx - 3, shaftY + 4, 4, 1);
+      const spikeColor = `rgba(235, 245, 255, ${0.76 + pulse * 0.18})`;
+      ctx.fillStyle = spikeColor;
+      ctx.fillRect(ballX + 3, ballY - 2, 1, 2);
+      ctx.fillRect(ballX + 3, ballY + 7, 1, 2);
+      ctx.fillRect(ballX - 2, ballY + 3, 2, 1);
+      ctx.fillRect(ballX + 7, ballY + 3, 2, 1);
+      ctx.fillRect(ballX + 1, ballY + 1, 1, 1);
+      ctx.fillRect(ballX + 5, ballY + 1, 1, 1);
+      ctx.fillRect(ballX + 1, ballY + 5, 1, 1);
+      ctx.fillRect(ballX + 5, ballY + 5, 1, 1);
 
-        ctx.fillStyle = "#8da8c8";
-        ctx.fillRect(hx, shaftY - 1, 4, 5);
-        ctx.fillRect(hx + 4, shaftY, 2, 3);
-        ctx.fillStyle = "#e8f3ff";
-        ctx.fillRect(hx + 1, shaftY, 3, 1);
-        ctx.fillRect(hx + 2, shaftY + 1, 2, 1);
-        ctx.fillStyle = "#f8fcff";
-        ctx.fillRect(hx + 5, shaftY + 1, 1, 1);
-      } else {
-        const hx = tipBase;
-        ctx.fillStyle = "#7088a8";
-        ctx.fillRect(hx + 1, shaftY - 2, 2, 7);
-        ctx.fillStyle = "#8ca6c4";
-        ctx.fillRect(hx, shaftY - 2, 4, 1);
-        ctx.fillRect(hx, shaftY + 4, 4, 1);
-
-        ctx.fillStyle = "#8da8c8";
-        ctx.fillRect(hx - 4, shaftY - 1, 4, 5);
-        ctx.fillRect(hx - 6, shaftY, 2, 3);
-        ctx.fillStyle = "#e8f3ff";
-        ctx.fillRect(hx - 4, shaftY, 3, 1);
-        ctx.fillRect(hx - 4, shaftY + 1, 2, 1);
-        ctx.fillStyle = "#f8fcff";
-        ctx.fillRect(hx - 6, shaftY + 1, 1, 1);
-      }
-
-      for (let i = 0; i < 3; i += 1) {
-        const sparkY = shaftY - 4 + i * 3;
-        const sparkX = dir > 0 ? tipBase + 4 : tipBase - 4;
-        ctx.fillStyle = `rgba(255, 252, 214, ${0.44 - i * 0.1 + pulse * 0.06})`;
-        ctx.fillRect(sparkX, sparkY, 2, 1);
-      }
+      ctx.fillStyle = "rgba(255, 233, 178, 0.45)";
+      ctx.fillRect(tipX + (dir > 0 ? 5 : -7), tipY - 2, 2, 2);
+      ctx.fillRect(tipX + (dir > 0 ? 8 : -10), tipY + 1, 1, 1);
     } else if (isCombo) {
       if (comboMove === "punch") {
         for (let i = 0; i < 3; i += 1) {
