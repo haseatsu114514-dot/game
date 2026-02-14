@@ -23,8 +23,8 @@
   };
 
   const BOSS_ARENA = {
-    minX: 6860,
-    maxX: 7180,
+    minX: 7300,
+    maxX: 7620,
   };
   const MAX_HEARTS = 3;
   const START_LIVES = 5;
@@ -1074,7 +1074,7 @@
       { x: 4300, y: 136, label: "CP-3" },
       { x: 5200, y: 136, label: "CP-4" },
       { x: 6040, y: 136, label: "CP-5" },
-      { x: 6680, y: 136, label: "CP-6" },
+      { x: 7240, y: 136, label: "CP-6" },
     ];
 
     const groundSegments = [
@@ -1094,6 +1094,7 @@
       [6120, 340],
       [6540, 360],
       [6940, 460],
+      [7420, 420],
     ];
 
     for (const [x, w] of groundSegments) {
@@ -1115,6 +1116,8 @@
     addSolid(6340, 114, 120, 10);
     addSolid(6760, 104, 130, 10, { kind: "crumble", state: "solid", collapseAt: 16 });
     addSolid(7090, 116, 90, 10);
+    addSolid(7320, 110, 120, 10, { kind: "crumble", state: "solid", collapseAt: 14 });
+    addSolid(7570, 118, 90, 10);
 
     addSolid(1220, 104, 26, 56);
     addSolid(2060, 96, 20, 64);
@@ -1142,7 +1145,10 @@
       { x: 5950, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.72, minX: 5820, maxX: 6030, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 6420, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.74, minX: 6280, maxX: 6480, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 86, hopInterval: 86 },
       { kind: "peacock", x: 6640, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.5, minX: 6520, maxX: 6750, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.58, chargeCooldown: 70, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
-      { x: 6890, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.76, minX: 6780, maxX: 7010, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true }
+      { x: 6890, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.76, minX: 6780, maxX: 7010, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true },
+      { x: 7210, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.72, minX: 7070, maxX: 7290, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 90, hopInterval: 90 },
+      { kind: "peacock", x: 7420, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.5, minX: 7310, maxX: 7520, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.5, chargeCooldown: 72, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 7600, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.74, minX: 7480, maxX: 7680, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 }
     );
 
     for (let i = 0; i < enemies.length; i += 1) {
@@ -1162,7 +1168,8 @@
       { x: 2870, y: 6, w: 22, h: 46, triggerX: 2810, state: "idle", vy: 0, timer: 0, warnDuration: 40 },
       { x: 3720, y: 4, w: 24, h: 52, triggerX: 3660, state: "idle", vy: 0, timer: 0, warnDuration: 38 },
       { x: 5570, y: 6, w: 24, h: 48, triggerX: 5510, state: "idle", vy: 0, timer: 0, warnDuration: 36 },
-      { x: 6460, y: 6, w: 24, h: 48, triggerX: 6400, state: "idle", vy: 0, timer: 0, warnDuration: 34 }
+      { x: 6460, y: 6, w: 24, h: 48, triggerX: 6400, state: "idle", vy: 0, timer: 0, warnDuration: 34 },
+      { x: 7240, y: 8, w: 24, h: 48, triggerX: 7180, state: "idle", vy: 0, timer: 0, warnDuration: 32 }
     );
 
     cannons.push(
@@ -1171,7 +1178,8 @@
       { x: 3470, y: 142, dir: -1, triggerX: 3390, interval: 132, cool: 48, active: false },
       { x: 4300, y: 142, dir: -1, triggerX: 4220, interval: 122, cool: 44, active: false },
       { x: 6020, y: 142, dir: -1, triggerX: 5950, interval: 118, cool: 40, active: false },
-      { x: 6760, y: 142, dir: 1, triggerX: 6700, interval: 112, cool: 38, active: false }
+      { x: 6760, y: 142, dir: 1, triggerX: 6700, interval: 112, cool: 38, active: false },
+      { x: 7360, y: 142, dir: -1, triggerX: 7300, interval: 108, cool: 36, active: false }
     );
 
     addProtein(1, 180, 136);
@@ -1214,6 +1222,10 @@
     addProtein(38, 7060, 104);
     addProtein(39, 7120, 132);
     addProtein(40, 7160, 132);
+    addProtein(41, 7240, 132);
+    addProtein(42, 7380, 96);
+    addProtein(43, 7510, 132);
+    addProtein(44, 7630, 102);
 
     // Bike = rare invincibility item.
     addBike(1, 3360, 102);
@@ -1248,7 +1260,7 @@
     }
 
     return {
-      width: 7400,
+      width: 7840,
       groundY,
       solids,
       enemies,
@@ -1265,7 +1277,7 @@
       bossShots: [],
       playerWaves: [],
       checkpoints,
-      goal: { x: 7044, y: 112, w: 24, h: 48 },
+      goal: { x: 7484, y: 112, w: 24, h: 48 },
       boss: {
         started: false,
         active: false,
@@ -2412,9 +2424,9 @@
 
     stage.boss.started = true;
     stage.boss.active = true;
-    stage.boss.maxHp = 9;
+    stage.boss.maxHp = 11;
     stage.boss.hp = stage.boss.maxHp;
-    stage.boss.x = 7100;
+    stage.boss.x = 7540;
     stage.boss.y = 124;
     stage.boss.vx = 0;
     stage.boss.vy = 0;
@@ -2430,9 +2442,9 @@
     stage.hazardBullets = [];
     stage.enemies = [];
     stage.enemies.push(
-      createPartyGoon(6932, 6888, 6994, 1),
-      createPartyGoon(7008, 6960, 7064, -1),
-      createPartyGoon(7072, 7022, 7132, 1)
+      createPartyGoon(7342, 7310, 7408, 1),
+      createPartyGoon(7440, 7398, 7494, -1),
+      createPartyGoon(7518, 7472, 7586, 1)
     );
     openingThemeActive = false;
     invincibleTimer = 0;
@@ -5329,6 +5341,12 @@
     input.attack = false;
     input.start = false;
   });
+
+  const blockGesture = (e) => e.preventDefault();
+  window.addEventListener("gesturestart", blockGesture, { passive: false });
+  window.addEventListener("gesturechange", blockGesture, { passive: false });
+  window.addEventListener("gestureend", blockGesture, { passive: false });
+  window.addEventListener("dblclick", blockGesture, { passive: false });
 
   let last = performance.now();
   function loop(now) {
