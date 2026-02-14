@@ -22,10 +22,11 @@
     CLEAR: "clear",
   };
 
-  const BOSS_ARENA = {
+  let BOSS_ARENA = {
     minX: 8340,
     maxX: 8660,
   };
+  const FINAL_STAGE_NUMBER = 2;
   const MAX_HEARTS = 5;
   const START_LIVES = 5;
 
@@ -60,6 +61,7 @@
   let deathContinueMode = "checkpoint";
 
   let checkpointIndex = 0;
+  let currentStageNumber = 1;
   let collectedProteinIds = new Set();
   let collectedLifeUpIds = new Set();
   let stage = buildStage();
@@ -1685,6 +1687,170 @@
       });
     };
 
+    if (currentStageNumber === 1) {
+      const checkpoints = [
+        { x: 34, y: 136, label: "START" },
+        { x: 980, y: 136, label: "CP-A" },
+        { x: 2060, y: 136, label: "CP-B" },
+        { x: 3180, y: 136, label: "CP-C" },
+      ];
+
+      const groundSegments = [
+        [0, 800],
+        [850, 900],
+        [1810, 950],
+        [2820, 960],
+        [3840, 920],
+      ];
+      for (const [x, w] of groundSegments) {
+        addSolid(x, groundY, w, 24);
+      }
+
+      addSolid(710, 128, 110, 10);
+      addSolid(1360, 124, 110, 10);
+      addSolid(1710, 114, 120, 10, { kind: "crumble", state: "solid", collapseAt: 34 });
+      addSolid(2240, 120, 120, 10);
+      addSolid(2650, 112, 110, 10);
+      addSolid(3140, 118, 130, 10, { kind: "crumble", state: "solid", collapseAt: 32 });
+      addSolid(3560, 110, 128, 10);
+      addSolid(4020, 118, 120, 10);
+
+      addSolid(1510, 100, 24, 60);
+      addSolid(3320, 98, 24, 62);
+
+      enemies.push(
+        { x: 430, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.38, minX: 340, maxX: 540, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 920, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.42, minX: 860, maxX: 1040, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 142, hopInterval: 142 },
+        { x: 1230, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.42, minX: 1130, maxX: 1330, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 1840, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.46, minX: 1730, maxX: 1940, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 132, hopInterval: 132 },
+        { x: 2380, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.46, minX: 2260, maxX: 2450, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 2860, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.48, minX: 2750, maxX: 3010, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 124, hopInterval: 124 },
+        { x: 3380, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.5, minX: 3260, maxX: 3460, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 4010, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.52, minX: 3880, maxX: 4090, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 120, hopInterval: 120 },
+        { kind: "peacock", x: 2100, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.38, minX: 1980, maxX: 2230, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.0, chargeCooldown: 76, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+        { kind: "peacock", x: 3620, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.4, minX: 3510, maxX: 3750, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.08, chargeCooldown: 78, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      );
+      for (let i = 0; i < enemies.length; i += 1) {
+        const enemy = enemies[i];
+        enemy.shooter = enemy.kind !== "peacock" && (i === 2 || i === 6);
+        enemy.shootInterval = enemy.shooter ? 176 + i * 9 : 0;
+        enemy.shootCooldown = enemy.shooter ? 104 + i * 7 : 0;
+        enemy.flash = 0;
+      }
+
+      fallBlocks.push(
+        { x: 1180, y: 8, w: 22, h: 44, triggerX: 1120, state: "idle", vy: 0, timer: 0, warnDuration: 52 },
+        { x: 2960, y: 8, w: 22, h: 44, triggerX: 2890, state: "idle", vy: 0, timer: 0, warnDuration: 48 }
+      );
+      cannons.push(
+        { x: 1670, y: 142, dir: -1, triggerX: 1600, interval: 170, cool: 60, active: false },
+        { x: 2510, y: 142, dir: 1, triggerX: 2440, interval: 162, cool: 56, active: false },
+        { x: 3460, y: 142, dir: -1, triggerX: 3380, interval: 154, cool: 54, active: false }
+      );
+      for (const block of fallBlocks) {
+        block.destroyed = false;
+        block.debrisTimer = 0;
+      }
+      for (const cannon of cannons) {
+        cannon.destroyed = false;
+        cannon.debrisTimer = 0;
+        cannon.warning = false;
+        cannon.muzzleFlash = 0;
+      }
+
+      addProtein(101, 180, 136);
+      addProtein(102, 430, 136);
+      addProtein(103, 620, 118);
+      addProtein(104, 880, 136);
+      addProtein(105, 1080, 132);
+      addProtein(106, 1360, 112);
+      addProtein(107, 1600, 132);
+      addProtein(108, 1820, 102);
+      addProtein(109, 2050, 136);
+      addProtein(110, 2280, 132);
+      addProtein(111, 2520, 132);
+      addProtein(112, 2760, 106);
+      addProtein(113, 3010, 132);
+      addProtein(114, 3250, 132);
+      addProtein(115, 3490, 108);
+      addProtein(116, 3740, 132);
+      addProtein(117, 3990, 132);
+      addProtein(118, 4230, 110);
+      addProtein(119, 4460, 132);
+
+      addBike(101, 2440, 108);
+      addHeartItem(101, 1420, 96);
+      addHeartItem(102, 3320, 96);
+      addLifeUpItem(101, 2870, 88);
+
+      const checkpointTokenIds = [1, 3];
+      const checkpointTokenAnchors = {
+        1: { x: 1010, y: 102 },
+        3: { x: 3210, y: 98 },
+      };
+      for (const i of checkpointTokenIds) {
+        const cp = checkpoints[i];
+        if (!cp) continue;
+        const anchor = checkpointTokenAnchors[i] || { x: cp.x + 2, y: cp.y - 18 };
+        checkpointTokens.push({
+          id: i,
+          x: anchor.x,
+          y: anchor.y,
+          w: 12,
+          h: 12,
+          bob: (i * 1.29) % (Math.PI * 2),
+          collected: checkpointIndex >= i,
+        });
+      }
+
+      return {
+        id: 1,
+        theme: "city_basic",
+        width: 4760,
+        groundY,
+        solids,
+        enemies,
+        proteins,
+        heartItems,
+        lifeUpItems,
+        bikes,
+        weaponItems,
+        checkpointTokens,
+        staticSpikes,
+        popSpikes,
+        fallBlocks,
+        cannons,
+        breakWalls,
+        hazardBullets: [],
+        bossShots: [],
+        playerWaves: [],
+        checkpoints,
+        goal: { x: 4300, y: 112, w: 24, h: 48 },
+        bossArena: { minX: 4380, maxX: 4660 },
+        boss: {
+          kind: "peacock",
+          started: false,
+          active: false,
+          x: 4490,
+          y: 124,
+          w: 24,
+          h: 36,
+          vx: 0,
+          vy: 0,
+          dir: -1,
+          onGround: false,
+          hp: 7,
+          maxHp: 7,
+          mode: "idle",
+          modeTimer: 0,
+          shotCooldown: 48,
+          attackCycle: 0,
+          spiralAngle: 0,
+          invuln: 0,
+        },
+      };
+    }
+
     const checkpoints = [
       { x: 34, y: 136, label: "START" },
       { x: 980, y: 136, label: "CP-0" },
@@ -1923,6 +2089,8 @@
     }
 
     return {
+      id: 2,
+      theme: "city_deluxe",
       width: 8960,
       groundY,
       solids,
@@ -1943,7 +2111,9 @@
       playerWaves: [],
       checkpoints,
       goal: { x: 8508, y: 112, w: 24, h: 48 },
+      bossArena: { minX: 8340, maxX: 8660 },
       boss: {
+        kind: "god",
         started: false,
         active: false,
         x: 8420,
@@ -2322,11 +2492,23 @@
     playDeathJingle();
   }
 
-  function startGameplay(resetDeaths) {
-    if (resetDeaths) {
-      deaths = 0;
-      collectedProteinIds = new Set();
+  function stageStartMessage() {
+    if (currentStageNumber <= 1) {
+      return "STAGE 1: 都会トレーニングエリア突破! 孔雀ボスを倒せ";
     }
+    return "STAGE 2: マンション会場へ突入し、彼氏を救出せよ";
+  }
+
+  function startGameplay(resetDeaths, options = {}) {
+    const keepLives = options.keepLives === true;
+    const keepDeaths = options.keepDeaths === true;
+    const previousLives = playerLives;
+    const previousDeaths = deaths;
+    if (resetDeaths && !keepDeaths) {
+      deaths = 0;
+    }
+    collectedProteinIds = new Set();
+    collectedLifeUpIds = new Set();
     checkpointIndex = 0;
     deathContinueMode = "checkpoint";
     preBossCutsceneTimer = 0;
@@ -2345,7 +2527,7 @@
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     playerHearts = MAX_HEARTS;
-    playerLives = START_LIVES;
+    playerLives = keepLives ? Math.max(1, previousLives) : START_LIVES;
     damageInvulnTimer = 0;
     hurtFlashTimer = 0;
     impactShakeTimer = 0;
@@ -2386,10 +2568,14 @@
     deathJumpVy = 0;
     deadReason = "";
     openingThemeActive = false;
+    BOSS_ARENA = stage.bossArena ? { ...stage.bossArena } : BOSS_ARENA;
+    if (keepDeaths) {
+      deaths = previousDeaths;
+    }
     stopInvincibleMusic();
     gameState = STATE.PLAY;
-    hudMessage = "りら: ホームパーティー会場へ殴り込み、彼氏を救出せよ";
-    hudTimer = 170;
+    hudMessage = stageStartMessage();
+    hudTimer = currentStageNumber <= 1 ? 150 : 170;
     deadTimerMax = 0;
     playUiStartSfx();
     startStageMusic(true);
@@ -2401,6 +2587,7 @@
     preBossCutsceneTimer = 0;
     deathContinueMode = "checkpoint";
     stage = buildStage();
+    BOSS_ARENA = stage.bossArena ? { ...stage.bossArena } : BOSS_ARENA;
     const cp = stage.checkpoints[checkpointIndex];
     placePlayerAtCheckpoint(cp);
     cameraX = clamp(player.x - 120, 0, stage.width - W);
@@ -2487,7 +2674,9 @@
     checkpointIndex = findPreMansionCheckpointIndex();
     respawnFromCheckpoint();
     deathContinueMode = "checkpoint";
-    hudMessage = "マンション前から再開";
+    hudMessage = currentStageNumber < FINAL_STAGE_NUMBER
+      ? "ボスゲート前から再開"
+      : "マンション前から再開";
     hudTimer = 96;
   }
 
@@ -3492,6 +3681,7 @@
     if (!stage.boss.active) return;
     if (!overlap(player, stage.boss)) return;
     const b = stage.boss;
+    const bossName = b.kind === "peacock" ? "孔雀ボス" : "神";
     const playerBottom = player.y + player.h;
     const bossTop = b.y;
     const bossMidY = b.y + b.h * 0.5;
@@ -3531,7 +3721,7 @@
         triggerImpact(3.0, hitX, hitY, 4.6);
         spawnHitSparks(hitX, hitY, "#fff2bc", "#ffb26a");
         playKickSfx(1.74);
-        hudMessage = "神を踏みつけ!";
+        hudMessage = `${bossName}を踏みつけ!`;
         hudTimer = 28;
         if (b.hp <= 0) {
           defeatBoss();
@@ -3559,19 +3749,23 @@
 
     const rage = stage.boss.hp <= Math.ceil(stage.boss.maxHp * 0.55);
     if (stage.boss.mode === "dash") {
-      killPlayer("神の突進に被弾");
+      killPlayer(`${bossName}の突進に被弾`);
     } else {
-      killPlayer(rage ? "神威に接触して被弾" : "神に接触して被弾");
+      killPlayer(rage ? `${bossName}の猛攻に被弾` : `${bossName}に接触して被弾`);
     }
   }
 
   function startBossBattle() {
     if (stage.boss.started) return;
     playBossStartSfx();
+    const bossKind = stage.boss.kind || "god";
+    BOSS_ARENA = stage.bossArena ? { ...stage.bossArena } : BOSS_ARENA;
 
-    // No protein pickups during the God battle.
-    for (const protein of stage.proteins) {
-      protein.collected = true;
+    if (bossKind === "god") {
+      // No protein pickups during the God battle.
+      for (const protein of stage.proteins) {
+        protein.collected = true;
+      }
     }
 
     // Boss arena should be a flat duel zone.
@@ -3591,19 +3785,21 @@
 
     stage.boss.started = true;
     stage.boss.active = true;
-    stage.boss.maxHp = 11;
+    stage.boss.maxHp = bossKind === "peacock" ? 8 : 11;
     stage.boss.hp = stage.boss.maxHp;
-    stage.boss.x = 8580;
-    stage.boss.y = 124;
+    stage.boss.x = bossKind === "peacock"
+      ? BOSS_ARENA.minX + Math.floor((BOSS_ARENA.maxX - BOSS_ARENA.minX) * 0.48)
+      : BOSS_ARENA.minX + Math.floor((BOSS_ARENA.maxX - BOSS_ARENA.minX) * 0.63);
+    stage.boss.y = stage.groundY - stage.boss.h;
     stage.boss.vx = 0;
     stage.boss.vy = 0;
     stage.boss.dir = -1;
     stage.boss.mode = "intro";
-    stage.boss.modeTimer = 42;
-    stage.boss.shotCooldown = 28;
+    stage.boss.modeTimer = bossKind === "peacock" ? 34 : 42;
+    stage.boss.shotCooldown = bossKind === "peacock" ? 34 : 28;
     stage.boss.attackCycle = 0;
     stage.boss.spiralAngle = 0;
-    stage.boss.invuln = 24;
+    stage.boss.invuln = bossKind === "peacock" ? 20 : 24;
     stage.bossShots = [];
     stage.playerWaves = [];
     waveFlashTimer = 0;
@@ -3611,12 +3807,16 @@
     waveBursts = [];
     invincibleBonusPops = [];
     stage.hazardBullets = [];
-    stage.enemies = [];
-    stage.enemies.push(
-      createPartyGoon(8382, 8350, 8448, 1),
-      createPartyGoon(8474, 8432, 8534, -1),
-      createPartyGoon(8554, 8508, 8622, 1)
-    );
+    if (bossKind === "god") {
+      stage.enemies = [];
+      stage.enemies.push(
+        createPartyGoon(BOSS_ARENA.minX + 42, BOSS_ARENA.minX + 10, BOSS_ARENA.minX + 108, 1),
+        createPartyGoon(BOSS_ARENA.minX + 134, BOSS_ARENA.minX + 92, BOSS_ARENA.minX + 194, -1),
+        createPartyGoon(BOSS_ARENA.minX + 214, BOSS_ARENA.minX + 168, BOSS_ARENA.minX + 282, 1)
+      );
+    } else {
+      stage.enemies = [];
+    }
     openingThemeActive = false;
     proteinBurstTimer = 0;
     proteinBurstBlastDone = false;
@@ -3648,12 +3848,15 @@
 
     triggerImpact(2.4, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.55, 3.4);
     playKickSfx(1.8);
-    hudMessage = "ホームパーティー会場突入! 構成員を避けつつ神を倒せ";
-    hudTimer = 120;
+    hudMessage = bossKind === "peacock"
+      ? "STAGE 1 BOSS: 突進と羽弾を避けて孔雀ボスを倒せ"
+      : "ホームパーティー会場突入! 構成員を避けつつ神を倒せ";
+    hudTimer = bossKind === "peacock" ? 112 : 120;
   }
 
   function defeatBoss() {
     if (!stage.boss.active) return;
+    const finalStage = currentStageNumber >= FINAL_STAGE_NUMBER;
     stage.boss.active = false;
     stage.boss.mode = "down";
     stage.boss.vx = 0;
@@ -3688,10 +3891,151 @@
     playKickSfx(2.2);
     playCheckpointSfx();
     startClearTheme();
-    hudMessage = "白ヒゲの神を撃破!";
-    hudTimer = 150;
+    hudMessage = finalStage ? "白ヒゲの神を撃破!" : "孔雀ボス撃破! STAGE 2へ";
+    hudTimer = finalStage ? 150 : 120;
     gameState = STATE.CLEAR;
     clearTimer = 0;
+  }
+
+  function emitPeacockBossShots(boss, rage) {
+    const cx = boss.x + boss.w * 0.5 - 2;
+    const cy = boss.y + 12;
+    const spread = rage
+      ? [-0.42, -0.2, 0, 0.2, 0.42]
+      : [-0.28, 0, 0.28];
+    for (const s of spread) {
+      stage.bossShots.push({
+        kind: "peacock_feather",
+        x: cx,
+        y: cy,
+        w: 5,
+        h: 4,
+        vx: boss.dir * (1.48 + Math.abs(s) * 0.6),
+        vy: s * 1.12 - 0.06,
+        ttl: rage ? 132 : 116,
+        reason: "孔雀ボスの羽弾に被弾",
+      });
+    }
+    playKickSfx(1.38);
+    playProjectileSfx("enemy");
+  }
+
+  function updatePeacockBoss(dt, solids) {
+    const boss = stage.boss;
+    const rage = boss.hp <= Math.ceil(boss.maxHp * 0.5);
+    boss.invuln = Math.max(0, boss.invuln - dt);
+    boss.modeTimer -= dt;
+    boss.shotCooldown -= dt;
+
+    if (boss.mode === "intro") {
+      boss.vx = -0.42;
+      if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 34 : 44;
+      }
+    } else if (boss.mode === "idle") {
+      boss.vx += boss.dir * (rage ? 0.23 : 0.18) * dt;
+      boss.vx = clamp(boss.vx, -(rage ? 1.22 : 1.02), rage ? 1.22 : 1.02);
+
+      if (boss.x < BOSS_ARENA.minX + 16) {
+        boss.x = BOSS_ARENA.minX + 16;
+        boss.dir = 1;
+      } else if (boss.x + boss.w > BOSS_ARENA.maxX - 16) {
+        boss.x = BOSS_ARENA.maxX - 16 - boss.w;
+        boss.dir = -1;
+      }
+
+      if (boss.modeTimer <= 0) {
+        const pattern = boss.attackCycle % 3;
+        if (pattern === 0) {
+          boss.mode = "windup";
+          boss.modeTimer = rage ? 16 : 22;
+          boss.vx *= 0.46;
+        } else if (pattern === 1) {
+          boss.mode = "shoot";
+          boss.modeTimer = rage ? 66 : 56;
+          boss.shotCooldown = rage ? 11 : 14;
+          boss.vx *= 0.52;
+        } else {
+          boss.mode = "leap_prep";
+          boss.modeTimer = rage ? 16 : 20;
+          boss.vx *= 0.48;
+        }
+        boss.attackCycle += 1;
+      }
+    } else if (boss.mode === "windup") {
+      boss.vx *= Math.pow(rage ? 0.6 : 0.66, dt);
+      if (boss.modeTimer <= 0) {
+        boss.mode = "dash";
+        boss.modeTimer = rage ? 28 : 22;
+        boss.vx = boss.dir * (2.15 + (rage ? 0.36 : 0));
+      }
+    } else if (boss.mode === "dash") {
+      if (boss.x <= BOSS_ARENA.minX + 3) {
+        boss.x = BOSS_ARENA.minX + 3;
+        boss.dir = 1;
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 30 : 40;
+      } else if (boss.x + boss.w >= BOSS_ARENA.maxX - 3) {
+        boss.x = BOSS_ARENA.maxX - 3 - boss.w;
+        boss.dir = -1;
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 30 : 40;
+      } else if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 30 : 40;
+      }
+    } else if (boss.mode === "shoot") {
+      boss.vx *= Math.pow(rage ? 0.78 : 0.84, dt);
+      if (boss.shotCooldown <= 0) {
+        emitPeacockBossShots(boss, rage);
+        boss.shotCooldown = rage ? 14 : 18;
+      }
+      if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 30 : 40;
+      }
+    } else if (boss.mode === "leap_prep") {
+      boss.vx *= Math.pow(rage ? 0.62 : 0.7, dt);
+      if (boss.modeTimer <= 0) {
+        const targetX = clamp(
+          player.x + player.w * 0.5 + player.vx * 11,
+          BOSS_ARENA.minX + 20,
+          BOSS_ARENA.maxX - 20
+        );
+        const cx = boss.x + boss.w * 0.5;
+        boss.leapTargetX = targetX;
+        boss.mode = "leap_air";
+        boss.modeTimer = rage ? 64 : 56;
+        boss.dir = targetX >= cx ? 1 : -1;
+        const dist = Math.abs(targetX - cx);
+        boss.vx = boss.dir * clamp(1.5 + dist * 0.011, 1.4, rage ? 2.7 : 2.4);
+        boss.vy = rage ? -6.6 : -6.1;
+      }
+    } else if (boss.mode === "leap_air") {
+      if (!boss.onGround) {
+        const cx = boss.x + boss.w * 0.5;
+        const toward = (boss.leapTargetX || cx) - cx;
+        boss.vx += clamp(toward * 0.004, -0.05, 0.05) * dt;
+        boss.vx = clamp(boss.vx, -(rage ? 2.7 : 2.4), rage ? 2.7 : 2.4);
+      }
+      if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 30 : 40;
+      }
+    }
+
+    boss.vy = Math.min(boss.vy + GRAVITY * dt, MAX_FALL);
+    moveWithCollisions(boss, solids, dt);
+    boss.x = clamp(boss.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - boss.w - 2);
+    if (boss.mode === "leap_air" && boss.onGround) {
+      triggerImpact(2.2, boss.x + boss.w * 0.5, boss.y + boss.h, 3.2);
+      playKickSfx(1.52);
+      boss.mode = "idle";
+      boss.modeTimer = rage ? 30 : 40;
+      boss.vx *= 0.24;
+      boss.vy = 0;
+    }
   }
 
   function emitBossGroundWave(boss, rage) {
@@ -3866,6 +4210,10 @@
     if (!stage.boss.active) return;
 
     const boss = stage.boss;
+    if (boss.kind === "peacock") {
+      updatePeacockBoss(dt, solids);
+      return;
+    }
     const rage = boss.hp <= Math.ceil(boss.maxHp * 0.55);
     boss.invuln = Math.max(0, boss.invuln - dt);
     boss.modeTimer -= dt;
@@ -4427,6 +4775,8 @@
   }
 
   function updatePreBossCutscene(dt, actions) {
+    const stage1Peacock = stage.boss && stage.boss.kind === "peacock";
+    const movieDuration = stage1Peacock ? 320 : PRE_BOSS_CUTSCENE_DURATION;
     if (actions.startPressed || actions.jumpPressed) {
       startBossBattle();
       return;
@@ -4451,13 +4801,20 @@
 
     preBossCutsceneTimer += dt;
     startOpeningTheme();
-    if (preBossCutsceneTimer > PRE_BOSS_CUTSCENE_DURATION) {
+    if (preBossCutsceneTimer > movieDuration) {
       startBossBattle();
     }
   }
 
   function returnToTitle() {
     deadReason = "";
+    currentStageNumber = 1;
+    collectedProteinIds = new Set();
+    collectedLifeUpIds = new Set();
+    stage = buildStage();
+    const cp = stage.checkpoints[0];
+    player = createPlayer(cp.x, cp.y);
+    BOSS_ARENA = stage.bossArena ? { ...stage.bossArena } : BOSS_ARENA;
     titleTimer = 0;
     deathPauseTimer = 0;
     deathAnimActive = false;
@@ -4496,6 +4853,27 @@
     stopStageMusic(true);
     gameState = STATE.TITLE;
     startOpeningTheme();
+  }
+
+  function startNextStage() {
+    if (currentStageNumber >= FINAL_STAGE_NUMBER) {
+      returnToTitle();
+      return;
+    }
+    currentStageNumber += 1;
+    cutsceneTime = 0;
+    preBossCutsceneTimer = 0;
+    deadReason = "";
+    proteinBurstGauge = 0;
+    proteinBurstTimer = 0;
+    proteinBurstBlastDone = false;
+    proteinBurstLaserTimer = 0;
+    proteinBurstLaserPhase = 0;
+    proteinBurstUsedGauge = 0;
+    proteinBurstPower = 1;
+    stopInvincibleMusic();
+    stopStageMusic(true);
+    startGameplay(false, { keepLives: true, keepDeaths: true });
   }
 
   function updateDead(dt, actions) {
@@ -4545,7 +4923,19 @@
       if (invincibleTimer <= 0) endInvincibleMode();
     }
 
-    if (clearTimer > 180 && (actions.startPressed || actions.jumpPressed)) {
+    const finalStage = currentStageNumber >= FINAL_STAGE_NUMBER;
+    if (!finalStage) {
+      if (clearTimer > 150 && (actions.startPressed || actions.jumpPressed || actions.attackPressed)) {
+        startNextStage();
+        return;
+      }
+      if (clearTimer > 280) {
+        startNextStage();
+      }
+      return;
+    }
+
+    if (clearTimer > 180 && (actions.startPressed || actions.jumpPressed || actions.attackPressed)) {
       returnToTitle();
     }
   }
@@ -4589,6 +4979,45 @@
   }
 
   function drawSkyGradient() {
+    const deluxeCity = stage && stage.theme === "city_deluxe";
+    if (deluxeCity) {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "#02040a");
+      g.addColorStop(0.25, "#0d1630");
+      g.addColorStop(0.52, "#1c3560");
+      g.addColorStop(0.78, "#2f5a87");
+      g.addColorStop(1, "#4f7aa3");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      const moonGlow = ctx.createRadialGradient(250, 24, 2, 250, 24, 34);
+      moonGlow.addColorStop(0, "rgba(255,240,206,0.98)");
+      moonGlow.addColorStop(0.2, "rgba(255,223,166,0.62)");
+      moonGlow.addColorStop(0.5, "rgba(255,168,133,0.24)");
+      moonGlow.addColorStop(1, "rgba(255,210,150,0)");
+      ctx.fillStyle = moonGlow;
+      ctx.fillRect(210, 0, 86, 76);
+
+      ctx.fillStyle = "rgba(255, 126, 177, 0.08)";
+      ctx.fillRect(0, 70, W, 20);
+      ctx.fillStyle = "rgba(120, 214, 255, 0.12)";
+      ctx.fillRect(0, 88, W, 26);
+
+      const twinkleSeed = Math.floor(player.anim * 0.7);
+      for (let i = 0; i < 46; i += 1) {
+        const sx = ((i * 23 + Math.floor(cameraX * 0.09)) % (W + 16)) - 8;
+        const sy = 4 + ((i * 19) % 58);
+        const blink = (twinkleSeed + i * 2) % 16 < 4;
+        ctx.fillStyle = blink ? "#f8fbff" : "rgba(188,213,255,0.76)";
+        ctx.fillRect(Math.floor(sx), sy, 1, 1);
+        if (blink && i % 6 === 0) {
+          ctx.fillRect(Math.floor(sx) - 1, sy, 1, 1);
+          ctx.fillRect(Math.floor(sx) + 1, sy, 1, 1);
+        }
+      }
+      return;
+    }
+
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, "#04060d");
     g.addColorStop(0.35, "#0f1a34");
@@ -4626,6 +5055,88 @@
   }
 
   function drawParallax() {
+    const deluxeCity = stage && stage.theme === "city_deluxe";
+    if (deluxeCity) {
+      const farShift = -Math.floor(cameraX * 0.1) % 168;
+      for (let block = -2; block < 6; block += 1) {
+        const base = block * 168 + farShift;
+        for (let i = 0; i < 12; i += 1) {
+          const bw = 10 + ((i + block + 13) % 3) * 3;
+          const h = 42 + ((i * 12 + block * 7 + 180) % 48);
+          const bx = Math.floor(base + i * 14);
+          const by = 124 - h;
+
+          ctx.fillStyle = "#14213a";
+          ctx.fillRect(bx, by, bw, h);
+          ctx.fillStyle = "#203459";
+          ctx.fillRect(bx + 1, by + 1, bw - 2, h - 2);
+          ctx.fillStyle = "#0a1224";
+          ctx.fillRect(bx + bw - 2, by + 1, 1, h - 2);
+
+          for (let wy = by + 6; wy < 122; wy += 6) {
+            const lit = (wy + i + block) % 3 !== 0;
+            ctx.fillStyle = lit ? "#8ce8ff" : "#2b456a";
+            ctx.fillRect(bx + 2, wy, 2, 1);
+            ctx.fillStyle = lit && i % 2 === 0 ? "#ffd8a2" : "#253e5f";
+            ctx.fillRect(bx + bw - 4, wy + 1, 2, 1);
+          }
+          if ((i + block) % 5 === 0) {
+            ctx.fillStyle = "#35608f";
+            ctx.fillRect(bx + 2, by - 3, bw - 4, 2);
+            ctx.fillStyle = "#ff62ab";
+            ctx.fillRect(bx + 4, by - 2, Math.max(1, bw - 8), 1);
+          }
+        }
+      }
+
+      const midShift = -Math.floor(cameraX * 0.26) % 132;
+      for (let block = -2; block < 7; block += 1) {
+        const base = block * 132 + midShift;
+        for (let i = 0; i < 8; i += 1) {
+          const bw = 13 + ((i + block + 18) % 2) * 3;
+          const h = 58 + ((i * 15 + block * 10 + 170) % 46);
+          const bx = Math.floor(base + i * 17);
+          const by = 144 - h;
+
+          ctx.fillStyle = "#1f3254";
+          ctx.fillRect(bx, by, bw, h);
+          ctx.fillStyle = "#33567f";
+          ctx.fillRect(bx, by, bw, 3);
+          ctx.fillStyle = "#142844";
+          ctx.fillRect(bx + bw - 2, by + 2, 1, h - 2);
+
+          for (let wy = by + 8; wy < 140; wy += 7) {
+            ctx.fillStyle = (wy + i) % 2 === 0 ? "#7ceeff" : "#31557f";
+            ctx.fillRect(bx + 3, wy, 2, 2);
+            ctx.fillStyle = (wy + i) % 3 === 0 ? "#ffcb83" : "#2d4b72";
+            ctx.fillRect(bx + bw - 5, wy + 1, 2, 2);
+          }
+
+          if ((i + block) % 4 === 0) {
+            ctx.fillStyle = "rgba(121, 237, 255, 0.16)";
+            ctx.fillRect(bx + 1, by + 5, bw - 2, 2);
+          }
+        }
+      }
+
+      ctx.fillStyle = "rgba(145, 188, 235, 0.16)";
+      ctx.fillRect(0, 118, W, 26);
+      ctx.fillStyle = "rgba(255, 132, 186, 0.1)";
+      ctx.fillRect(0, 128, W, 8);
+
+      ctx.fillStyle = "#1d2431";
+      ctx.fillRect(0, 136, W, 8);
+      ctx.fillStyle = "#2f394b";
+      const railShift = -Math.floor(cameraX * 0.58) % 22;
+      for (let x = railShift - 22; x < W + 22; x += 22) {
+        ctx.fillRect(x, 144, 4, 8);
+        ctx.fillStyle = "#566076";
+        ctx.fillRect(x + 1, 144, 1, 8);
+        ctx.fillStyle = "#2f394b";
+      }
+      return;
+    }
+
     const farShift = -Math.floor(cameraX * 0.11) % 176;
     for (let block = -2; block < 5; block += 1) {
       const base = block * 176 + farShift;
@@ -5155,6 +5666,61 @@
     const b = stage.boss;
     const x = Math.floor(b.x - cameraX);
     const y = Math.floor(b.y);
+    if (b.kind === "peacock") {
+      const warn = b.mode === "windup" || b.mode === "dash";
+      const cast = b.mode === "shoot";
+      const rage = b.hp <= Math.ceil(b.maxHp * 0.4);
+
+      ctx.fillStyle = "#0f1724";
+      ctx.fillRect(x + 3, y + 8, 18, 18);
+      ctx.fillStyle = rage ? "#1c89c4" : "#2794b8";
+      ctx.fillRect(x + 4, y + 10, 16, 14);
+      ctx.fillStyle = "#52d4e8";
+      ctx.fillRect(x + 7, y + 11, 10, 5);
+      ctx.fillStyle = "#2d6e93";
+      ctx.fillRect(x + 6, y + 16, 12, 6);
+
+      ctx.fillStyle = "#f5d57e";
+      if (b.dir > 0) {
+        ctx.fillRect(x + 20, y + 12, 5, 3);
+      } else {
+        ctx.fillRect(x + 1, y + 12, 5, 3);
+      }
+
+      ctx.fillStyle = "#1d2f4f";
+      ctx.fillRect(x + 8, y + 6, 8, 4);
+      ctx.fillStyle = "#d8f0ff";
+      ctx.fillRect(x + 10, y + 7, 1, 1);
+      ctx.fillStyle = "#f7fbff";
+      ctx.fillRect(x + 13, y + 7, 1, 1);
+
+      ctx.fillStyle = rage ? "#217cab" : "#2b85ad";
+      ctx.fillRect(x - 6, y + 4, 8, 22);
+      ctx.fillRect(x + 22, y + 4, 8, 22);
+      ctx.fillStyle = "#72e4f0";
+      ctx.fillRect(x - 4, y + 8, 3, 13);
+      ctx.fillRect(x + 24, y + 8, 3, 13);
+      ctx.fillStyle = "#f6e0a3";
+      ctx.fillRect(x - 3, y + 15, 1, 2);
+      ctx.fillRect(x + 25, y + 15, 1, 2);
+
+      ctx.fillStyle = "#2b3b55";
+      ctx.fillRect(x + 7, y + 26, 4, 8);
+      ctx.fillRect(x + 14, y + 26, 4, 8);
+      ctx.fillStyle = "#1a2333";
+      ctx.fillRect(x + 7, y + 34, 4, 2);
+      ctx.fillRect(x + 14, y + 34, 4, 2);
+
+      if (cast || warn) {
+        ctx.fillStyle = "rgba(132, 224, 255, 0.42)";
+        ctx.fillRect(x - 3, y + 9, 30, 10);
+      }
+      if (warn) {
+        ctx.strokeStyle = "rgba(255, 228, 165, 0.9)";
+        ctx.strokeRect(x - 2, y - 1, b.w + 4, b.h + 3);
+      }
+      return;
+    }
     const warn = b.mode === "windup" || b.mode === "dash";
     const cast = b.mode === "shoot" || b.mode === "ring" || b.mode === "rain" || b.mode === "spiral";
     const rage = b.hp <= Math.ceil(b.maxHp * 0.35);
@@ -6079,6 +6645,48 @@
     const x = Math.floor(g.x - cameraX);
     const y = Math.floor(g.y);
 
+    if (stage.id === 1) {
+      const gx = x - 20;
+      const gy = y - 56;
+      const gw = 64;
+      const gh = 104;
+
+      ctx.fillStyle = "#17243a";
+      ctx.fillRect(gx, gy + 6, gw, gh - 6);
+      ctx.fillStyle = "#213453";
+      ctx.fillRect(gx + 3, gy + 10, gw - 6, gh - 12);
+      ctx.fillStyle = "#4cc4f0";
+      ctx.fillRect(gx + 6, gy + 12, gw - 12, 2);
+      ctx.fillStyle = "#ff8fbe";
+      ctx.fillRect(gx + 8, gy + 18, gw - 16, 1);
+
+      ctx.fillStyle = "#111a2b";
+      ctx.fillRect(x - 1, y - 1, g.w + 2, g.h + 2);
+      ctx.fillStyle = "#1c2b44";
+      ctx.fillRect(x, y, g.w, g.h);
+      ctx.fillStyle = "rgba(128, 210, 255, 0.3)";
+      ctx.fillRect(x + 1, y + 2, g.w - 2, g.h - 5);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.14)";
+      ctx.fillRect(x + 2, y + 4, 2, g.h - 10);
+      ctx.fillRect(x + g.w - 4, y + 4, 1, g.h - 10);
+
+      ctx.fillStyle = "#206f95";
+      ctx.fillRect(gx + 24, gy + 28, 18, 3);
+      ctx.fillStyle = "#4ce2ff";
+      ctx.fillRect(gx + 26, gy + 29, 14, 1);
+      ctx.fillStyle = "#f8d682";
+      ctx.fillRect(gx + 31, gy + 32, 6, 2);
+
+      if (stage.boss.active) {
+        ctx.fillStyle = "rgba(255,40,60,0.35)";
+        ctx.fillRect(x - 4, y - 2, g.w + 8, g.h + 4);
+        ctx.fillStyle = "#ffd0d0";
+        ctx.font = "8px monospace";
+        ctx.fillText("BOSS", x - 1, y - 10);
+      }
+      return;
+    }
+
     const mx = x - 46;
     const my = y - 72;
     const mw = 116;
@@ -6147,13 +6755,14 @@
   }
 
   function drawWorld() {
-    if (gameState === STATE.BOSS) {
+    const godBossRoom = gameState === STATE.BOSS && stage.boss && stage.boss.kind === "god";
+    if (godBossRoom) {
       drawMansionInteriorBackdrop();
     } else {
       drawSkyGradient();
       drawParallax();
     }
-    ctx.fillStyle = gameState === STATE.BOSS ? "rgba(6,8,12,0.12)" : "rgba(8,10,16,0.1)";
+    ctx.fillStyle = godBossRoom ? "rgba(6,8,12,0.12)" : "rgba(8,10,16,0.1)";
     ctx.fillRect(0, 0, W, H - 18);
 
     ctx.save();
@@ -6205,7 +6814,14 @@
       if (bs.dead) continue;
       const sx = Math.floor(bs.x - cameraX);
       const sy = Math.floor(bs.y);
-      if (bs.kind === "wave") {
+      if (bs.kind === "peacock_feather") {
+        ctx.fillStyle = "rgba(128, 226, 255, 0.42)";
+        ctx.fillRect(sx - 1, sy - 1, bs.w + 2, bs.h + 2);
+        ctx.fillStyle = "#59d9ef";
+        ctx.fillRect(sx, sy, bs.w, bs.h);
+        ctx.fillStyle = "#f6df94";
+        ctx.fillRect(sx + 1, sy + 1, Math.max(2, bs.w - 2), 1);
+      } else if (bs.kind === "wave") {
         ctx.fillStyle = "rgba(255, 156, 108, 0.44)";
         ctx.fillRect(sx - 2, sy - 1, bs.w + 4, bs.h + 2);
         ctx.fillStyle = "#ff9f5b";
@@ -6595,6 +7211,92 @@
 
   function drawPreBossCutscene() {
     const rawT = preBossCutsceneTimer;
+    const stage1Peacock = stage.boss && stage.boss.kind === "peacock";
+
+    if (stage1Peacock) {
+      if (rawT < 0) {
+        drawWorld();
+        const enterRatio = clamp((rawT + PRE_BOSS_ENTRY_DURATION) / PRE_BOSS_ENTRY_DURATION, 0, 1);
+        const fade = clamp(0.38 + enterRatio * 0.32, 0.38, 0.74);
+        const gx = Math.floor(stage.goal.x - cameraX);
+        const gy = Math.floor(stage.goal.y);
+        ctx.fillStyle = `rgba(8,10,16,${fade})`;
+        ctx.fillRect(gx - 4, gy + 3, stage.goal.w + 8, stage.goal.h - 3);
+        drawTextPanel(["りらはゲートを開き、孔雀ボスのアリーナへ入る。"]);
+        drawCutscenePolish(rawT + PRE_BOSS_ENTRY_DURATION, 0.52);
+
+        ctx.fillStyle = "rgba(0,0,0,0.44)";
+        ctx.fillRect(90, 8, 140, 14);
+        ctx.fillStyle = "#f4f3ff";
+        ctx.font = "9px monospace";
+        ctx.textBaseline = "top";
+        ctx.fillText("タップ / Enter でスキップ", 101, 11);
+        return;
+      }
+
+      const t = rawT + 110;
+      const camBackup = cameraX;
+      cameraX = clamp(stage.goal.x - 120, 0, stage.width - W);
+      drawSkyGradient();
+      drawParallax();
+      cameraX = camBackup;
+
+      ctx.fillStyle = "#232d40";
+      ctx.fillRect(0, 132, W, 48);
+      ctx.fillStyle = "#4e5f7f";
+      for (let i = 0; i < W; i += 20) ctx.fillRect(i, 140, 10, 1);
+
+      const approach = clamp(t / 146, 0, 1);
+      const heroX = 62 + approach * 94;
+      drawHero(heroX, 112, 1, t * 1.1, 1.08);
+
+      const bossX = 216 + Math.sin(t * 0.1) * 1.2;
+      const bossY = 106;
+      ctx.fillStyle = "#11202f";
+      ctx.fillRect(bossX - 10, bossY + 12, 20, 15);
+      ctx.fillStyle = "#2180ad";
+      ctx.fillRect(bossX - 8, bossY + 14, 16, 10);
+      ctx.fillStyle = "#45c3df";
+      ctx.fillRect(bossX - 7, bossY + 15, 5, 7);
+      ctx.fillRect(bossX + 2, bossY + 15, 5, 7);
+      ctx.fillStyle = "#6de3f0";
+      ctx.fillRect(bossX - 3, bossY + 11, 6, 6);
+      ctx.fillStyle = "#f3d57f";
+      ctx.fillRect(bossX + 3, bossY + 13, 5, 2);
+      ctx.fillStyle = "#1a283f";
+      ctx.fillRect(bossX - 1, bossY + 12, 3, 3);
+      ctx.fillStyle = "#f4f7ff";
+      ctx.fillRect(bossX, bossY + 13, 1, 1);
+
+      ctx.fillStyle = "#2b9cc4";
+      ctx.fillRect(bossX - 18, bossY + 8, 8, 14);
+      ctx.fillRect(bossX + 10, bossY + 8, 8, 14);
+      ctx.fillStyle = "#6fe3ef";
+      ctx.fillRect(bossX - 15, bossY + 11, 2, 7);
+      ctx.fillRect(bossX + 13, bossY + 11, 2, 7);
+
+      if (t < 152) {
+        drawTextPanel([
+          "ステージ1終点: ネオンアリーナに到着。",
+          "ゲートの先で孔雀ボスが待ち構える。",
+        ]);
+      } else {
+        drawTextPanel([
+          "孔雀ボス出現! 突進と羽弾を見切って倒せ。",
+          "倒せばSTAGE 2の都会中心部へ進める。",
+        ]);
+      }
+      drawCutscenePolish(t, 0.62);
+
+      ctx.fillStyle = "rgba(0,0,0,0.44)";
+      ctx.fillRect(90, 8, 140, 14);
+      ctx.fillStyle = "#f4f3ff";
+      ctx.font = "9px monospace";
+      ctx.textBaseline = "top";
+      ctx.fillText("タップ / Enter でスキップ", 101, 11);
+      return;
+    }
+
     if (rawT < 0) {
       drawWorld();
       const enterRatio = clamp((rawT + PRE_BOSS_ENTRY_DURATION) / PRE_BOSS_ENTRY_DURATION, 0, 1);
@@ -6818,6 +7520,10 @@
       ctx.fillRect(barX + 1, barY + 1, Math.floor((barW - 2) * ratio), 4);
     }
 
+    ctx.fillStyle = "rgba(235, 245, 255, 0.9)";
+    ctx.font = "8px monospace";
+    ctx.fillText(`STAGE ${currentStageNumber}`, W - 56, 6);
+
     if (hurtFlashTimer > 0 && (gameState === STATE.PLAY || gameState === STATE.BOSS)) {
       const flash = clamp(hurtFlashTimer / 24, 0, 1);
       ctx.fillStyle = `rgba(255, 130, 130, ${0.18 * flash})`;
@@ -6881,6 +7587,47 @@
 
   function drawClearOverlay() {
     const t = clearTimer;
+    if (currentStageNumber < FINAL_STAGE_NUMBER) {
+      drawCutsceneCityBackdrop(t * 0.85, false);
+      const heroX = 102 + Math.sin(t * 0.08) * 1.2;
+      const heroY = 106;
+      drawHero(heroX, heroY, 1, t * 1.02, 1.06);
+
+      ctx.fillStyle = "#24324b";
+      ctx.fillRect(186, 110, 18, 24);
+      ctx.fillStyle = "#1b6f9e";
+      ctx.fillRect(183, 112, 10, 14);
+      ctx.fillStyle = "#63d9f0";
+      ctx.fillRect(184, 115, 2, 5);
+      ctx.fillStyle = "#f0cc72";
+      ctx.fillRect(193, 118, 4, 2);
+      ctx.fillStyle = "#fff5d3";
+      ctx.fillRect(191, 106, 8, 2);
+      ctx.fillStyle = "#ff9d8d";
+      ctx.fillRect(197, 112, 2, 2);
+
+      const cardW = 230;
+      const cardX = Math.floor((W - cardW) * 0.5);
+      ctx.fillStyle = "rgba(9,12,20,0.82)";
+      ctx.fillRect(cardX, 34, cardW, 70);
+      ctx.strokeStyle = "rgba(170, 216, 255, 0.75)";
+      ctx.strokeRect(cardX, 34, cardW, 70);
+      ctx.fillStyle = "#9bd8ff";
+      ctx.font = "12px monospace";
+      ctx.fillText("STAGE 1 CLEAR", cardX + 58, 46);
+      ctx.fillStyle = "#f0f5ff";
+      ctx.font = "9px monospace";
+      ctx.fillText("孔雀ボスを撃破! りらはさらに奥の都会エリアへ。", cardX + 17, 64);
+      ctx.fillText("次はマンション街区、STAGE 2が始まる。", cardX + 34, 76);
+
+      drawTextPanel([
+        "STAGE 2 へ移動中...",
+        "Tap / Enter で先へ進む",
+      ]);
+      drawCutscenePolish(t, 0.68);
+      return;
+    }
+
     if (t < 180) {
       drawCutsceneCityBackdrop(t * 0.8, true);
       const carryBob = Math.sin(t * 0.14) * 1.3;
