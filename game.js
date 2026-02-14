@@ -5756,6 +5756,7 @@
 
     if (input.attack && attackCooldown <= 0 && attackChargeTimer > 0) {
       const chargeRatio = clamp(attackChargeTimer / ATTACK_CHARGE_MAX, 0, 1);
+      const waveReady = attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN;
       const spearReady = attackChargeTimer >= ATTACK_SPEAR_CHARGE_MIN && attackChargeTimer < ATTACK_WAVE_CHARGE_MIN;
       const auraA = 0.12 + chargeRatio * 0.2;
       const auraB = 0.1 + chargeRatio * 0.18;
@@ -5775,6 +5776,40 @@
       ctx.fillRect(barX, barY, barW, 4);
       ctx.fillStyle = chargeRatio >= ATTACK_WAVE_CHARGE_MIN / ATTACK_CHARGE_MAX ? "#ffcf72" : spearReady ? "#d6f5ff" : "#89e4ff";
       ctx.fillRect(barX + 1, barY + 1, Math.max(1, Math.floor((barW - 2) * chargeRatio)), 2);
+
+      // Thin, translucent reach preview while charging.
+      const previewReach = waveReady
+        ? 22 + Math.floor(chargeRatio * 40)
+        : spearReady
+          ? 26 + Math.floor(chargeRatio * 30)
+          : 12 + Math.floor(chargeRatio * 50);
+      const previewY = player.y + (spearReady ? 9 : waveReady ? 4 : 6);
+      const previewH = spearReady
+        ? 8 + Math.floor(chargeRatio * 3)
+        : 13 + Math.floor(chargeRatio * 8);
+      const previewX = dir > 0
+        ? player.x + player.w - 1
+        : player.x - previewReach + 1;
+      const px = Math.floor(previewX - cameraX);
+      const py = Math.floor(previewY);
+      const pw = Math.max(2, Math.floor(previewReach));
+      const ph = Math.max(3, Math.floor(previewH));
+      const previewPulse = 0.5 + Math.sin(player.anim * 0.24) * 0.5;
+      const fillAlpha = 0.035 + chargeRatio * 0.055 + previewPulse * 0.01;
+      const edgeAlpha = 0.1 + chargeRatio * 0.09;
+      const midAlpha = 0.08 + chargeRatio * 0.06;
+      const previewTone = waveReady
+        ? "255, 214, 135"
+        : spearReady
+          ? "176, 234, 255"
+          : "162, 226, 255";
+
+      ctx.fillStyle = `rgba(${previewTone}, ${fillAlpha})`;
+      ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = `rgba(${previewTone}, ${edgeAlpha})`;
+      ctx.strokeRect(px, py, pw, ph);
+      ctx.fillStyle = `rgba(255, 255, 255, ${midAlpha})`;
+      ctx.fillRect(px + 1, py + Math.floor(ph * 0.5), Math.max(1, pw - 2), 1);
 
       if (chargeRatio >= 0.98) {
         for (let i = 0; i < 8; i += 1) {
