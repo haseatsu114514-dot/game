@@ -198,7 +198,8 @@
   const DASH_JUMP_GRAVITY_MULT = 0.84;
   const ATTACK_CHARGE_MAX = 132;
   const ATTACK_WAVE_CHARGE_MIN = ATTACK_CHARGE_MAX;
-  const ATTACK_SPEAR_CHARGE_MIN = ATTACK_CHARGE_MAX * 0.55;
+  const ATTACK_MORNINGSTAR_CHARGE_MIN = ATTACK_CHARGE_MAX * 0.3;
+  const ATTACK_MORNINGSTAR_LONG_MIN = ATTACK_CHARGE_MAX * 0.6;
   const ATTACK_COMBO_TAP_MAX = 14;
   const ATTACK_PUNCH_COOLDOWN = 10;
   const ATTACK_WAVE_COOLDOWN = 28;
@@ -3179,7 +3180,8 @@
     const forcePunch = options.forcePunch === true;
     const chargeRatio = clamp(chargeFrames / ATTACK_CHARGE_MAX, 0, 1);
     const strongWave = !forcePunch && chargeFrames >= ATTACK_WAVE_CHARGE_MIN - 0.01;
-    const morningStarStrike = !forcePunch && !comboPunch && !strongWave && chargeFrames >= ATTACK_SPEAR_CHARGE_MIN;
+    const morningStarStrike = !forcePunch && !comboPunch && !strongWave && chargeFrames >= ATTACK_MORNINGSTAR_CHARGE_MIN;
+    const morningStarLong = morningStarStrike && chargeFrames >= ATTACK_MORNINGSTAR_LONG_MIN;
     const comboYOffset = comboType === "kick" ? 5 : comboType === "upper" ? -2 : 2;
     const comboBaseY = comboType === "kick" ? 11 : comboType === "upper" ? 4 : 6;
     const strikeYOffset = strongWave ? 0 : morningStarStrike ? 0 : comboPunch ? comboYOffset : 2;
@@ -3195,7 +3197,7 @@
     const reach = strongWave
       ? 22 + Math.floor(chargeRatio * 40)
       : morningStarStrike
-        ? 22 + Math.floor(chargeRatio * 28)
+        ? 20 + Math.floor(chargeRatio * 18) + (morningStarLong ? 10 : 0)
       : comboPunch
         ? 12 + comboStage * 4 + comboReachBonus + Math.floor(chargeRatio * 4)
         : 12 + Math.floor(chargeRatio * 50);
@@ -3250,7 +3252,7 @@
         enemy.vy,
         -(
           morningStarStrike
-            ? 2.8 + chargeRatio * 0.9
+            ? 2.8 + chargeRatio * 0.9 + (morningStarLong ? 0.4 : 0)
             : 3.4 + chargeRatio * 1.3 + comboStage * 0.14 + comboVyBonus
         )
       );
@@ -3280,8 +3282,8 @@
       stage.boss.invuln = morningStarStrike
         ? (bossDamageBonus() > 0 ? 9 : 13)
         : (bossDamageBonus() > 0 ? 11 : 15);
-      stage.boss.vx += dir * (0.62 + chargeRatio * 0.38 + comboVxBonus * 0.45 + (morningStarStrike ? 0.34 : 0));
-      stage.boss.vy = Math.min(stage.boss.vy, -(morningStarStrike ? 1.72 + chargeRatio * 0.24 : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5));
+      stage.boss.vx += dir * (0.62 + chargeRatio * 0.38 + comboVxBonus * 0.45 + (morningStarStrike ? (morningStarLong ? 0.52 : 0.34) : 0));
+      stage.boss.vy = Math.min(stage.boss.vy, -(morningStarStrike ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0) : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5));
       hitX = stage.boss.x + stage.boss.w * 0.5;
       hitY = stage.boss.y + stage.boss.h * (morningStarStrike ? 0.34 : 0.45);
       hits += 1;
@@ -3325,10 +3327,10 @@
 
     triggerKickBurst(hitX, hitY, 1.6 + chargeRatio * 1.2 + comboStage * 0.32 + hits * 0.08);
     triggerImpact(
-      1.9 + chargeRatio * 1.4 + comboStage * 0.28 + (morningStarStrike ? 0.5 : 0) + (strongWave ? 0.9 : 0),
+      1.9 + chargeRatio * 1.4 + comboStage * 0.28 + (morningStarStrike ? (morningStarLong ? 0.72 : 0.5) : 0) + (strongWave ? 0.9 : 0),
       hitX,
       hitY,
-      3.1 + chargeRatio * 1.1 + comboStage * 0.35 + (morningStarStrike ? 0.62 : 0) + (strongWave ? 1.3 : 0)
+      3.1 + chargeRatio * 1.1 + comboStage * 0.35 + (morningStarStrike ? (morningStarLong ? 0.84 : 0.62) : 0) + (strongWave ? 1.3 : 0)
     );
     if (strongWave) {
       spawnWaveBurst(hitX, hitY, 1.0 + chargeRatio * 0.8);
@@ -6703,7 +6705,8 @@
     if (showingChargeReach) {
       const chargeRatio = clamp(attackChargeTimer / ATTACK_CHARGE_MAX, 0, 1);
       const waveReady = attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN;
-      const morningStarReady = attackChargeTimer >= ATTACK_SPEAR_CHARGE_MIN && attackChargeTimer < ATTACK_WAVE_CHARGE_MIN;
+      const morningStarReady = attackChargeTimer >= ATTACK_MORNINGSTAR_CHARGE_MIN && attackChargeTimer < ATTACK_WAVE_CHARGE_MIN;
+      const morningStarLongReady = attackChargeTimer >= ATTACK_MORNINGSTAR_LONG_MIN && attackChargeTimer < ATTACK_WAVE_CHARGE_MIN;
       const auraA = 0.12 + chargeRatio * 0.2;
       const auraB = 0.1 + chargeRatio * 0.18;
       const pulse = 0.5 + Math.sin(player.anim * 0.3) * 0.5;
@@ -6727,7 +6730,7 @@
       const previewReach = waveReady
         ? 22 + Math.floor(chargeRatio * 40)
         : morningStarReady
-          ? 22 + Math.floor(chargeRatio * 28)
+          ? 20 + Math.floor(chargeRatio * 18) + (morningStarLongReady ? 10 : 0)
           : 12 + Math.floor(chargeRatio * 50);
       const previewY = player.y + (morningStarReady ? -2 : waveReady ? 4 : 6);
       const previewH = morningStarReady
@@ -6747,7 +6750,7 @@
       const previewTone = waveReady
         ? "255, 214, 135"
         : morningStarReady
-          ? "176, 234, 255"
+          ? (morningStarLongReady ? "196, 242, 255" : "176, 234, 255")
           : "162, 226, 255";
 
       ctx.fillStyle = `rgba(${previewTone}, ${fillAlpha})`;
