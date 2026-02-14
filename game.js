@@ -6768,22 +6768,83 @@
       ctx.fillRect(flareX - 2, baseY - 4, 4, 8);
       ctx.fillRect(flareX - 6, baseY - 1, 12, 2);
     } else if (isSpear) {
-      const shaftLen = Math.floor(18 + effectPower * 28 + (1 - ratio) * 4);
-      const shaftY = baseY;
-      const shaftX = dir > 0 ? frontX + 4 : frontX - shaftLen - 4;
-      const tipBase = dir > 0 ? shaftX + shaftLen : shaftX - 4;
-      ctx.fillStyle = "rgba(214, 240, 255, 0.88)";
-      ctx.fillRect(shaftX, shaftY, shaftLen, 1);
-      ctx.fillStyle = "rgba(126, 178, 214, 0.8)";
-      ctx.fillRect(shaftX, shaftY + 1, Math.max(2, shaftLen - 1), 1);
-      ctx.fillStyle = "rgba(255, 240, 170, 0.92)";
-      ctx.fillRect(tipBase, shaftY - 1, 4, 4);
-      ctx.fillStyle = "rgba(255, 214, 120, 0.9)";
-      ctx.fillRect(tipBase + 1, shaftY, 2, 2);
+      const shaftLen = Math.floor(20 + effectPower * 30 + (1 - ratio) * 5);
+      const shaftY = baseY - 1;
+      const shaftX = dir > 0 ? frontX + 3 : frontX - shaftLen - 3;
+      const tipBase = dir > 0 ? shaftX + shaftLen - 1 : shaftX;
+      const buttX = dir > 0 ? shaftX - 2 : shaftX + shaftLen + 1;
+      const pulse = 0.5 + Math.sin((attackEffectPhase + effectPower * 3) * 0.8) * 0.5;
+
       for (let i = 0; i < 3; i += 1) {
-        const sparkY = shaftY - 3 + i * 2;
-        const sparkX = dir > 0 ? tipBase + 2 : tipBase;
-        ctx.fillStyle = `rgba(255, 252, 214, ${0.42 - i * 0.1})`;
+        const trailAlpha = 0.16 + (1 - ratio) * 0.12 - i * 0.04 + pulse * 0.03;
+        const tw = Math.max(6, Math.floor(shaftLen * (0.42 - i * 0.1)));
+        const tx = dir > 0
+          ? shaftX + Math.floor(shaftLen * 0.24) - i * 2
+          : shaftX + shaftLen - Math.floor(shaftLen * 0.24) - tw + i * 2;
+        const ty = shaftY - 3 + i * 2;
+        ctx.fillStyle = `rgba(150, 220, 255, ${Math.max(0.05, trailAlpha)})`;
+        ctx.fillRect(tx, ty, tw, 1);
+      }
+
+      ctx.fillStyle = "#7a5735";
+      ctx.fillRect(shaftX, shaftY, shaftLen, 3);
+      ctx.fillStyle = "#a27b4c";
+      ctx.fillRect(shaftX, shaftY, shaftLen, 1);
+      ctx.fillStyle = "#5a4129";
+      ctx.fillRect(shaftX, shaftY + 2, shaftLen, 1);
+
+      const gripW = Math.min(9, Math.max(5, Math.floor(shaftLen * 0.22)));
+      const gripX = dir > 0 ? shaftX + 2 : shaftX + shaftLen - gripW - 2;
+      ctx.fillStyle = "#33261a";
+      ctx.fillRect(gripX, shaftY, gripW, 3);
+      ctx.fillStyle = "rgba(209, 186, 142, 0.55)";
+      for (let i = 1; i < gripW - 1; i += 2) {
+        ctx.fillRect(gripX + i, shaftY, 1, 3);
+      }
+
+      ctx.fillStyle = "#91a8c3";
+      ctx.fillRect(buttX, shaftY, 2, 3);
+      ctx.fillStyle = "#d8e7f9";
+      ctx.fillRect(buttX, shaftY, 1, 1);
+
+      if (dir > 0) {
+        const hx = tipBase;
+        ctx.fillStyle = "#7088a8";
+        ctx.fillRect(hx - 2, shaftY - 2, 2, 7);
+        ctx.fillStyle = "#8ca6c4";
+        ctx.fillRect(hx - 3, shaftY - 2, 4, 1);
+        ctx.fillRect(hx - 3, shaftY + 4, 4, 1);
+
+        ctx.fillStyle = "#8da8c8";
+        ctx.fillRect(hx, shaftY - 1, 4, 5);
+        ctx.fillRect(hx + 4, shaftY, 2, 3);
+        ctx.fillStyle = "#e8f3ff";
+        ctx.fillRect(hx + 1, shaftY, 3, 1);
+        ctx.fillRect(hx + 2, shaftY + 1, 2, 1);
+        ctx.fillStyle = "#f8fcff";
+        ctx.fillRect(hx + 5, shaftY + 1, 1, 1);
+      } else {
+        const hx = tipBase;
+        ctx.fillStyle = "#7088a8";
+        ctx.fillRect(hx + 1, shaftY - 2, 2, 7);
+        ctx.fillStyle = "#8ca6c4";
+        ctx.fillRect(hx, shaftY - 2, 4, 1);
+        ctx.fillRect(hx, shaftY + 4, 4, 1);
+
+        ctx.fillStyle = "#8da8c8";
+        ctx.fillRect(hx - 4, shaftY - 1, 4, 5);
+        ctx.fillRect(hx - 6, shaftY, 2, 3);
+        ctx.fillStyle = "#e8f3ff";
+        ctx.fillRect(hx - 4, shaftY, 3, 1);
+        ctx.fillRect(hx - 4, shaftY + 1, 2, 1);
+        ctx.fillStyle = "#f8fcff";
+        ctx.fillRect(hx - 6, shaftY + 1, 1, 1);
+      }
+
+      for (let i = 0; i < 3; i += 1) {
+        const sparkY = shaftY - 4 + i * 3;
+        const sparkX = dir > 0 ? tipBase + 4 : tipBase - 4;
+        ctx.fillStyle = `rgba(255, 252, 214, ${0.44 - i * 0.1 + pulse * 0.06})`;
         ctx.fillRect(sparkX, sparkY, 2, 1);
       }
     } else if (isCombo) {
