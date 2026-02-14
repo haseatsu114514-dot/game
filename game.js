@@ -2464,12 +2464,31 @@
     setBgmVolume(BGM_NORMAL_VOL, 0.08);
   }
 
+  function findPreMansionCheckpointIndex() {
+    if (!stage || !stage.checkpoints || stage.checkpoints.length === 0) return checkpointIndex;
+    const goalX = stage.goal && typeof stage.goal.x === "number"
+      ? stage.goal.x
+      : Infinity;
+    let bestIndex = 0;
+    let bestX = -Infinity;
+    for (let i = 0; i < stage.checkpoints.length; i += 1) {
+      const cp = stage.checkpoints[i];
+      if (!cp) continue;
+      if (cp.x >= goalX) continue;
+      if (cp.x > bestX) {
+        bestX = cp.x;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
   function respawnFromBossBattle() {
+    checkpointIndex = findPreMansionCheckpointIndex();
     respawnFromCheckpoint();
-    startBossBattle();
     deathContinueMode = "checkpoint";
-    hudMessage = "神との戦いからコンティニュー";
-    hudTimer = 90;
+    hudMessage = "マンション前から再開";
+    hudTimer = 96;
   }
 
   function updateCheckpointTokens(dt) {
