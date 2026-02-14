@@ -131,6 +131,8 @@
   let stageMusicFadeDuration = 0;
   let stageMusicFadeStart = 0;
   let stageMusicFadeEnd = 0;
+  let bossMusic = null;
+  let bossMusicPrimed = false;
   let invincibleMusic = null;
   let invincibleMusicPrimed = false;
   let invincibleMusicFadeTimer = 0;
@@ -167,6 +169,7 @@
   ];
   const BGM_NORMAL_VOL = 0.38;
   const BGM_DEAD_VOL = 0.14;
+  const BOSS_BGM_VOL = 0.41;
   const INVINCIBLE_BGM_VOL = 0.44;
   const CLEAR_BGM_VOL = 0.4;
   const SE_GAIN_BOOST = 1.42;
@@ -175,6 +178,7 @@
   const INVINCIBLE_BONUS_POP_LIFE = 44;
   const INVINCIBLE_BGM_FADE_SEC = 1.2;
   const STAGE_BGM_PATH = "assets/stage_bgm.mp3";
+  const BOSS_BGM_PATH = "assets/boss_bgm.mp3";
   const INVINCIBLE_BGM_PATH = "assets/invincible_bgm.mp3";
   const WEAPON_DURATION = 600;
   const PROTEIN_BURST_REQUIRE = 15;
@@ -279,6 +283,14 @@
     stageMusic.preload = "auto";
   }
 
+  function ensureBossMusic() {
+    if (bossMusic) return;
+    bossMusic = new Audio(BOSS_BGM_PATH);
+    bossMusic.loop = true;
+    bossMusic.volume = BOSS_BGM_VOL;
+    bossMusic.preload = "auto";
+  }
+
   function startStageMusic(fromStart = false) {
     ensureStageMusic();
     if (!stageMusic) return;
@@ -303,6 +315,32 @@
       stageMusic.pause();
       if (resetToStart) {
         stageMusic.currentTime = 0;
+      }
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
+  }
+
+  function startBossMusic(fromStart = false) {
+    ensureBossMusic();
+    if (!bossMusic) return;
+    try {
+      if (fromStart) {
+        bossMusic.currentTime = 0;
+      }
+      bossMusic.volume = clamp(bossMusic.volume || BOSS_BGM_VOL, 0, 1);
+      bossMusic.play().catch(() => {});
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
+  }
+
+  function stopBossMusic(resetToStart = false) {
+    if (!bossMusic) return;
+    try {
+      bossMusic.pause();
+      if (resetToStart) {
+        bossMusic.currentTime = 0;
       }
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
@@ -355,6 +393,7 @@
     if (gameState !== STATE.PLAY) return;
 
     ensureStageMusic();
+    stopBossMusic(false);
     if (!stageMusic) return;
     stageMusicFadeTimer = 0;
     stageMusicFadeDuration = 0;
@@ -437,6 +476,7 @@
     openingThemeActive = false;
     pendingStageResumeAfterInvincible = false;
     stopStageMusic(false);
+    stopBossMusic(false);
     ensureInvincibleMusic();
     if (!invincibleMusic) return true;
     invincibleMusicFadeTimer = 0;
@@ -470,6 +510,7 @@
     openingThemeActive = true;
     invincibleMusicFadeTimer = 0;
     invincibleMusicFadeDuration = 0;
+    stopBossMusic(false);
     stopStageMusic(true);
 
     try {
@@ -526,24 +567,21 @@
   }
 
   function startBossTheme() {
-    openingThemeActive = true;
+    openingThemeActive = false;
     pendingStageResumeAfterInvincible = false;
-    ensureInvincibleMusic();
-    if (!invincibleMusic) return;
-    invincibleMusicFadeTimer = 0;
-    invincibleMusicFadeDuration = 0;
+    ensureBossMusic();
+    if (!bossMusic) return;
+    stopInvincibleMusic();
     stopStageMusic(true);
 
     try {
-      invincibleMusic.muted = false;
-      invincibleMusic.volume = INVINCIBLE_BGM_VOL;
-      invincibleMusic.currentTime = 0;
-      invincibleMusic.play().catch(() => {});
+      bossMusic.muted = false;
+      bossMusic.volume = BOSS_BGM_VOL;
+      bossMusic.currentTime = 0;
+      bossMusic.play().catch(() => {});
     } catch (_e) {
       openingThemeActive = false;
-      startStageMusic(true);
-      setBgmVolume(0, 0);
-      setBgmVolume(BGM_NORMAL_VOL, 0.12);
+      startBossMusic(true);
       // Ignore media errors and keep gameplay responsive.
     }
   }
@@ -551,6 +589,7 @@
   function startClearTheme() {
     openingThemeActive = false;
     pendingStageResumeAfterInvincible = false;
+    stopBossMusic(true);
     stopStageMusic(true);
     ensureInvincibleMusic();
     if (!invincibleMusic) return;
@@ -677,6 +716,35 @@
             invincibleMusic.pause();
             invincibleMusic.currentTime = 0;
             invincibleMusic.muted = false;
+          }
+        }
+      } catch (_e) {
+        // Ignore media errors and keep gameplay responsive.
+      }
+    }
+
+    ensureBossMusic();
+    if (bossMusic && !bossMusicPrimed) {
+      bossMusicPrimed = true;
+      try {
+        if (bossMusic.paused) {
+          bossMusic.muted = true;
+          const priming = bossMusic.play();
+          if (priming && typeof priming.then === "function") {
+            priming.then(() => {
+              bossMusic.pause();
+              bossMusic.currentTime = 0;
+              bossMusic.muted = false;
+              bossMusic.volume = BOSS_BGM_VOL;
+            }).catch(() => {
+              bossMusic.muted = false;
+              bossMusic.volume = BOSS_BGM_VOL;
+            });
+          } else {
+            bossMusic.pause();
+            bossMusic.currentTime = 0;
+            bossMusic.muted = false;
+            bossMusic.volume = BOSS_BGM_VOL;
           }
         }
       } catch (_e) {
@@ -2452,6 +2520,7 @@
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     stopInvincibleMusic();
+    stopBossMusic(true);
     stopStageMusic(true);
     proteinRushTimer = 0;
     proteinBurstTimer = 0;
@@ -2577,6 +2646,7 @@
       deaths = previousDeaths;
     }
     stopInvincibleMusic();
+    stopBossMusic(true);
     gameState = STATE.PLAY;
     hudMessage = stageStartMessage();
     hudTimer = currentStageNumber <= 1 ? 150 : 170;
@@ -2645,6 +2715,7 @@
     deathJumpVy = 0;
     deadReason = "";
     stopInvincibleMusic();
+    stopBossMusic(true);
     gameState = STATE.PLAY;
     hudMessage = `${cp.label} から再開`;
     hudTimer = 70;
@@ -3965,6 +4036,20 @@
       gimmick.charge = 0;
       gimmick.cooldown = 24 + gimmick.id * 6;
     }
+    stopBossMusic(false);
+    ensureInvincibleMusic();
+    if (invincibleMusic) {
+      invincibleMusicFadeTimer = 0;
+      invincibleMusicFadeDuration = 0;
+      try {
+        invincibleMusic.muted = false;
+        invincibleMusic.volume = INVINCIBLE_BGM_VOL;
+        invincibleMusic.currentTime = 0;
+        invincibleMusic.play().catch(() => {});
+      } catch (_e) {
+        // Ignore media errors and keep gameplay responsive.
+      }
+    }
     triggerImpact(3.6, b.x + b.w * 0.5, b.y + b.h * 0.45, 6.4);
     playBossStartSfx();
     playKickSfx(2.18);
@@ -4874,6 +4959,7 @@
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     stopInvincibleMusic();
+    stopBossMusic(true);
     stage.playerWaves = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
@@ -5192,6 +5278,7 @@
     waveBursts = [];
     invincibleBonusPops = [];
     stopInvincibleMusic();
+    stopBossMusic(true);
     stopStageMusic(true);
     gameState = STATE.TITLE;
     startOpeningTheme();
@@ -5214,6 +5301,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     stopInvincibleMusic();
+    stopBossMusic(true);
     stopStageMusic(true);
     startGameplay(false, { keepLives: true, keepDeaths: true });
   }
