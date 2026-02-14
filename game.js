@@ -1876,7 +1876,7 @@
       return {
         id: 1,
         theme: "city_basic",
-        width: 4760,
+        width: 4860,
         groundY,
         solids,
         enemies,
@@ -1894,15 +1894,16 @@
         hazardBullets: [],
         bossShots: [],
         godGimmicks: [],
+        bossArenaControl: null,
         playerWaves: [],
         checkpoints,
-        goal: { x: 4300, y: 112, w: 24, h: 48 },
-        bossArena: { minX: 4380, maxX: 4660 },
+        goal: { x: 4208, y: 112, w: 24, h: 48 },
+        bossArena: { minX: 4260, maxX: 4740 },
         boss: {
           kind: "peacock",
           started: false,
           active: false,
-          x: 4490,
+          x: 4500,
           y: 124,
           w: 24,
           h: 36,
@@ -2180,10 +2181,11 @@
       hazardBullets: [],
       bossShots: [],
       godGimmicks: [],
+      bossArenaControl: null,
       playerWaves: [],
       checkpoints,
-      goal: { x: 8508, y: 112, w: 24, h: 48 },
-      bossArena: { minX: 8340, maxX: 8660 },
+      goal: { x: 8108, y: 112, w: 24, h: 48 },
+      bossArena: { minX: 8160, maxX: 8840 },
       boss: {
         kind: "god",
         started: false,
@@ -2232,6 +2234,156 @@
       shootCooldown: 0,
       flash: 0,
     };
+  }
+
+  function bossArenaControlRatio() {
+    if (!stage || !stage.bossArenaControl || !stage.bossArenaControl.active) return 0;
+    const control = stage.bossArenaControl;
+    const total = Math.max(1, (control.totalGimmicks || 0) + (control.totalAdds || 0));
+    const cleared = (control.brokenGimmicks || 0) + (control.defeatedAdds || 0);
+    return clamp(cleared / total, 0, 1);
+  }
+
+  function updateBossArenaControlState() {
+    if (!stage || !stage.bossArenaControl) return;
+    const control = stage.bossArenaControl;
+    control.ratio = bossArenaControlRatio();
+    control.bonusTier = control.ratio >= 0.78 ? 2 : (control.ratio >= 0.42 ? 1 : 0);
+  }
+
+  function registerBossArenaTargetDestroyed(kind, x, y) {
+    if (gameState !== STATE.BOSS || !stage || !stage.bossArenaControl || !stage.bossArenaControl.active) return;
+    const control = stage.bossArenaControl;
+    if (kind === "enemy") {
+      control.defeatedAdds = Math.min(control.totalAdds || 0, (control.defeatedAdds || 0) + 1);
+    } else {
+      control.brokenGimmicks = Math.min(control.totalGimmicks || 0, (control.brokenGimmicks || 0) + 1);
+    }
+    const beforeTier = control.bonusTier || 0;
+    updateBossArenaControlState();
+    if ((control.bonusTier || 0) > beforeTier) {
+      hudMessage = control.bonusTier >= 2 ? "制圧MAX! ボス弱体化" : "制圧中! ボス弱体化";
+      hudTimer = Math.max(hudTimer, 44);
+      playCheckpointSfx();
+      playParrySfx();
+    }
+    if (typeof x === "number" && typeof y === "number") {
+      triggerImpact(1.05, x, y, 1.9);
+    }
+  }
+
+  function setupBossArenaThreats(bossKind) {
+    if (!stage || !stage.boss || !BOSS_ARENA) return;
+    const minX = BOSS_ARENA.minX;
+    const maxX = BOSS_ARENA.maxX;
+    const span = maxX - minX;
+    const center = (minX + maxX) * 0.5;
+    let totalGimmicks = 0;
+    let totalAdds = 0;
+
+    const addBossCannon = (x, dir, interval, cool) => {
+      stage.cannons.push({
+        x: Math.floor(clamp(x, minX + 24, maxX - 24)),
+        y: stage.groundY - 18,
+        dir,
+        triggerX: minX - 999,
+        interval,
+        cool,
+        active: true,
+        destroyed: false,
+        debrisTimer: 0,
+        warning: false,
+        muzzleFlash: 0,
+        bossArenaTarget: true,
+      });
+      totalGimmicks += 1;
+    };
+
+    const addBossFallBlock = (x, warnDuration) => {
+      stage.fallBlocks.push({
+        x: Math.floor(clamp(x, minX + 34, maxX - 54)),
+        y: 8,
+        w: 22,
+        h: 46,
+        triggerX: minX - 999,
+        state: "warning",
+        vy: 0,
+        timer: warnDuration,
+        warnDuration: warnDuration,
+        destroyed: false,
+        debrisTimer: 0,
+        bossArenaTarget: true,
+      });
+      totalGimmicks += 1;
+    };
+
+    const addBossGuest = (x, minRange, maxRange, dir, shooter, speed = 0.34) => {
+      const guest = createPartyGoon(
+        Math.floor(clamp(x, minX + 20, maxX - 20)),
+        Math.floor(clamp(minRange, minX + 10, maxX - 20)),
+        Math.floor(clamp(maxRange, minX + 20, maxX - 10)),
+        dir
+      );
+      guest.speed = speed;
+      guest.bossArenaTarget = true;
+      guest.bossArenaCounted = false;
+      guest.flash = 0;
+      if (shooter) {
+        guest.shooter = true;
+        guest.shootInterval = 110 + Math.random() * 18;
+        guest.shootCooldown = 44 + Math.random() * 26;
+      }
+      stage.enemies.push(guest);
+      totalAdds += 1;
+    };
+
+    if (bossKind === "peacock") {
+      addBossCannon(minX + span * 0.14, 1, 126, 42);
+      addBossCannon(center, -1, 138, 62);
+      addBossCannon(maxX - span * 0.14, -1, 118, 34);
+      addBossFallBlock(minX + span * 0.3, 20);
+      addBossFallBlock(maxX - span * 0.3, 36);
+
+      addBossGuest(minX + span * 0.2, minX + 20, center - 30, 1, true, 0.35);
+      addBossGuest(center + span * 0.08, center - 20, maxX - 30, -1, false, 0.36);
+      addBossGuest(maxX - span * 0.2, center + 24, maxX - 20, -1, true, 0.37);
+    } else {
+      for (let i = 0; i < stage.enemies.length; i += 1) {
+        const enemy = stage.enemies[i];
+        enemy.bossArenaTarget = true;
+        enemy.bossArenaCounted = false;
+        enemy.minX = clamp(enemy.minX || minX + 12, minX + 12, maxX - 22);
+        enemy.maxX = clamp(enemy.maxX || maxX - 12, minX + 22, maxX - 12);
+        enemy.speed = 0.32 + (i % 2) * 0.04;
+        enemy.flash = 0;
+        if (i % 2 === 0) {
+          enemy.shooter = true;
+          enemy.shootInterval = 112 + i * 8;
+          enemy.shootCooldown = 42 + i * 8;
+        }
+      }
+      totalAdds += stage.enemies.length;
+
+      addBossGuest(minX + span * 0.24, minX + 20, center - 30, 1, true, 0.35);
+      addBossGuest(maxX - span * 0.24, center + 30, maxX - 20, -1, true, 0.35);
+
+      addBossCannon(minX + span * 0.16, 1, 112, 32);
+      addBossCannon(center, -1, 128, 52);
+      addBossCannon(maxX - span * 0.16, -1, 106, 30);
+      addBossFallBlock(minX + span * 0.34, 18);
+      addBossFallBlock(maxX - span * 0.34, 30);
+    }
+
+    stage.bossArenaControl = {
+      active: true,
+      totalGimmicks,
+      brokenGimmicks: 0,
+      totalAdds,
+      defeatedAdds: 0,
+      ratio: 0,
+      bonusTier: 0,
+    };
+    updateBossArenaControlState();
   }
 
   function collectSolids() {
@@ -2434,6 +2586,10 @@
     spawnEnemyBlood(hitX, hitY, power);
     if (freshDefeat) {
       triggerInvincibleKillBonus(hitX, hitY, power);
+      if (enemy.bossArenaTarget && !enemy.bossArenaCounted) {
+        enemy.bossArenaCounted = true;
+        registerBossArenaTargetDestroyed("enemy", hitX, hitY);
+      }
     }
     enemy.kicked = true;
     enemy.vx = dir * (4.3 + power * 1.55);
@@ -2886,6 +3042,9 @@
     const cx = cannon.x + (cannon.dir > 0 ? 1 : -1);
     const cy = cannon.y + 2;
     spawnGimmickBreakFx(cx, cy, 1.1 + power * 0.4);
+    if (cannon.bossArenaTarget) {
+      registerBossArenaTargetDestroyed("gimmick", cx, cy);
+    }
 
     for (const bullet of stage.hazardBullets) {
       if (bullet.dead || bullet.kind !== "cannon") continue;
@@ -2906,6 +3065,9 @@
     const cx = block.x + block.w * 0.5;
     const cy = block.y + block.h * 0.45;
     spawnGimmickBreakFx(cx, cy, 0.9 + power * 0.35);
+    if (block.bossArenaTarget) {
+      registerBossArenaTargetDestroyed("gimmick", cx, cy);
+    }
     return true;
   }
 
@@ -2916,6 +3078,9 @@
     const cx = solid.x + solid.w * 0.5;
     const cy = solid.y + solid.h * 0.5;
     spawnGimmickBreakFx(cx, cy, 0.84 + power * 0.3);
+    if (solid.bossArenaTarget) {
+      registerBossArenaTargetDestroyed("gimmick", cx, cy);
+    }
     return true;
   }
 
@@ -3924,8 +4089,12 @@
   function bossDamageBonus() {
     if (!stage || !stage.boss) return 0;
     const b = stage.boss;
-    if (b.kind !== "god") return 0;
-    return (b.gimmickAdvantageTimer || 0) > 0 ? 1 : 0;
+    const control = stage.bossArenaControl && stage.bossArenaControl.active
+      ? (stage.bossArenaControl.bonusTier || 0)
+      : 0;
+    const controlBonus = control > 0 ? 1 : 0;
+    if (b.kind !== "god") return controlBonus;
+    return controlBonus + ((b.gimmickAdvantageTimer || 0) > 0 ? 1 : 0);
   }
 
   function handleBossHpZero() {
@@ -4084,6 +4253,8 @@
     if (!hasArenaFloor) {
       stage.solids.push({ x: arenaFloorX, y: stage.groundY, w: arenaFloorW, h: 24, kind: "solid", state: "solid", timer: 0 });
     }
+    stage.cannons = stage.cannons.filter((c) => c.x < BOSS_ARENA.minX - 16 || c.x > BOSS_ARENA.maxX + 16);
+    stage.fallBlocks = stage.fallBlocks.filter((b) => b.x + b.w < BOSS_ARENA.minX - 10 || b.x > BOSS_ARENA.maxX + 10);
 
     stage.boss.started = true;
     stage.boss.active = true;
@@ -4109,6 +4280,7 @@
     stage.boss.phase2MaxHp = bossKind === "god" ? 13 : stage.boss.maxHp;
     stage.bossShots = [];
     stage.godGimmicks = [];
+    stage.bossArenaControl = null;
     stage.playerWaves = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
@@ -4126,6 +4298,7 @@
     } else {
       stage.enemies = [];
     }
+    setupBossArenaThreats(bossKind);
     openingThemeActive = false;
     proteinBurstTimer = 0;
     proteinBurstBlastDone = false;
@@ -4158,8 +4331,8 @@
     triggerImpact(2.4, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.55, 3.4);
     playKickSfx(1.8);
     hudMessage = bossKind === "peacock"
-      ? "STAGE 1 BOSS: 突進と羽弾を避けて孔雀ボスを倒せ"
-      : "ホームパーティー会場突入! 構成員を避けつつ神を倒せ";
+      ? "STAGE 1 BOSS: 妨害を壊して孔雀ボスを弱体化"
+      : "ホームパーティー会場突入! 妨害破壊で神を弱体化";
     hudTimer = bossKind === "peacock" ? 112 : 120;
   }
 
@@ -4170,6 +4343,9 @@
     stage.boss.mode = "down";
     stage.boss.vx = 0;
     stage.boss.vy = 0;
+    if (stage.bossArenaControl) {
+      stage.bossArenaControl.active = false;
+    }
     stage.bossShots = [];
     stage.playerWaves = [];
     attackCooldown = 0;
@@ -4209,9 +4385,17 @@
   function emitPeacockBossShots(boss, rage) {
     const cx = boss.x + boss.w * 0.5 - 2;
     const cy = boss.y + 12;
-    const spread = rage
+    const control = bossArenaControlRatio();
+    let spread = rage
       ? [-0.42, -0.2, 0, 0.2, 0.42]
       : [-0.28, 0, 0.28];
+    if (control >= 0.42) {
+      spread = spread.filter((_s, i) => i % 2 === 0);
+    }
+    if (control >= 0.78) {
+      spread = [0];
+    }
+    const speedMul = 1 - control * 0.16;
     for (const s of spread) {
       stage.bossShots.push({
         kind: "peacock_feather",
@@ -4219,7 +4403,7 @@
         y: cy,
         w: 5,
         h: 4,
-        vx: boss.dir * (1.48 + Math.abs(s) * 0.6),
+        vx: boss.dir * (1.48 + Math.abs(s) * 0.6) * speedMul,
         vy: s * 1.12 - 0.06,
         ttl: rage ? 132 : 116,
         reason: "孔雀ボスの羽弾に被弾",
@@ -4232,9 +4416,12 @@
   function updatePeacockBoss(dt, solids) {
     const boss = stage.boss;
     const rage = boss.hp <= Math.ceil(boss.maxHp * 0.5);
+    const arenaControl = bossArenaControlRatio();
+    const shotDrain = 1 - arenaControl * 0.42;
+    const moveSlow = 1 - arenaControl * 0.18;
     boss.invuln = Math.max(0, boss.invuln - dt);
     boss.modeTimer -= dt;
-    boss.shotCooldown -= dt;
+    boss.shotCooldown -= dt * shotDrain;
 
     if (boss.mode === "intro") {
       boss.vx = -0.42;
@@ -4243,8 +4430,8 @@
         boss.modeTimer = rage ? 34 : 44;
       }
     } else if (boss.mode === "idle") {
-      boss.vx += boss.dir * (rage ? 0.23 : 0.18) * dt;
-      boss.vx = clamp(boss.vx, -(rage ? 1.22 : 1.02), rage ? 1.22 : 1.02);
+      boss.vx += boss.dir * (rage ? 0.23 : 0.18) * moveSlow * dt;
+      boss.vx = clamp(boss.vx, -(rage ? 1.22 : 1.02) * moveSlow, (rage ? 1.22 : 1.02) * moveSlow);
 
       if (boss.x < BOSS_ARENA.minX + 16) {
         boss.x = BOSS_ARENA.minX + 16;
@@ -4277,7 +4464,7 @@
       if (boss.modeTimer <= 0) {
         boss.mode = "dash";
         boss.modeTimer = rage ? 28 : 22;
-        boss.vx = boss.dir * (2.15 + (rage ? 0.36 : 0));
+        boss.vx = boss.dir * (2.15 + (rage ? 0.36 : 0)) * (1 - arenaControl * 0.22);
       }
     } else if (boss.mode === "dash") {
       if (boss.x <= BOSS_ARENA.minX + 3) {
@@ -4298,7 +4485,7 @@
       boss.vx *= Math.pow(rage ? 0.78 : 0.84, dt);
       if (boss.shotCooldown <= 0) {
         emitPeacockBossShots(boss, rage);
-        boss.shotCooldown = rage ? 14 : 18;
+        boss.shotCooldown = (rage ? 14 : 18) * (1 + arenaControl * 0.35);
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -4348,10 +4535,12 @@
   }
 
   function emitBossGroundWave(boss, rage) {
+    const control = bossArenaControlRatio();
     const baseY = stage.groundY - 6;
-    const speed = rage ? 2.48 : 2.16;
+    const speed = (rage ? 2.48 : 2.16) * (1 - control * 0.14);
     const dirs = rage ? [-1, 1, -0.82, 0.82] : [-1, 1];
-    for (const d of dirs) {
+    const waveDirs = control >= 0.78 ? dirs.filter((d) => Math.abs(d) === 1) : dirs;
+    for (const d of waveDirs) {
       stage.bossShots.push({
         kind: "wave",
         x: boss.x + boss.w * 0.5 - 5,
@@ -4372,9 +4561,11 @@
   }
 
   function emitBossRingShots(boss, rage) {
+    const control = bossArenaControlRatio();
     const cx = boss.x + boss.w * 0.5 - 2;
     const cy = boss.y + 12;
-    const count = rage ? 7 : 5;
+    const baseCount = rage ? 7 : 5;
+    const count = Math.max(3, Math.round(baseCount * (1 - control * 0.35)));
     for (let i = 0; i < count; i += 1) {
       const rad = (Math.PI * 2 * i) / count;
       stage.bossShots.push({
@@ -4383,8 +4574,8 @@
         y: cy,
         w: 5,
         h: 5,
-        vx: Math.cos(rad) * (rage ? 1.82 : 1.56),
-        vy: Math.sin(rad) * (rage ? 1.44 : 1.22),
+        vx: Math.cos(rad) * (rage ? 1.82 : 1.56) * (1 - control * 0.14),
+        vy: Math.sin(rad) * (rage ? 1.44 : 1.22) * (1 - control * 0.14),
         ttl: rage ? 132 : 116,
         reason: "神の結界弾に被弾",
       });
@@ -4394,6 +4585,7 @@
   }
 
   function emitBossRainBurst(boss, rage) {
+    const control = bossArenaControlRatio();
     const arenaPad = 16;
     const minX = BOSS_ARENA.minX + arenaPad;
     const maxX = BOSS_ARENA.maxX - arenaPad;
@@ -4403,7 +4595,8 @@
     const targetB = clamp(boss.x + boss.w * 0.5 - offset * 0.46, minX, maxX);
     const targetC = clamp((targetA + targetB) * 0.5 + (Math.random() * 2 - 1) * 18, minX, maxX);
     const targets = rage ? [targetA, targetC] : [targetA, targetB];
-    for (const tx of targets) {
+    const limitedTargets = control >= 0.42 ? [targets[0]] : targets;
+    for (const tx of limitedTargets) {
       stage.bossShots.push({
         kind: "rain_warn",
         x: tx - 3,
@@ -4412,7 +4605,7 @@
         h: 20,
         ttl: rage ? 24 : 28,
         wind: (Math.random() * 2 - 1) * (rage ? 0.1 : 0.08),
-        rainVy: rage ? 2.34 : 2.02,
+        rainVy: (rage ? 2.34 : 2.02) * (1 - control * 0.12),
         reason: "神の落下弾に被弾",
       });
     }
@@ -4421,10 +4614,11 @@
   }
 
   function emitBossSpiralShots(boss, rage) {
+    const control = bossArenaControlRatio();
     const cx = boss.x + boss.w * 0.5 - 2;
     const cy = boss.y + 10;
-    const count = rage ? 6 : 4;
-    const speed = rage ? 1.88 : 1.58;
+    const count = Math.max(3, Math.round((rage ? 6 : 4) * (1 - control * 0.3)));
+    const speed = (rage ? 1.88 : 1.58) * (1 - control * 0.14);
     const base = ((boss.spiralAngle || 0) * Math.PI) / 180;
     for (let i = 0; i < count; i += 1) {
       const ang = base + (Math.PI * 2 * i) / count;
@@ -4445,10 +4639,12 @@
   }
 
   function emitBossNovaShots(boss, rage, phase2 = false) {
+    const control = bossArenaControlRatio();
     const cx = boss.x + boss.w * 0.5 - 2;
     const cy = boss.y + 12;
-    const count = phase2 ? (rage ? 8 : 7) : (rage ? 7 : 5);
-    const speed = phase2 ? (rage ? 2.08 : 1.86) : (rage ? 1.92 : 1.72);
+    const baseCount = phase2 ? (rage ? 8 : 7) : (rage ? 7 : 5);
+    const count = Math.max(3, Math.round(baseCount * (1 - control * 0.34)));
+    const speed = (phase2 ? (rage ? 2.08 : 1.86) : (rage ? 1.92 : 1.72)) * (1 - control * 0.16);
     for (let i = 0; i < count; i += 1) {
       const ang = (Math.PI * 2 * i) / count + (phase2 ? (boss.spiralAngle || 0) * Math.PI / 180 : 0);
       stage.bossShots.push({
@@ -4470,7 +4666,8 @@
   function updateBossShots(dt, solids) {
     const spawned = [];
     const godAdvantageActive = stage && stage.boss && stage.boss.kind === "god" && (stage.boss.gimmickAdvantageTimer || 0) > 0;
-    const shotSpeedMul = godAdvantageActive ? 0.78 : 1;
+    const control = bossArenaControlRatio();
+    const shotSpeedMul = (godAdvantageActive ? 0.78 : 1) * (1 - control * 0.18);
     for (const shot of stage.bossShots) {
       if (shot.dead) continue;
 
@@ -4550,12 +4747,16 @@
       updatePeacockBoss(dt, solids);
       return;
     }
+    const arenaControl = bossArenaControlRatio();
+    const shotDrain = 1 - arenaControl * 0.45;
+    const cooldownMul = 1 + arenaControl * 0.34;
+    const moveSlow = 1 - arenaControl * 0.18;
     const phase = boss.phase || 1;
     const phase2 = phase >= 2;
     const rage = boss.hp <= Math.ceil(boss.maxHp * (phase2 ? 0.6 : 0.55));
     boss.invuln = Math.max(0, boss.invuln - dt);
     boss.modeTimer -= dt;
-    boss.shotCooldown -= dt;
+    boss.shotCooldown -= dt * shotDrain;
     if (boss.gimmickAdvantageTimer > 0) {
       boss.gimmickAdvantageTimer = Math.max(0, boss.gimmickAdvantageTimer - dt);
     }
@@ -4569,12 +4770,12 @@
       boss.spiralAngle = (boss.spiralAngle + (rage ? 8 : 6) * dt) % 360;
       if (boss.shotCooldown <= 0) {
         emitBossNovaShots(boss, true, true);
-        boss.shotCooldown = 18;
+        boss.shotCooldown = 18 * cooldownMul;
       }
       if (boss.phaseTransitionTimer <= 0) {
         boss.mode = "idle";
         boss.modeTimer = 28;
-        boss.shotCooldown = 14;
+        boss.shotCooldown = 14 * cooldownMul;
         boss.invuln = Math.max(boss.invuln, 14);
         hudMessage = "第2形態開始! 電磁パネルで硬直を狙え!";
         hudTimer = 96;
@@ -4597,8 +4798,8 @@
       }
     } else if (boss.mode === "idle") {
       const accelMul = phase2 ? 1.18 : 1;
-      const accel = (rage ? 0.29 : 0.22) * accelMul * (advantageActive ? 0.72 : 1);
-      const moveCap = (rage ? 1.4 : 1.12) * (phase2 ? 1.26 : 1) * (advantageActive ? 0.8 : 1);
+      const accel = (rage ? 0.29 : 0.22) * accelMul * (advantageActive ? 0.72 : 1) * moveSlow;
+      const moveCap = (rage ? 1.4 : 1.12) * (phase2 ? 1.26 : 1) * (advantageActive ? 0.8 : 1) * moveSlow;
       boss.vx += boss.dir * accel * dt;
       boss.vx = clamp(boss.vx, -moveCap, moveCap);
 
@@ -4619,7 +4820,7 @@
         } else if (pattern === 1) {
           boss.mode = "shoot";
           boss.modeTimer = phase2 ? (rage ? 76 : 88) : (rage ? 78 : 66);
-          boss.shotCooldown = phase2 ? (rage ? 10 : 13) : (rage ? 11 : 15);
+          boss.shotCooldown = (phase2 ? (rage ? 10 : 13) : (rage ? 11 : 15)) * cooldownMul;
           boss.shootVolleyCount = 0;
         } else if (pattern === 2) {
           boss.mode = "leap_prep";
@@ -4628,26 +4829,26 @@
         } else if (pattern === 3) {
           boss.mode = "ring";
           boss.modeTimer = phase2 ? (rage ? 78 : 90) : (rage ? 82 : 68);
-          boss.shotCooldown = phase2 ? (rage ? 13 : 17) : (rage ? 14 : 18);
+          boss.shotCooldown = (phase2 ? (rage ? 13 : 17) : (rage ? 14 : 18)) * cooldownMul;
           boss.ringVolleyCount = 0;
           boss.vx *= 0.42;
         } else if (pattern === 4) {
           boss.mode = "rain";
           boss.modeTimer = phase2 ? (rage ? 84 : 98) : (rage ? 94 : 80);
-          boss.shotCooldown = phase2 ? (rage ? 12 : 16) : (rage ? 13 : 17);
+          boss.shotCooldown = (phase2 ? (rage ? 12 : 16) : (rage ? 13 : 17)) * cooldownMul;
           boss.rainVolleyCount = 0;
           boss.vx *= 0.4;
         } else if (pattern === 5) {
           boss.mode = "spiral";
           boss.modeTimer = phase2 ? (rage ? 74 : 86) : (rage ? 88 : 74);
-          boss.shotCooldown = phase2 ? (rage ? 11 : 14) : (rage ? 12 : 16);
+          boss.shotCooldown = (phase2 ? (rage ? 11 : 14) : (rage ? 12 : 16)) * cooldownMul;
           boss.spiralVolleyCount = 0;
           boss.spiralAngle = (boss.spiralAngle + (rage ? 22 : 16)) % 360;
           boss.vx *= 0.35;
         } else if (pattern === 6) {
           boss.mode = "nova";
           boss.modeTimer = rage ? 74 : 88;
-          boss.shotCooldown = rage ? 11 : 15;
+          boss.shotCooldown = (rage ? 11 : 15) * cooldownMul;
           boss.novaVolleyCount = 0;
           boss.vx *= 0.32;
         } else {
@@ -4664,7 +4865,7 @@
         boss.mode = "dash";
         boss.modeTimer = phase2 ? (rage ? 40 : 34) : (rage ? 34 : 28);
         const speedBase = 2.55 + (boss.maxHp - boss.hp) * 0.034 + (rage ? 0.38 : 0) + (phase2 ? 0.52 : 0);
-        boss.vx = boss.dir * speedBase * (advantageActive ? 0.78 : 1);
+        boss.vx = boss.dir * speedBase * (advantageActive ? 0.78 : 1) * (1 - arenaControl * 0.22);
       }
     } else if (boss.mode === "dash") {
       if (boss.x <= BOSS_ARENA.minX + 3) {
@@ -4687,17 +4888,23 @@
       if (boss.shotCooldown <= 0) {
         const aim = player.x + player.w * 0.5 < boss.x + boss.w * 0.5 ? -1 : 1;
         const spread = ((boss.shootVolleyCount || 0) % 3) - 1;
-        const volleyOffsets = phase2
+        let volleyOffsets = phase2
           ? (rage ? [-0.46, -0.28, -0.1, 0.1, 0.28, 0.46] : [-0.32, -0.12, 0.12, 0.32])
           : (rage ? [-0.38, -0.19, 0, 0.19, 0.38] : [-0.22, 0, 0.22]);
+        if (arenaControl >= 0.42) {
+          volleyOffsets = volleyOffsets.filter((_v, i) => i % 2 === 0);
+        }
+        if (arenaControl >= 0.78) {
+          volleyOffsets = [0];
+        }
         for (const offset of volleyOffsets) {
           stage.bossShots.push({
             x: boss.x + boss.w * 0.5 - 2,
             y: boss.y + 10,
             w: phase2 ? 6 : (rage ? 6 : 5),
             h: phase2 ? 6 : (rage ? 6 : 5),
-            vx: aim * (1.68 + Math.abs(spread) * 0.16) + aim * offset * 0.36,
-            vy: -0.56 + spread * 0.18 + offset,
+            vx: (aim * (1.68 + Math.abs(spread) * 0.16) + aim * offset * 0.36) * (1 - arenaControl * 0.16),
+            vy: (-0.56 + spread * 0.18 + offset) * (1 - arenaControl * 0.1),
             ttl: rage ? 148 : 136,
             reason: "神の連射弾に被弾",
           });
@@ -4706,7 +4913,7 @@
         if (phase2 && boss.shootVolleyCount % 2 === 0) {
           emitBossNovaShots(boss, rage, false);
         }
-        boss.shotCooldown = phase2 ? (rage ? 10 : 13) : (rage ? 12 : 17);
+        boss.shotCooldown = (phase2 ? (rage ? 10 : 13) : (rage ? 12 : 17)) * cooldownMul;
       }
 
       if (boss.modeTimer <= 0) {
@@ -4750,7 +4957,7 @@
         if (phase2 && boss.ringVolleyCount % 2 === 0) {
           emitBossNovaShots(boss, rage, false);
         }
-        boss.shotCooldown = phase2 ? (rage ? 13 : 17) : (rage ? 17 : 23);
+        boss.shotCooldown = (phase2 ? (rage ? 13 : 17) : (rage ? 17 : 23)) * cooldownMul;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -4767,7 +4974,7 @@
         if (phase2 && boss.rainVolleyCount % 3 === 0) {
           emitBossRingShots(boss, true);
         }
-        boss.shotCooldown = phase2 ? (rage ? 11 : 15) : (rage ? 16 : 22);
+        boss.shotCooldown = (phase2 ? (rage ? 11 : 15) : (rage ? 16 : 22)) * cooldownMul;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -4785,7 +4992,7 @@
         if (phase2 && boss.spiralVolleyCount % 2 === 0) {
           emitBossNovaShots(boss, rage, true);
         }
-        boss.shotCooldown = phase2 ? (rage ? 9 : 12) : (rage ? 11 : 15);
+        boss.shotCooldown = (phase2 ? (rage ? 9 : 12) : (rage ? 11 : 15)) * cooldownMul;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -4802,7 +5009,7 @@
         if (boss.novaVolleyCount % 2 === 0) {
           emitBossRingShots(boss, true);
         }
-        boss.shotCooldown = rage ? 11 : 14;
+        boss.shotCooldown = (rage ? 11 : 14) * cooldownMul;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
