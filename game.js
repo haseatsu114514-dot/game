@@ -1494,14 +1494,12 @@
     stage.bossShots = stage.bossShots.filter((s) => !s.dead);
 
     if (stage.boss.active && stage.boss.hp > 0 && stage.boss.invuln <= 0) {
-      const bossDamage = 1 + Math.floor(gaugeRatio * 2.2);
+      const bossDamage = 1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus();
       stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
-      stage.boss.invuln = 20;
+      stage.boss.invuln = bossDamageBonus() > 0 ? 12 : 20;
       stage.boss.vx += player.facing * (0.5 + gaugeRatio * 0.95);
       stage.boss.vy = Math.min(stage.boss.vy, -(2.0 + gaugeRatio * 1.6));
-      if (stage.boss.hp <= 0) {
-        defeatBoss();
-      }
+      handleBossHpZero();
     }
 
     triggerImpact(5.4 + sweepPower * 1.6, px, py - 24, 7.6 + sweepPower * 1.95);
@@ -1823,6 +1821,7 @@
         breakWalls,
         hazardBullets: [],
         bossShots: [],
+        godGimmicks: [],
         playerWaves: [],
         checkpoints,
         goal: { x: 4300, y: 112, w: 24, h: 48 },
@@ -2108,6 +2107,7 @@
       breakWalls,
       hazardBullets: [],
       bossShots: [],
+      godGimmicks: [],
       playerWaves: [],
       checkpoints,
       goal: { x: 8508, y: 112, w: 24, h: 48 },
@@ -3238,17 +3238,17 @@
     }
 
     if (stage.boss.active && stage.boss.hp > 0 && overlap(hitBox, stage.boss) && stage.boss.invuln <= 0) {
-      const bossDamage = 1;
+      const bossDamage = 1 + bossDamageBonus();
       stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
-      stage.boss.invuln = spearThrust ? 13 : 15;
+      stage.boss.invuln = spearThrust
+        ? (bossDamageBonus() > 0 ? 9 : 13)
+        : (bossDamageBonus() > 0 ? 11 : 15);
       stage.boss.vx += dir * (0.62 + chargeRatio * 0.38 + (spearThrust ? 0.28 : 0));
       stage.boss.vy = Math.min(stage.boss.vy, -(spearThrust ? 1.55 + chargeRatio * 0.26 : 1.9 + chargeRatio * 0.36));
       hitX = stage.boss.x + stage.boss.w * 0.5;
       hitY = stage.boss.y + stage.boss.h * 0.45;
       hits += 1;
-      if (stage.boss.hp <= 0) {
-        defeatBoss();
-      }
+      handleBossHpZero();
     }
 
     if (strongWave) {
@@ -3382,16 +3382,14 @@
     }
 
     if (stage.boss.active && stage.boss.hp > 0 && overlap(hitBox, stage.boss) && stage.boss.invuln <= 0) {
-      stage.boss.hp = Math.max(0, stage.boss.hp - 1);
-      stage.boss.invuln = 16;
+      stage.boss.hp = Math.max(0, stage.boss.hp - (1 + bossDamageBonus()));
+      stage.boss.invuln = bossDamageBonus() > 0 ? 10 : 16;
       stage.boss.vx += dir * 0.48;
       stage.boss.vy = Math.min(stage.boss.vy, -1.6);
       hitX = stage.boss.x + stage.boss.w * 0.5;
       hitY = stage.boss.y + stage.boss.h * 0.44;
       hits += 1;
-      if (stage.boss.hp <= 0) {
-        defeatBoss();
-      }
+      handleBossHpZero();
     }
 
     if (hits > 0) {
@@ -3526,9 +3524,9 @@
 
       if (!wave.dead && stage.boss.active && stage.boss.hp > 0 && overlap(wave, stage.boss) && stage.boss.invuln <= 0) {
         const dir = wave.vx >= 0 ? 1 : -1;
-        const bossDamage = 1;
+        const bossDamage = 1 + bossDamageBonus();
         stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
-        stage.boss.invuln = 13;
+        stage.boss.invuln = bossDamageBonus() > 0 ? 9 : 13;
         stage.boss.vx += dir * (0.62 + (wave.power || 0) * 0.28);
         stage.boss.vy = Math.min(stage.boss.vy, -(1.85 + (wave.power || 0) * 0.24));
         const hx = stage.boss.x + stage.boss.w * 0.5;
@@ -3536,9 +3534,7 @@
         triggerImpact(2.0 + (wave.power || 0), hx, hy, 3.0);
         spawnWaveBurst(hx, hy, 1.0 + (wave.power || 0));
         playKickSfx(1.52 + (wave.power || 0) * 0.28);
-        if (stage.boss.hp <= 0) {
-          defeatBoss();
-        }
+        handleBossHpZero();
       }
 
       for (const bullet of stage.hazardBullets) {
@@ -3682,6 +3678,14 @@
     if (!overlap(player, stage.boss)) return;
     const b = stage.boss;
     const bossName = b.kind === "peacock" ? "孔雀ボス" : "神";
+    if (b.kind === "god" && (b.phaseTransitionTimer || 0) > 0) {
+      const pushDir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? -1 : 1;
+      player.vx += pushDir * 0.34;
+      player.vy = Math.min(player.vy, -5.1);
+      player.onGround = false;
+      stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.52);
+      return;
+    }
     const playerBottom = player.y + player.h;
     const bossTop = b.y;
     const bossMidY = b.y + b.h * 0.5;
@@ -3707,8 +3711,8 @@
     if (stompable) {
       const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
       if (b.invuln <= 0 && b.hp > 0) {
-        b.hp = Math.max(0, b.hp - 1);
-        b.invuln = 20;
+        b.hp = Math.max(0, b.hp - (1 + bossDamageBonus()));
+        b.invuln = bossDamageBonus() > 0 ? 13 : 20;
         b.vx += dir * 0.72;
         b.vy = Math.min(b.vy, -2.2);
         player.vy = -6.4;
@@ -3723,9 +3727,7 @@
         playKickSfx(1.74);
         hudMessage = `${bossName}を踏みつけ!`;
         hudTimer = 28;
-        if (b.hp <= 0) {
-          defeatBoss();
-        }
+        handleBossHpZero();
       } else {
         player.vy = -5.2;
         player.onGround = false;
@@ -3751,8 +3753,151 @@
     if (stage.boss.mode === "dash") {
       killPlayer(`${bossName}の突進に被弾`);
     } else {
+      if (b.kind === "god" && (b.gimmickAdvantageTimer || 0) > 0) {
+        player.vy = -5.6;
+        player.onGround = false;
+        player.vx += (player.x + player.w * 0.5 < b.x + b.w * 0.5 ? -1 : 1) * 0.48;
+        stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.66);
+        triggerImpact(1.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.8);
+        hudMessage = "電磁拘束中! 押し切れ!";
+        hudTimer = 18;
+        return;
+      }
       killPlayer(rage ? `${bossName}の猛攻に被弾` : `${bossName}に接触して被弾`);
     }
+  }
+
+  function setupGodPhaseGimmicks() {
+    const left = BOSS_ARENA.minX + 34;
+    const center = Math.floor((BOSS_ARENA.minX + BOSS_ARENA.maxX) * 0.5) - 8;
+    const right = BOSS_ARENA.maxX - 50;
+    stage.godGimmicks = [
+      { id: 1, x: left, y: stage.groundY - 12, w: 16, h: 10, charge: 0, cooldown: 0, pulse: 0 },
+      { id: 2, x: center, y: stage.groundY - 12, w: 16, h: 10, charge: 0, cooldown: 0, pulse: 0.9 },
+      { id: 3, x: right, y: stage.groundY - 12, w: 16, h: 10, charge: 0, cooldown: 0, pulse: 1.8 },
+    ];
+  }
+
+  function bossDamageBonus() {
+    if (!stage || !stage.boss) return 0;
+    const b = stage.boss;
+    if (b.kind !== "god") return 0;
+    return (b.gimmickAdvantageTimer || 0) > 0 ? 1 : 0;
+  }
+
+  function handleBossHpZero() {
+    if (!stage || !stage.boss) return;
+    const b = stage.boss;
+    if (b.hp > 0) return;
+    if (b.kind === "god" && (b.phase || 1) < 2) {
+      startGodSecondForm();
+      return;
+    }
+    defeatBoss();
+  }
+
+  function activateGodGimmick(gimmick) {
+    if (!stage || !stage.boss || !stage.boss.active) return;
+    const b = stage.boss;
+    if (b.kind !== "god" || (b.phase || 1) < 2) return;
+
+    gimmick.charge = 0;
+    gimmick.cooldown = 380;
+    b.stunTimer = Math.max(b.stunTimer || 0, 88);
+    b.gimmickAdvantageTimer = Math.max(b.gimmickAdvantageTimer || 0, 220);
+    b.invuln = Math.min(b.invuln || 0, 4);
+    b.vx *= 0.24;
+    b.vy = Math.min(b.vy, -1.4);
+    b.hp = Math.max(0, b.hp - 2);
+    const bx = b.x + b.w * 0.5;
+    const by = b.y + b.h * 0.44;
+    triggerImpact(3.1, bx, by, 5.4);
+    spawnWaveBurst(bx, by, 1.2);
+    spawnWaveBurst(gimmick.x + gimmick.w * 0.5, gimmick.y + gimmick.h * 0.5, 1.05);
+    spawnHitSparks(bx, by, "#d8f6ff", "#7dd1ff");
+    playCheckpointSfx();
+    playParrySfx();
+    playKickSfx(1.92);
+    hudMessage = "電磁パネル起動! 神が硬直!";
+    hudTimer = 48;
+    handleBossHpZero();
+  }
+
+  function updateGodGimmicks(dt) {
+    if (gameState !== STATE.BOSS || !stage || !stage.boss || !stage.boss.active) return;
+    const b = stage.boss;
+    if (b.kind !== "god") return;
+    if (!stage.godGimmicks || stage.godGimmicks.length === 0) return;
+
+    for (const gimmick of stage.godGimmicks) {
+      gimmick.pulse += dt * 0.14;
+      gimmick.cooldown = Math.max(0, (gimmick.cooldown || 0) - dt);
+      if ((b.phase || 1) < 2 || (b.phaseTransitionTimer || 0) > 0 || gimmick.cooldown > 0) {
+        gimmick.charge = Math.max(0, gimmick.charge - dt * 0.7);
+        continue;
+      }
+
+      const zone = {
+        x: gimmick.x - 2,
+        y: gimmick.y - 4,
+        w: gimmick.w + 4,
+        h: gimmick.h + 8,
+      };
+      const onPad = player.onGround && overlap(player, zone);
+      if (onPad) {
+        const add = input.attack ? 1.85 : 1.2;
+        gimmick.charge = Math.min(54, gimmick.charge + dt * add);
+        if (gimmick.charge >= 54) {
+          activateGodGimmick(gimmick);
+        }
+      } else {
+        gimmick.charge = Math.max(0, gimmick.charge - dt * 0.52);
+      }
+    }
+  }
+
+  function startGodSecondForm() {
+    if (!stage || !stage.boss) return;
+    const b = stage.boss;
+    if (b.kind !== "god") {
+      defeatBoss();
+      return;
+    }
+    if ((b.phase || 1) >= 2) {
+      defeatBoss();
+      return;
+    }
+
+    b.phase = 2;
+    b.phaseTransitionTimer = 148;
+    b.mode = "phase_shift";
+    b.modeTimer = b.phaseTransitionTimer;
+    b.phase2MaxHp = b.phase2MaxHp || 13;
+    b.maxHp = b.phase2MaxHp;
+    b.hp = b.maxHp;
+    b.invuln = b.phaseTransitionTimer + 24;
+    b.attackCycle = 0;
+    b.shotCooldown = 30;
+    b.stunTimer = 0;
+    b.gimmickAdvantageTimer = 0;
+    playerHearts = MAX_HEARTS;
+    damageInvulnTimer = Math.max(damageInvulnTimer, 36);
+    hurtFlashTimer = 0;
+    b.vx = 0;
+    b.vy = -1.8;
+    stage.bossShots = [];
+    if (!stage.godGimmicks || stage.godGimmicks.length === 0) {
+      setupGodPhaseGimmicks();
+    }
+    for (const gimmick of stage.godGimmicks) {
+      gimmick.charge = 0;
+      gimmick.cooldown = 24 + gimmick.id * 6;
+    }
+    triggerImpact(3.6, b.x + b.w * 0.5, b.y + b.h * 0.45, 6.4);
+    playBossStartSfx();
+    playKickSfx(2.18);
+    hudMessage = "神 第2形態! 電磁パネルで隙を作れ!";
+    hudTimer = 150;
   }
 
   function startBossBattle() {
@@ -3800,7 +3945,13 @@
     stage.boss.attackCycle = 0;
     stage.boss.spiralAngle = 0;
     stage.boss.invuln = bossKind === "peacock" ? 20 : 24;
+    stage.boss.phase = 1;
+    stage.boss.phaseTransitionTimer = 0;
+    stage.boss.stunTimer = 0;
+    stage.boss.gimmickAdvantageTimer = 0;
+    stage.boss.phase2MaxHp = bossKind === "god" ? 13 : stage.boss.maxHp;
     stage.bossShots = [];
+    stage.godGimmicks = [];
     stage.playerWaves = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
@@ -3814,6 +3965,7 @@
         createPartyGoon(BOSS_ARENA.minX + 134, BOSS_ARENA.minX + 92, BOSS_ARENA.minX + 194, -1),
         createPartyGoon(BOSS_ARENA.minX + 214, BOSS_ARENA.minX + 168, BOSS_ARENA.minX + 282, 1)
       );
+      setupGodPhaseGimmicks();
     } else {
       stage.enemies = [];
     }
@@ -4137,8 +4289,33 @@
     playProjectileSfx("enemy");
   }
 
+  function emitBossNovaShots(boss, rage, phase2 = false) {
+    const cx = boss.x + boss.w * 0.5 - 2;
+    const cy = boss.y + 12;
+    const count = phase2 ? (rage ? 10 : 8) : (rage ? 8 : 6);
+    const speed = phase2 ? (rage ? 2.08 : 1.86) : (rage ? 1.92 : 1.72);
+    for (let i = 0; i < count; i += 1) {
+      const ang = (Math.PI * 2 * i) / count + (phase2 ? (boss.spiralAngle || 0) * Math.PI / 180 : 0);
+      stage.bossShots.push({
+        kind: phase2 ? "nova2" : "nova",
+        x: cx,
+        y: cy,
+        w: 5,
+        h: 5,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed * 0.82,
+        ttl: phase2 ? 144 : 128,
+        reason: phase2 ? "神第2形態の光弾に被弾" : "神の光弾に被弾",
+      });
+    }
+    playKickSfx(phase2 ? 1.92 : 1.66);
+    playProjectileSfx("enemy");
+  }
+
   function updateBossShots(dt, solids) {
     const spawned = [];
+    const godAdvantageActive = stage && stage.boss && stage.boss.kind === "god" && (stage.boss.gimmickAdvantageTimer || 0) > 0;
+    const shotSpeedMul = godAdvantageActive ? 0.78 : 1;
     for (const shot of stage.bossShots) {
       if (shot.dead) continue;
 
@@ -4160,22 +4337,26 @@
         }
         continue;
       } else if (shot.kind === "wave") {
-        shot.x += shot.vx * dt;
+        shot.x += shot.vx * dt * shotSpeedMul;
         shot.ttl -= dt;
         shot.phase = (shot.phase || 0) + dt * 0.22;
         shot.y = shot.baseY + Math.sin((shot.phase || 0) + (shot.seed || 0)) * 0.8;
       } else if (shot.kind === "spiral") {
-        shot.x += shot.vx * dt;
-        shot.y += shot.vy * dt;
+        shot.x += shot.vx * dt * shotSpeedMul;
+        shot.y += shot.vy * dt * shotSpeedMul;
+        shot.ttl -= dt;
+      } else if (shot.kind === "nova" || shot.kind === "nova2") {
+        shot.x += shot.vx * dt * shotSpeedMul;
+        shot.y += shot.vy * dt * shotSpeedMul;
         shot.ttl -= dt;
       } else if (shot.kind === "rain") {
-        shot.x += shot.vx * dt;
-        shot.y += shot.vy * dt;
+        shot.x += shot.vx * dt * shotSpeedMul;
+        shot.y += shot.vy * dt * shotSpeedMul;
         shot.vy += 0.16 * dt;
         shot.ttl -= dt;
       } else {
-        shot.x += shot.vx * dt;
-        shot.y += shot.vy * dt;
+        shot.x += shot.vx * dt * shotSpeedMul;
+        shot.y += shot.vy * dt * shotSpeedMul;
         shot.vy += shot.kind === "ring" ? 0.04 * dt : 0.1 * dt;
         shot.ttl -= dt;
       }
@@ -4214,20 +4395,57 @@
       updatePeacockBoss(dt, solids);
       return;
     }
-    const rage = boss.hp <= Math.ceil(boss.maxHp * 0.55);
+    const phase = boss.phase || 1;
+    const phase2 = phase >= 2;
+    const rage = boss.hp <= Math.ceil(boss.maxHp * (phase2 ? 0.6 : 0.55));
     boss.invuln = Math.max(0, boss.invuln - dt);
     boss.modeTimer -= dt;
     boss.shotCooldown -= dt;
+    if (boss.gimmickAdvantageTimer > 0) {
+      boss.gimmickAdvantageTimer = Math.max(0, boss.gimmickAdvantageTimer - dt);
+    }
+    const advantageActive = (boss.gimmickAdvantageTimer || 0) > 0;
 
-    if (boss.mode === "intro") {
+    if ((boss.phaseTransitionTimer || 0) > 0) {
+      boss.phaseTransitionTimer = Math.max(0, boss.phaseTransitionTimer - dt);
+      boss.mode = "phase_shift";
+      boss.vx *= Math.pow(0.78, dt);
+      boss.vy = Math.min(boss.vy, -1.2);
+      boss.spiralAngle = (boss.spiralAngle + (rage ? 8 : 6) * dt) % 360;
+      if (boss.shotCooldown <= 0) {
+        emitBossNovaShots(boss, true, true);
+        boss.shotCooldown = 16;
+      }
+      if (boss.phaseTransitionTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = 28;
+        boss.shotCooldown = 12;
+        boss.invuln = Math.max(boss.invuln, 14);
+        hudMessage = "第2形態開始! 電磁パネルで硬直を狙え!";
+        hudTimer = 96;
+      }
+    } else if (boss.stunTimer > 0) {
+      boss.stunTimer = Math.max(0, boss.stunTimer - dt);
+      boss.mode = "stunned";
+      boss.vx *= Math.pow(0.56, dt);
+      boss.vy = Math.min(boss.vy, 0.6);
+      boss.shotCooldown = Math.max(boss.shotCooldown, 8);
+      if (boss.stunTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = phase2 ? 18 : 30;
+      }
+    } else if (boss.mode === "intro") {
       boss.vx = -0.54;
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
         boss.modeTimer = rage ? 38 : 48;
       }
     } else if (boss.mode === "idle") {
-      boss.vx += boss.dir * (rage ? 0.29 : 0.22) * dt;
-      boss.vx = clamp(boss.vx, -(rage ? 1.4 : 1.12), rage ? 1.4 : 1.12);
+      const accelMul = phase2 ? 1.18 : 1;
+      const accel = (rage ? 0.29 : 0.22) * accelMul * (advantageActive ? 0.72 : 1);
+      const moveCap = (rage ? 1.4 : 1.12) * (phase2 ? 1.26 : 1) * (advantageActive ? 0.8 : 1);
+      boss.vx += boss.dir * accel * dt;
+      boss.vx = clamp(boss.vx, -moveCap, moveCap);
 
       if (boss.x < BOSS_ARENA.minX + 18) {
         boss.x = BOSS_ARENA.minX + 18;
@@ -4238,149 +4456,202 @@
       }
 
       if (boss.modeTimer <= 0) {
-        const pattern = boss.attackCycle % 6;
+        const pattern = boss.attackCycle % (phase2 ? 8 : 6);
         if (pattern === 0) {
           boss.mode = "windup";
-          boss.modeTimer = rage ? 20 : 28;
+          boss.modeTimer = phase2 ? (rage ? 15 : 20) : (rage ? 20 : 28);
           boss.vx = 0;
         } else if (pattern === 1) {
           boss.mode = "shoot";
-          boss.modeTimer = rage ? 78 : 66;
-          boss.shotCooldown = rage ? 11 : 15;
+          boss.modeTimer = phase2 ? (rage ? 76 : 88) : (rage ? 78 : 66);
+          boss.shotCooldown = phase2 ? (rage ? 9 : 12) : (rage ? 11 : 15);
+          boss.shootVolleyCount = 0;
         } else if (pattern === 2) {
           boss.mode = "leap_prep";
-          boss.modeTimer = rage ? 20 : 26;
+          boss.modeTimer = phase2 ? (rage ? 16 : 22) : (rage ? 20 : 26);
           boss.vx *= 0.5;
         } else if (pattern === 3) {
           boss.mode = "ring";
-          boss.modeTimer = rage ? 82 : 68;
-          boss.shotCooldown = rage ? 14 : 18;
+          boss.modeTimer = phase2 ? (rage ? 78 : 90) : (rage ? 82 : 68);
+          boss.shotCooldown = phase2 ? (rage ? 12 : 16) : (rage ? 14 : 18);
+          boss.ringVolleyCount = 0;
           boss.vx *= 0.42;
         } else if (pattern === 4) {
           boss.mode = "rain";
-          boss.modeTimer = rage ? 94 : 80;
-          boss.shotCooldown = rage ? 13 : 17;
+          boss.modeTimer = phase2 ? (rage ? 84 : 98) : (rage ? 94 : 80);
+          boss.shotCooldown = phase2 ? (rage ? 11 : 15) : (rage ? 13 : 17);
+          boss.rainVolleyCount = 0;
           boss.vx *= 0.4;
-        } else {
+        } else if (pattern === 5) {
           boss.mode = "spiral";
-          boss.modeTimer = rage ? 88 : 74;
-          boss.shotCooldown = rage ? 12 : 16;
+          boss.modeTimer = phase2 ? (rage ? 74 : 86) : (rage ? 88 : 74);
+          boss.shotCooldown = phase2 ? (rage ? 10 : 13) : (rage ? 12 : 16);
+          boss.spiralVolleyCount = 0;
           boss.spiralAngle = (boss.spiralAngle + (rage ? 22 : 16)) % 360;
           boss.vx *= 0.35;
+        } else if (pattern === 6) {
+          boss.mode = "nova";
+          boss.modeTimer = rage ? 74 : 88;
+          boss.shotCooldown = rage ? 10 : 14;
+          boss.novaVolleyCount = 0;
+          boss.vx *= 0.32;
+        } else {
+          boss.mode = "windup";
+          boss.modeTimer = rage ? 12 : 17;
+          boss.vx *= 0.24;
         }
         boss.attackCycle += 1;
       }
     } else if (boss.mode === "windup") {
-      boss.vx *= Math.pow(rage ? 0.62 : 0.68, dt);
+      const damp = phase2 ? (rage ? 0.56 : 0.62) : (rage ? 0.62 : 0.68);
+      boss.vx *= Math.pow(damp, dt);
       if (boss.modeTimer <= 0) {
         boss.mode = "dash";
-        boss.modeTimer = rage ? 34 : 28;
-        boss.vx = boss.dir * (2.55 + (boss.maxHp - boss.hp) * 0.034 + (rage ? 0.38 : 0));
+        boss.modeTimer = phase2 ? (rage ? 40 : 34) : (rage ? 34 : 28);
+        const speedBase = 2.55 + (boss.maxHp - boss.hp) * 0.034 + (rage ? 0.38 : 0) + (phase2 ? 0.52 : 0);
+        boss.vx = boss.dir * speedBase * (advantageActive ? 0.78 : 1);
       }
     } else if (boss.mode === "dash") {
       if (boss.x <= BOSS_ARENA.minX + 3) {
         boss.x = BOSS_ARENA.minX + 3;
         boss.dir = 1;
         boss.mode = "idle";
-        boss.modeTimer = rage ? 34 : 46;
+        boss.modeTimer = phase2 ? (rage ? 20 : 30) : (rage ? 34 : 46);
       } else if (boss.x + boss.w >= BOSS_ARENA.maxX - 3) {
         boss.x = BOSS_ARENA.maxX - 3 - boss.w;
         boss.dir = -1;
         boss.mode = "idle";
-        boss.modeTimer = rage ? 34 : 46;
+        boss.modeTimer = phase2 ? (rage ? 20 : 30) : (rage ? 34 : 46);
       } else if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = rage ? 34 : 46;
+        boss.modeTimer = phase2 ? (rage ? 20 : 30) : (rage ? 34 : 46);
       }
     } else if (boss.mode === "shoot") {
-      boss.vx *= Math.pow(rage ? 0.74 : 0.79, dt);
+      boss.vx *= Math.pow(phase2 ? (rage ? 0.7 : 0.75) : (rage ? 0.74 : 0.79), dt);
 
       if (boss.shotCooldown <= 0) {
         const aim = player.x + player.w * 0.5 < boss.x + boss.w * 0.5 ? -1 : 1;
-        const spread = (boss.attackCycle % 3) - 1;
-        const volleyOffsets = rage ? [-0.38, -0.19, 0, 0.19, 0.38] : [-0.22, 0, 0.22];
+        const spread = ((boss.shootVolleyCount || 0) % 3) - 1;
+        const volleyOffsets = phase2
+          ? (rage ? [-0.52, -0.31, -0.14, 0.04, 0.22, 0.39, 0.56] : [-0.4, -0.22, -0.04, 0.14, 0.32])
+          : (rage ? [-0.38, -0.19, 0, 0.19, 0.38] : [-0.22, 0, 0.22]);
         for (const offset of volleyOffsets) {
           stage.bossShots.push({
             x: boss.x + boss.w * 0.5 - 2,
             y: boss.y + 10,
-            w: rage ? 6 : 5,
-            h: rage ? 6 : 5,
+            w: phase2 ? 6 : (rage ? 6 : 5),
+            h: phase2 ? 6 : (rage ? 6 : 5),
             vx: aim * (1.68 + Math.abs(spread) * 0.16) + aim * offset * 0.36,
             vy: -0.56 + spread * 0.18 + offset,
             ttl: rage ? 148 : 136,
+            reason: "神の連射弾に被弾",
           });
         }
-        boss.shotCooldown = rage ? 12 : 17;
+        boss.shootVolleyCount = (boss.shootVolleyCount || 0) + 1;
+        if (phase2 && boss.shootVolleyCount % 2 === 0) {
+          emitBossNovaShots(boss, rage, false);
+        }
+        boss.shotCooldown = phase2 ? (rage ? 9 : 12) : (rage ? 12 : 17);
       }
 
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = rage ? 34 : 46;
+        boss.modeTimer = phase2 ? (rage ? 20 : 30) : (rage ? 34 : 46);
       }
     } else if (boss.mode === "leap_prep") {
-      boss.vx *= Math.pow(rage ? 0.66 : 0.72, dt);
+      boss.vx *= Math.pow(phase2 ? (rage ? 0.6 : 0.66) : (rage ? 0.66 : 0.72), dt);
       if (boss.modeTimer <= 0) {
         const targetX = clamp(
-          player.x + player.w * 0.5 + player.vx * 14,
-          BOSS_ARENA.minX + 20,
-          BOSS_ARENA.maxX - 20
+          player.x + player.w * 0.5 + player.vx * (phase2 ? 18 : 14),
+          BOSS_ARENA.minX + (phase2 ? 18 : 20),
+          BOSS_ARENA.maxX - (phase2 ? 18 : 20)
         );
         const cx = boss.x + boss.w * 0.5;
         boss.leapTargetX = targetX;
         boss.mode = "leap_air";
-        boss.modeTimer = rage ? 82 : 70;
+        boss.modeTimer = phase2 ? (rage ? 90 : 78) : (rage ? 82 : 70);
         boss.dir = targetX >= cx ? 1 : -1;
         const dist = Math.abs(targetX - cx);
-        boss.vx = boss.dir * clamp(1.65 + dist * 0.012, 1.65, rage ? 3.2 : 2.8);
-        boss.vy = rage ? -7.35 : -6.85;
+        boss.vx = boss.dir * clamp(1.65 + dist * 0.012, 1.65, phase2 ? (rage ? 3.6 : 3.2) : (rage ? 3.2 : 2.8));
+        boss.vy = phase2 ? (rage ? -7.75 : -7.15) : (rage ? -7.35 : -6.85);
       }
     } else if (boss.mode === "leap_air") {
       if (!boss.onGround) {
         const cx = boss.x + boss.w * 0.5;
         const toward = (boss.leapTargetX || cx) - cx;
-        boss.vx += clamp(toward * 0.004, -0.05, 0.05) * dt;
-        boss.vx = clamp(boss.vx, -(rage ? 3.2 : 2.8), rage ? 3.2 : 2.8);
+        boss.vx += clamp(toward * (phase2 ? 0.005 : 0.004), -0.05, 0.05) * dt;
+        const leapCap = phase2 ? (rage ? 3.6 : 3.2) : (rage ? 3.2 : 2.8);
+        boss.vx = clamp(boss.vx, -leapCap, leapCap);
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = rage ? 30 : 42;
+        boss.modeTimer = phase2 ? (rage ? 26 : 36) : (rage ? 30 : 42);
       }
     } else if (boss.mode === "ring") {
-      boss.vx *= Math.pow(rage ? 0.76 : 0.82, dt);
+      boss.vx *= Math.pow(phase2 ? (rage ? 0.7 : 0.76) : (rage ? 0.76 : 0.82), dt);
       if (boss.shotCooldown <= 0) {
         emitBossRingShots(boss, rage);
-        boss.shotCooldown = rage ? 17 : 23;
+        boss.ringVolleyCount = (boss.ringVolleyCount || 0) + 1;
+        if (phase2 && boss.ringVolleyCount % 2 === 0) {
+          emitBossNovaShots(boss, rage, false);
+        }
+        boss.shotCooldown = phase2 ? (rage ? 12 : 16) : (rage ? 17 : 23);
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = rage ? 32 : 44;
+        boss.modeTimer = phase2 ? (rage ? 20 : 30) : (rage ? 32 : 44);
       }
     } else if (boss.mode === "rain") {
       const target = player.x + player.w * 0.5 >= boss.x + boss.w * 0.5 ? 1 : -1;
-      boss.vx += target * (rage ? 0.022 : 0.016) * dt;
-      boss.vx *= Math.pow(rage ? 0.84 : 0.88, dt);
-      boss.vx = clamp(boss.vx, -0.72, 0.72);
+      boss.vx += target * (phase2 ? (rage ? 0.028 : 0.022) : (rage ? 0.022 : 0.016)) * dt;
+      boss.vx *= Math.pow(phase2 ? (rage ? 0.8 : 0.84) : (rage ? 0.84 : 0.88), dt);
+      boss.vx = clamp(boss.vx, -(phase2 ? 0.92 : 0.72), phase2 ? 0.92 : 0.72);
       if (boss.shotCooldown <= 0) {
         emitBossRainBurst(boss, rage);
-        boss.shotCooldown = rage ? 16 : 22;
+        boss.rainVolleyCount = (boss.rainVolleyCount || 0) + 1;
+        if (phase2 && boss.rainVolleyCount % 3 === 0) {
+          emitBossRingShots(boss, true);
+        }
+        boss.shotCooldown = phase2 ? (rage ? 10 : 14) : (rage ? 16 : 22);
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = rage ? 30 : 42;
+        boss.modeTimer = phase2 ? (rage ? 18 : 30) : (rage ? 30 : 42);
       }
     } else if (boss.mode === "spiral") {
       const target = player.x + player.w * 0.5 >= boss.x + boss.w * 0.5 ? 1 : -1;
-      boss.vx += target * (rage ? 0.03 : 0.022) * dt;
-      boss.vx *= Math.pow(rage ? 0.86 : 0.9, dt);
-      boss.vx = clamp(boss.vx, -0.9, 0.9);
+      boss.vx += target * (phase2 ? (rage ? 0.036 : 0.03) : (rage ? 0.03 : 0.022)) * dt;
+      boss.vx *= Math.pow(phase2 ? (rage ? 0.82 : 0.86) : (rage ? 0.86 : 0.9), dt);
+      boss.vx = clamp(boss.vx, -(phase2 ? 1.1 : 0.9), phase2 ? 1.1 : 0.9);
       if (boss.shotCooldown <= 0) {
         emitBossSpiralShots(boss, rage);
-        boss.spiralAngle = (boss.spiralAngle + (rage ? 36 : 27)) % 360;
-        boss.shotCooldown = rage ? 11 : 15;
+        boss.spiralVolleyCount = (boss.spiralVolleyCount || 0) + 1;
+        boss.spiralAngle = (boss.spiralAngle + (phase2 ? (rage ? 48 : 38) : (rage ? 36 : 27))) % 360;
+        if (phase2 && boss.spiralVolleyCount % 2 === 0) {
+          emitBossNovaShots(boss, rage, true);
+        }
+        boss.shotCooldown = phase2 ? (rage ? 8 : 11) : (rage ? 11 : 15);
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
-        boss.modeTimer = rage ? 28 : 40;
+        boss.modeTimer = phase2 ? (rage ? 16 : 26) : (rage ? 28 : 40);
+      }
+    } else if (boss.mode === "nova") {
+      const target = player.x + player.w * 0.5 >= boss.x + boss.w * 0.5 ? 1 : -1;
+      boss.vx += target * (rage ? 0.036 : 0.03) * dt;
+      boss.vx *= Math.pow(rage ? 0.84 : 0.88, dt);
+      boss.vx = clamp(boss.vx, -1.12, 1.12);
+      if (boss.shotCooldown <= 0) {
+        emitBossNovaShots(boss, rage, true);
+        boss.novaVolleyCount = (boss.novaVolleyCount || 0) + 1;
+        if (boss.novaVolleyCount % 2 === 0) {
+          emitBossRingShots(boss, true);
+        }
+        boss.shotCooldown = rage ? 10 : 13;
+      }
+      if (boss.modeTimer <= 0) {
+        boss.mode = "idle";
+        boss.modeTimer = rage ? 18 : 28;
       }
     }
 
@@ -4388,9 +4659,9 @@
     moveWithCollisions(boss, solids, dt);
     boss.x = clamp(boss.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - boss.w - 2);
     if (boss.mode === "leap_air" && boss.onGround) {
-      emitBossGroundWave(boss, rage);
+      emitBossGroundWave(boss, phase2 ? true : rage);
       boss.mode = "idle";
-      boss.modeTimer = rage ? 30 : 42;
+      boss.modeTimer = phase2 ? (rage ? 20 : 30) : (rage ? 30 : 42);
       boss.vx *= 0.28;
       boss.vy = 0;
     }
@@ -4723,6 +4994,7 @@
     updateLifeUpItems(dt);
     updateBikes(dt);
     updateBoss(dt, solids);
+    updateGodGimmicks(dt);
     updateBossShots(dt, solids);
     updateEnemies(dt, solids);
     updateHazardBullets(dt, solids);
@@ -5721,20 +5993,24 @@
       }
       return;
     }
-    const warn = b.mode === "windup" || b.mode === "dash";
-    const cast = b.mode === "shoot" || b.mode === "ring" || b.mode === "rain" || b.mode === "spiral";
-    const rage = b.hp <= Math.ceil(b.maxHp * 0.35);
+    const phase2 = (b.phase || 1) >= 2;
+    const transitioning = (b.phaseTransitionTimer || 0) > 0;
+    const stunned = (b.stunTimer || 0) > 0;
+    const advantage = (b.gimmickAdvantageTimer || 0) > 0;
+    const warn = b.mode === "windup" || b.mode === "dash" || b.mode === "phase_shift";
+    const cast = b.mode === "shoot" || b.mode === "ring" || b.mode === "rain" || b.mode === "spiral" || b.mode === "nova" || b.mode === "phase_shift";
+    const rage = b.hp <= Math.ceil(b.maxHp * (phase2 ? 0.45 : 0.35));
 
     ctx.fillStyle = "#11131a";
     ctx.fillRect(x + 1, y, 22, 1);
     ctx.fillRect(x, y + 1, 24, 35);
 
-    ctx.fillStyle = rage ? "#f3cc74" : "#e7dfb5";
+    ctx.fillStyle = phase2 ? (rage ? "#f2b766" : "#efcd95") : (rage ? "#f3cc74" : "#e7dfb5");
     ctx.fillRect(x + 8, y - 3, 8, 2);
-    ctx.fillStyle = "rgba(255, 231, 177, 0.45)";
+    ctx.fillStyle = phase2 ? "rgba(255, 214, 146, 0.5)" : "rgba(255, 231, 177, 0.45)";
     ctx.fillRect(x + 7, y - 2, 10, 1);
 
-    ctx.fillStyle = warn ? "#f4f9ff" : "#eaf0fb";
+    ctx.fillStyle = warn ? "#f4f9ff" : (phase2 ? "#f3f0ff" : "#eaf0fb");
     ctx.fillRect(x + 4, y + 1, 16, 6);
     ctx.fillStyle = "#d7e0f2";
     ctx.fillRect(x + 5, y + 2, 14, 3);
@@ -5756,7 +6032,7 @@
     ctx.fillStyle = "#f8fbff";
     ctx.fillRect(x + 10, y + 17, 4, 2);
 
-    ctx.fillStyle = warn ? "#c4ccd9" : "#b6c0d0";
+    ctx.fillStyle = warn ? "#c4ccd9" : (phase2 ? "#b9b5cf" : "#b6c0d0");
     ctx.fillRect(x + 3, y + 18, 18, 11);
     ctx.fillStyle = "#d4dbe8";
     ctx.fillRect(x + 4, y + 19, 16, 4);
@@ -5790,6 +6066,22 @@
       ctx.strokeRect(x - 1, y - 2, b.w + 2, b.h + 3);
       ctx.fillStyle = "rgba(255,236,188,0.16)";
       ctx.fillRect(x + 2, y + 1, b.w - 4, b.h - 2);
+    }
+
+    if (phase2 || transitioning) {
+      const auraAlpha = transitioning ? 0.42 : (advantage ? 0.34 : 0.22);
+      ctx.fillStyle = `rgba(136, 223, 255, ${auraAlpha})`;
+      ctx.fillRect(x - 3, y - 3, b.w + 6, 1);
+      ctx.fillRect(x - 3, y + b.h + 1, b.w + 6, 1);
+      ctx.fillRect(x - 3, y - 2, 1, b.h + 4);
+      ctx.fillRect(x + b.w + 2, y - 2, 1, b.h + 4);
+    }
+
+    if (stunned) {
+      ctx.fillStyle = "rgba(134, 236, 255, 0.74)";
+      ctx.fillRect(x + 6, y - 6, 2, 2);
+      ctx.fillRect(x + 11, y - 8, 2, 2);
+      ctx.fillRect(x + 16, y - 6, 2, 2);
     }
   }
 
@@ -6754,6 +7046,59 @@
     }
   }
 
+  function drawGodGimmicks() {
+    if (!stage.godGimmicks || stage.godGimmicks.length === 0) return;
+    const boss = stage.boss;
+    if (!boss || boss.kind !== "god" || !boss.active) return;
+
+    const phase2Ready = (boss.phase || 1) >= 2 && (boss.phaseTransitionTimer || 0) <= 0;
+    for (const gimmick of stage.godGimmicks) {
+      const x = Math.floor(gimmick.x - cameraX);
+      const y = Math.floor(gimmick.y);
+      const chargeRatio = clamp((gimmick.charge || 0) / 54, 0, 1);
+      const cooldown = Math.max(0, gimmick.cooldown || 0);
+      const activePulse = (Math.sin((gimmick.pulse || 0) + player.anim * 0.06) * 0.5 + 0.5);
+      const ready = phase2Ready && cooldown <= 0;
+      const lit = ready && chargeRatio > 0.04;
+
+      ctx.fillStyle = ready ? "#202d4d" : "#1f2433";
+      ctx.fillRect(x - 1, y - 1, gimmick.w + 2, gimmick.h + 2);
+      ctx.fillStyle = ready ? "#2f4675" : "#2b3245";
+      ctx.fillRect(x, y, gimmick.w, gimmick.h);
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.fillRect(x + 1, y + 1, gimmick.w - 2, 1);
+
+      if (lit) {
+        const fillW = Math.floor((gimmick.w - 2) * chargeRatio);
+        ctx.fillStyle = `rgba(110, 227, 255, ${0.3 + activePulse * 0.24})`;
+        ctx.fillRect(x - 2, y - 2, gimmick.w + 4, gimmick.h + 4);
+        ctx.fillStyle = "#72e3ff";
+        ctx.fillRect(x + 1, y + gimmick.h - 4, fillW, 2);
+      }
+
+      if (ready && chargeRatio >= 0.98) {
+        const blink = Math.floor((gimmick.pulse || 0) * 2) % 2 === 0;
+        if (blink) {
+          ctx.fillStyle = "rgba(255, 248, 176, 0.9)";
+          ctx.fillRect(x - 2, y - 2, gimmick.w + 4, 1);
+        }
+      }
+
+      if (!phase2Ready || cooldown > 0) {
+        const coolRatio = clamp(cooldown / 380, 0, 1);
+        ctx.fillStyle = "rgba(255, 177, 134, 0.24)";
+        ctx.fillRect(x + 1, y + gimmick.h - 3, gimmick.w - 2, 1);
+        ctx.fillStyle = "#ffb68a";
+        ctx.fillRect(x + 1, y + gimmick.h - 3, Math.floor((gimmick.w - 2) * (1 - coolRatio)), 1);
+      }
+
+      if ((boss.gimmickAdvantageTimer || 0) > 0) {
+        ctx.fillStyle = "rgba(129, 248, 255, 0.26)";
+        ctx.fillRect(x - 2, y - 2, gimmick.w + 4, gimmick.h + 1);
+      }
+    }
+  }
+
   function drawWorld() {
     const godBossRoom = gameState === STATE.BOSS && stage.boss && stage.boss.kind === "god";
     if (godBossRoom) {
@@ -6805,6 +7150,8 @@
       drawCheckpointToken(token);
     }
 
+    drawGodGimmicks();
+
     for (const e of stage.enemies) {
       if (!e.alive) continue;
       drawEnemy(e);
@@ -6841,6 +7188,14 @@
         ctx.fillStyle = "#7ee0ff";
         ctx.fillRect(sx, sy, bs.w, bs.h);
         ctx.fillStyle = "#e8fcff";
+        ctx.fillRect(sx + 1, sy + 1, Math.max(2, bs.w - 2), Math.max(2, bs.h - 2));
+      } else if (bs.kind === "nova" || bs.kind === "nova2") {
+        const phase2Nova = bs.kind === "nova2";
+        ctx.fillStyle = phase2Nova ? "rgba(255, 175, 114, 0.48)" : "rgba(157, 232, 255, 0.42)";
+        ctx.fillRect(sx - 2, sy - 2, bs.w + 4, bs.h + 4);
+        ctx.fillStyle = phase2Nova ? "#ffb36f" : "#85e6ff";
+        ctx.fillRect(sx - 1, sy - 1, bs.w + 2, bs.h + 2);
+        ctx.fillStyle = phase2Nova ? "#ffe5b6" : "#f2fdff";
         ctx.fillRect(sx + 1, sy + 1, Math.max(2, bs.w - 2), Math.max(2, bs.h - 2));
       } else if (bs.kind === "rain_warn") {
         const blink = Math.floor((bs.ttl || 0) * 0.32) % 2 === 0;
@@ -7476,7 +7831,7 @@
   }
 
   function drawHUD() {
-    const hudH = 20;
+    const hudH = 22;
     ctx.fillStyle = "rgba(9, 8, 12, 0.78)";
     ctx.fillRect(0, 0, W, hudH);
 
@@ -7518,6 +7873,21 @@
       ctx.fillRect(barX, barY, barW, 6);
       ctx.fillStyle = "#e25555";
       ctx.fillRect(barX + 1, barY + 1, Math.floor((barW - 2) * ratio), 4);
+
+      if (stage.boss.kind === "god") {
+        const phase = stage.boss.phase || 1;
+        ctx.fillStyle = "rgba(235, 245, 255, 0.92)";
+        ctx.font = "7px monospace";
+        ctx.fillText(`P${phase}`, barX + barW - 14, barY + 7);
+
+        if (phase >= 2) {
+          const advRatio = clamp((stage.boss.gimmickAdvantageTimer || 0) / 220, 0, 1);
+          ctx.fillStyle = "#18303a";
+          ctx.fillRect(barX, barY + 8, barW, 3);
+          ctx.fillStyle = "#7be9ff";
+          ctx.fillRect(barX + 1, barY + 9, Math.floor((barW - 2) * advRatio), 1);
+        }
+      }
     }
 
     ctx.fillStyle = "rgba(235, 245, 255, 0.9)";
