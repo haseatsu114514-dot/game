@@ -364,6 +364,10 @@
     } else {
       // On miss, reset the continuation chain back to the initial chance tier.
       blackFlashChain = 0;
+      // Also clear any remaining Black Flash benefits so gameplay returns to normal immediately.
+      blackFlashTimer = 0;
+      blackFlashPower = 0;
+      blackFlashSlowTimer = 0;
     }
     return triggered;
   }
