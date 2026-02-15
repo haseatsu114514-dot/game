@@ -82,6 +82,7 @@
   let proteinBurstLaserPhase = 0;
   let proteinBurstUsedGauge = 0;
   let proteinBurstPower = 1;
+  let proteinBurstMode = "laser";
   let invincibleTimer = 0;
   let invincibleHitCooldown = 0;
   let impactShakeTimer = 0;
@@ -223,10 +224,15 @@
   const PROTEIN_BURST_MIN = Math.ceil(PROTEIN_BURST_REQUIRE * 0.5);
   const PROTEIN_BURST_GAIN_PROTEIN = 0.6;
   const PROTEIN_BURST_GAIN_DEFEAT_BASE = 0.18;
+  const PROTEIN_BURST_MODE_LASER = "laser";
+  const PROTEIN_BURST_MODE_METEOR = "meteor";
   const PROTEIN_BURST_DURATION = 98;
+  const PROTEIN_BURST_METEOR_DURATION = 82;
   const PROTEIN_BURST_BLAST_AT = 0.38;
   const PROTEIN_BURST_TOP_Y = 30;
   const PROTEIN_BURST_LASER_DURATION = 56;
+  const PROTEIN_BURST_METEOR_COUNT_MIN = 4;
+  const PROTEIN_BURST_METEOR_COUNT_MAX = 9;
   const OPENING_CUTSCENE_DURATION = 760;
   const PRE_BOSS_CUTSCENE_DURATION = 460;
   const PRE_BOSS_ENTRY_DURATION = 78;
@@ -2053,20 +2059,30 @@
     if (proteinBurstGauge < PROTEIN_BURST_MIN) return false;
 
     const spentGauge = proteinBurstGauge;
+    const fullBurst = spentGauge >= PROTEIN_BURST_REQUIRE - 0.001;
     const gaugeRatio = clamp(
       (spentGauge - PROTEIN_BURST_MIN) / Math.max(1, PROTEIN_BURST_REQUIRE - PROTEIN_BURST_MIN),
       0,
       1
     );
+    proteinBurstMode = fullBurst ? PROTEIN_BURST_MODE_LASER : PROTEIN_BURST_MODE_METEOR;
     proteinBurstUsedGauge = spentGauge;
-    proteinBurstPower = 0.9 + gaugeRatio * 1.1;
+    proteinBurstPower = fullBurst
+      ? (0.9 + gaugeRatio * 1.1)
+      : (0.72 + gaugeRatio * 0.76);
 
     proteinBurstGauge = 0;
-    proteinBurstTimer = PROTEIN_BURST_DURATION;
+    proteinBurstTimer = fullBurst ? PROTEIN_BURST_DURATION : PROTEIN_BURST_METEOR_DURATION;
     proteinBurstBlastDone = false;
+    if (!stage.burstMeteors) stage.burstMeteors = [];
+    stage.burstMeteors = [];
     player.vx *= 0.4;
-    player.vy = Math.min(player.vy, -8.1 - gaugeRatio * 1.3);
-    player.onGround = false;
+    if (fullBurst) {
+      player.vy = Math.min(player.vy, -8.1 - gaugeRatio * 1.3);
+      player.onGround = false;
+    } else {
+      player.vy = Math.min(player.vy, -2.8 - gaugeRatio * 0.55);
+    }
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
@@ -2085,6 +2101,7 @@
     resetBattleRank();
     stage.playerWaves = [];
     stage.hammerShards = [];
+    stage.burstMeteors = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -2108,7 +2125,7 @@
     waveFlashY = player.y + player.h * 0.4;
     waveFlashTimer = Math.max(waveFlashTimer, 42 + gaugeRatio * 16);
     waveFlashPower = Math.max(waveFlashPower, 2.0 + gaugeRatio * 1.5);
-    hudMessage = spentGauge >= PROTEIN_BURST_REQUIRE ? "PROTEIN BURST MAX!" : "PROTEIN BURST!";
+    hudMessage = fullBurst ? "PROTEIN BURST MAX!" : "METEOR BURST!";
     hudTimer = 58;
     return true;
   }
@@ -2202,31 +2219,221 @@
     hudTimer = 34;
   }
 
+  function performProteinBurstMeteorBarrage() {
+    if (!stage.burstMeteors) stage.burstMeteors = [];
+    stage.burstMeteors = [];
+    const gaugeRatio = clamp(
+      (proteinBurstUsedGauge - PROTEIN_BURST_MIN) / Math.max(1, PROTEIN_BURST_REQUIRE - PROTEIN_BURST_MIN),
+      0,
+      1
+    );
+    const count = Math.round(
+      PROTEIN_BURST_METEOR_COUNT_MIN +
+      gaugeRatio * (PROTEIN_BURST_METEOR_COUNT_MAX - PROTEIN_BURST_METEOR_COUNT_MIN)
+    );
+    const minX = clamp(cameraX + 20, 10, stage.width - 10);
+    const maxX = clamp(cameraX + W - 20, minX + 1, stage.width - 10);
+    const delayStep = 4.8 - gaugeRatio * 1.4;
+
+    for (let i = 0; i < count; i += 1) {
+      const t = count <= 1 ? 0.5 : i / (count - 1);
+      const baseX = minX + (maxX - minX) * t;
+      const jitter = (Math.random() * 2 - 1) * (20 + gaugeRatio * 30);
+      const x = clamp(baseX + jitter, 10, stage.width - 10);
+      const power = 0.84 + gaugeRatio * 0.56 + Math.random() * 0.16;
+      stage.burstMeteors.push({
+        state: "warn",
+        x,
+        y: -18 - Math.random() * 18,
+        vx: (Math.random() * 2 - 1) * 0.28,
+        vy: 4.1 + gaugeRatio * 1.15 + Math.random() * 0.9,
+        delay: 7 + i * delayStep + Math.random() * 5,
+        pulse: Math.random() * Math.PI * 2,
+        radius: 22 + power * 11,
+        power,
+        life: 0,
+      });
+    }
+
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.45;
+    triggerImpact(3.1 + gaugeRatio * 1.2, px, py - 12, 4.8 + gaugeRatio * 1.4);
+    for (let i = 0; i < 8; i += 1) {
+      const ang = (Math.PI * 2 * i) / 8;
+      spawnWaveBurst(px + Math.cos(ang) * 7, py - 14 + Math.sin(ang) * 5, 0.9 + gaugeRatio * 0.55);
+    }
+    playWaveShotSfx(0.56 + gaugeRatio * 0.24);
+    playKickSfx(1.72 + gaugeRatio * 0.26);
+    hudMessage = `METEOR x${count}`;
+    hudTimer = 40;
+  }
+
+  function applyProteinBurstMeteorImpact(meteor, gaugeRatio) {
+    const crisisMul = pinchAttackMultiplier();
+    const mx = meteor.x;
+    const my = stage.groundY - 1;
+    const radius = meteor.radius;
+    const enemyPower = (0.88 + meteor.power * 0.56 + gaugeRatio * 0.34) * crisisMul * 0.92;
+
+    let hits = 0;
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      const ex = enemy.x + enemy.w * 0.5;
+      const ey = enemy.y + enemy.h * 0.45;
+      if (Math.abs(ex - mx) > radius * 1.08 || Math.abs(ey - my) > radius * 0.88) continue;
+      const dir = ex < mx ? -1 : 1;
+      kickEnemy(enemy, dir, enemyPower, {
+        immediateRemove: false,
+        flyLifetime: 36,
+        rankStyle: "burst_meteor",
+      });
+      enemy.vx = dir * (4.2 + meteor.power * 1.25);
+      enemy.vy = -(3.0 + meteor.power * 0.75);
+      enemy.flash = 12;
+      hits += 1;
+    }
+
+    for (const bullet of stage.hazardBullets) {
+      if (bullet.dead) continue;
+      const bx = bullet.x + bullet.w * 0.5;
+      const by = bullet.y + bullet.h * 0.5;
+      if (Math.abs(bx - mx) > radius * 1.22 || Math.abs(by - my) > radius) continue;
+      bullet.dead = true;
+      hits += 1;
+    }
+
+    for (const shot of stage.bossShots) {
+      if (shot.dead) continue;
+      const sx = shot.x + shot.w * 0.5;
+      const sy = shot.y + shot.h * 0.5;
+      if (Math.abs(sx - mx) > radius * 1.28 || Math.abs(sy - my) > radius) continue;
+      shot.dead = true;
+      hits += 1;
+    }
+
+    for (const boss of getBossEntities()) {
+      if (boss.hp <= 0 || boss.invuln > 0) continue;
+      const hx = boss.x + boss.w * 0.5;
+      const hy = boss.y + boss.h * 0.42;
+      if (Math.abs(hx - mx) > radius * 1.34 || Math.abs(hy - my) > radius * 1.05) continue;
+      const bf = rollBlackFlashHit(hx, hy, 0.92 + meteor.power * 0.58);
+      const damageBase = 0.86 + gaugeRatio * 0.76 + bossDamageBonus() * 0.3;
+      const damage = Math.max(1, Math.round(damageBase * (bf ? 2 : 1)));
+      boss.hp = Math.max(0, boss.hp - damage);
+      boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
+      const dir = hx < mx ? -1 : 1;
+      boss.vx += dir * (0.34 + meteor.power * 0.24 + (bf ? 0.12 : 0));
+      boss.vy = Math.min(boss.vy, -(1.2 + meteor.power * 0.34 + (bf ? 0.16 : 0)));
+      handleBossHpZero();
+      hits += 1;
+    }
+
+    triggerImpact(3.8 + meteor.power * 1.2, mx, my - 14, 5.6 + meteor.power * 1.5);
+    for (let i = 0; i < 11; i += 1) {
+      const ang = (Math.PI * 2 * i) / 11 + Math.random() * 0.24;
+      const dist = 5 + (i % 3) * 5 + radius * 0.14;
+      const sx = mx + Math.cos(ang) * dist;
+      const sy = my - 12 + Math.sin(ang) * dist * 0.7;
+      spawnWaveBurst(sx, sy, 0.8 + meteor.power * 0.44);
+    }
+    spawnHitSparks(mx, my - 14, "#ffd4a8", "#ff7a60");
+    playKickSfx(1.84 + meteor.power * 0.2);
+
+    if (hits > 0) {
+      hudMessage = `METEOR HIT x${hits}`;
+      hudTimer = 16;
+    }
+
+    meteor.state = "boom";
+    meteor.life = 18 + meteor.power * 7;
+    meteor.y = my;
+  }
+
+  function updateProteinBurstMeteors(dt) {
+    if (!stage.burstMeteors || stage.burstMeteors.length === 0) return;
+    const gaugeRatio = clamp(
+      (proteinBurstUsedGauge - PROTEIN_BURST_MIN) / Math.max(1, PROTEIN_BURST_REQUIRE - PROTEIN_BURST_MIN),
+      0,
+      1
+    );
+
+    for (const meteor of stage.burstMeteors) {
+      if (meteor.dead) continue;
+      meteor.pulse = (meteor.pulse || 0) + dt * 0.22;
+
+      if (meteor.state === "warn") {
+        meteor.delay -= dt;
+        if (meteor.delay <= 0) {
+          meteor.state = "fall";
+          meteor.y = -18 - Math.random() * 16;
+        }
+        continue;
+      }
+
+      if (meteor.state === "fall") {
+        meteor.vy = Math.min(meteor.vy + (0.18 + meteor.power * 0.03) * dt, 9.2);
+        meteor.x = clamp(meteor.x + meteor.vx * dt, 8, stage.width - 8);
+        meteor.y += meteor.vy * dt;
+        if (meteor.y >= stage.groundY - 1) {
+          applyProteinBurstMeteorImpact(meteor, gaugeRatio);
+        }
+        continue;
+      }
+
+      if (meteor.state === "boom") {
+        meteor.life -= dt;
+        if (meteor.life <= 0) meteor.dead = true;
+      }
+    }
+
+    stage.burstMeteors = stage.burstMeteors.filter((meteor) => !meteor.dead);
+  }
+
   function updateProteinBurst(dt, solids, minX, maxX) {
     if (proteinBurstTimer <= 0) return false;
 
-    const elapsed = PROTEIN_BURST_DURATION - proteinBurstTimer;
-    const progress = clamp(elapsed / PROTEIN_BURST_DURATION, 0, 1);
+    const duration = proteinBurstMode === PROTEIN_BURST_MODE_METEOR
+      ? PROTEIN_BURST_METEOR_DURATION
+      : PROTEIN_BURST_DURATION;
+    const elapsed = duration - proteinBurstTimer;
+    const progress = clamp(elapsed / duration, 0, 1);
     const sweepPower = clamp(proteinBurstPower, 0.9, 2.4);
     if (!proteinBurstBlastDone && progress >= PROTEIN_BURST_BLAST_AT) {
       proteinBurstBlastDone = true;
-      performProteinBurstSweep();
+      if (proteinBurstMode === PROTEIN_BURST_MODE_METEOR) {
+        performProteinBurstMeteorBarrage();
+      } else {
+        performProteinBurstSweep();
+      }
     }
 
-    player.vx *= Math.pow(0.86, dt);
-    if (progress < 0.42) {
-      player.vy = Math.min(player.vy - (0.22 + sweepPower * 0.06) * dt, -(4.0 + sweepPower * 0.55));
+    if (proteinBurstMode === PROTEIN_BURST_MODE_METEOR) {
+      updateProteinBurstMeteors(dt);
+      player.vx *= Math.pow(0.8, dt);
+      if (player.onGround) {
+        player.vy = Math.min(player.vy, -0.2);
+      } else {
+        player.vy = Math.min(player.vy + GRAVITY * 0.78 * dt, MAX_FALL);
+      }
+      const rumblePulse = 0.5 + Math.sin((proteinBurstLaserPhase + elapsed) * 0.3) * 0.5;
+      impactShakeTimer = Math.max(impactShakeTimer, 3.2 + sweepPower * 1.7);
+      impactShakePower = Math.max(impactShakePower, 0.82 + sweepPower * 0.36 + rumblePulse * 0.28);
     } else {
-      player.vy = Math.min(player.vy + GRAVITY * (0.84 + sweepPower * 0.03) * dt, MAX_FALL);
-    }
+      player.vx *= Math.pow(0.86, dt);
+      if (progress < 0.42) {
+        player.vy = Math.min(player.vy - (0.22 + sweepPower * 0.06) * dt, -(4.0 + sweepPower * 0.55));
+      } else {
+        player.vy = Math.min(player.vy + GRAVITY * (0.84 + sweepPower * 0.03) * dt, MAX_FALL);
+      }
 
-    const rumblePulse = 0.5 + Math.sin((proteinBurstLaserPhase + elapsed) * 0.34) * 0.5;
-    impactShakeTimer = Math.max(impactShakeTimer, 4 + sweepPower * 2.2);
-    impactShakePower = Math.max(impactShakePower, 0.9 + sweepPower * 0.55 + rumblePulse * 0.35);
+      const rumblePulse = 0.5 + Math.sin((proteinBurstLaserPhase + elapsed) * 0.34) * 0.5;
+      impactShakeTimer = Math.max(impactShakeTimer, 4 + sweepPower * 2.2);
+      impactShakePower = Math.max(impactShakePower, 0.9 + sweepPower * 0.55 + rumblePulse * 0.35);
+    }
 
     moveWithCollisions(player, solids, dt, triggerCrumble);
     player.x = clamp(player.x, minX, maxX);
-    if (player.y < PROTEIN_BURST_TOP_Y) {
+    if (proteinBurstMode === PROTEIN_BURST_MODE_LASER && player.y < PROTEIN_BURST_TOP_Y) {
       player.y = PROTEIN_BURST_TOP_Y;
       if (player.vy < -0.9) {
         player.vy = -0.9;
@@ -2239,6 +2446,9 @@
       proteinBurstBlastDone = false;
       proteinBurstUsedGauge = 0;
       proteinBurstPower = 1;
+      proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+      if (!stage.burstMeteors) stage.burstMeteors = [];
+      stage.burstMeteors = [];
       player.vy = Math.min(player.vy, -2.7);
       hudMessage = "BURST END";
       hudTimer = 22;
@@ -2529,6 +2739,7 @@
         bossArenaControl: null,
         playerWaves: [],
         hammerShards: [],
+        burstMeteors: [],
         checkpoints,
         goal: { x: 5460, y: 112, w: 24, h: 48 },
         bossArena: { minX: 5520, maxX: 6020 },
@@ -2873,6 +3084,7 @@
       bossArenaControl: null,
       playerWaves: [],
       hammerShards: [],
+      burstMeteors: [],
       checkpoints,
       goal: { x: 10380, y: 112, w: 24, h: 48 },
       bossArena: { minX: 10440, maxX: 11120 },
@@ -3386,6 +3598,7 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstMode = PROTEIN_BURST_MODE_LASER;
     kickCombo = 0;
     kickComboTimer = 0;
     stompChainGuardTimer = 0;
@@ -3416,6 +3629,7 @@
     resetBlackFlashState();
     stage.playerWaves = [];
     stage.hammerShards = [];
+    stage.burstMeteors = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -3460,6 +3674,7 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstMode = PROTEIN_BURST_MODE_LASER;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     playerHearts = MAX_HEARTS;
@@ -3497,6 +3712,7 @@
     resetBlackFlashState();
     stage.playerWaves = [];
     stage.hammerShards = [];
+    stage.burstMeteors = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -3541,6 +3757,7 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstMode = PROTEIN_BURST_MODE_LASER;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     playerHearts = MAX_HEARTS;
@@ -3577,6 +3794,7 @@
     resetBattleRank();
     stage.playerWaves = [];
     stage.hammerShards = [];
+    stage.burstMeteors = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -5462,6 +5680,7 @@
     stage.bossShots = [];
     stage.hammerShards = [];
     stage.playerWaves = [];
+    stage.burstMeteors = [];
     if (!stage.godGimmicks || stage.godGimmicks.length === 0) {
       setupGodPhaseGimmicks();
     }
@@ -5646,6 +5865,7 @@
     stage.bossArenaControl = null;
     stage.playerWaves = [];
     stage.hammerShards = [];
+    stage.burstMeteors = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -5703,6 +5923,7 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstMode = PROTEIN_BURST_MODE_LASER;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     attackCooldown = 0;
@@ -5759,6 +5980,7 @@
     stage.bossShots = [];
     stage.playerWaves = [];
     stage.hammerShards = [];
+    stage.burstMeteors = [];
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
@@ -5783,6 +6005,7 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstMode = PROTEIN_BURST_MODE_LASER;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     hitStopTimer = Math.max(hitStopTimer, 4);
@@ -6626,12 +6849,14 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstMode = PROTEIN_BURST_MODE_LASER;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     stopInvincibleMusic();
     stopBossMusic(true);
     stage.playerWaves = [];
     stage.hammerShards = [];
+    stage.burstMeteors = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -6966,8 +7191,10 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstMode = PROTEIN_BURST_MODE_LASER;
     stage.playerWaves = [];
     stage.hammerShards = [];
+    stage.burstMeteors = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -6996,6 +7223,7 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstMode = PROTEIN_BURST_MODE_LASER;
     stopInvincibleMusic();
     stopBossMusic(true);
     stopStageMusic(true);
@@ -8646,6 +8874,54 @@
     }
   }
 
+  function drawBurstMeteors() {
+    if (!stage.burstMeteors || stage.burstMeteors.length === 0) return;
+
+    for (const meteor of stage.burstMeteors) {
+      const x = Math.floor(meteor.x - cameraX);
+      const groundY = Math.floor(stage.groundY - 1);
+      const pulse = 0.5 + Math.sin((meteor.pulse || 0) * 3.2) * 0.5;
+      const radius = meteor.radius || 24;
+
+      if (meteor.state === "warn") {
+        const alpha = 0.22 + pulse * 0.28;
+        ctx.fillStyle = `rgba(255, 188, 112, ${alpha})`;
+        ctx.fillRect(x - 2, 24, 4, groundY - 24);
+        ctx.fillStyle = `rgba(255, 86, 70, ${0.28 + pulse * 0.2})`;
+        ctx.fillRect(x - Math.floor(radius * 0.7), groundY - 2, Math.floor(radius * 1.4), 2);
+        ctx.fillStyle = `rgba(255, 235, 160, ${0.2 + pulse * 0.18})`;
+        ctx.fillRect(x - Math.floor(radius * 0.45), groundY - 1, Math.floor(radius * 0.9), 1);
+        continue;
+      }
+
+      if (meteor.state === "fall") {
+        const y = Math.floor(meteor.y);
+        const trailH = Math.max(8, Math.floor(18 + meteor.power * 8));
+        ctx.fillStyle = "rgba(255, 154, 96, 0.45)";
+        ctx.fillRect(x - 2, y - trailH, 4, trailH);
+        ctx.fillStyle = "rgba(255, 222, 156, 0.34)";
+        ctx.fillRect(x - 1, y - trailH - 6, 2, trailH + 6);
+        ctx.fillStyle = "#6a3942";
+        ctx.fillRect(x - 3, y - 4, 6, 6);
+        ctx.fillStyle = "#a64d58";
+        ctx.fillRect(x - 2, y - 3, 4, 4);
+        ctx.fillStyle = "#ffd8ac";
+        ctx.fillRect(x - 1, y - 2, 2, 2);
+        continue;
+      }
+
+      if (meteor.state === "boom") {
+        const lifeRatio = clamp(meteor.life / (18 + meteor.power * 7), 0, 1);
+        const burstR = radius * (1.15 + (1 - lifeRatio) * 0.42);
+        const y = groundY - Math.floor(4 + (1 - lifeRatio) * 3);
+        ctx.fillStyle = `rgba(255, 132, 82, ${0.2 + lifeRatio * 0.28})`;
+        ctx.fillRect(Math.floor(x - burstR), y - 4, Math.floor(burstR * 2), 4);
+        ctx.fillStyle = `rgba(255, 228, 170, ${0.18 + lifeRatio * 0.24})`;
+        ctx.fillRect(Math.floor(x - burstR * 0.72), y - 2, Math.floor(burstR * 1.44), 2);
+      }
+    }
+  }
+
   function drawInvincibleBonusPops() {
     if (invincibleBonusPops.length === 0) return;
 
@@ -9618,6 +9894,8 @@
       ctx.fillStyle = enemyShot ? "#9f7dff" : "#ffa934";
       ctx.fillRect(bx + 1, by + 1, b.w - 2, b.h - 2);
     }
+
+    drawBurstMeteors();
 
     for (const shard of stage.hammerShards || []) {
       if (shard.dead) continue;
@@ -11090,10 +11368,11 @@
   }
 
   function drawProteinBurstLaserOverlay() {
-    if (proteinBurstLaserTimer <= 0 && proteinBurstTimer <= 0) return;
+    const laserModeActive = proteinBurstMode === PROTEIN_BURST_MODE_LASER && proteinBurstTimer > 0;
+    if (proteinBurstLaserTimer <= 0 && !laserModeActive) return;
 
     const ratio = clamp(proteinBurstLaserTimer / PROTEIN_BURST_LASER_DURATION, 0, 1);
-    const burstRatio = clamp(proteinBurstTimer / PROTEIN_BURST_DURATION, 0, 1);
+    const burstRatio = laserModeActive ? clamp(proteinBurstTimer / PROTEIN_BURST_DURATION, 0, 1) : 0;
     const intensity = Math.max(ratio, burstRatio * 0.92);
     const sweep = 1 - ratio;
     const topY = 24;
