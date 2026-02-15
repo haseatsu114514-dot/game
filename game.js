@@ -239,9 +239,9 @@
   const PRE_BOSS_MOVIE_START_AT = 230;
   const GOD_PHASE_CUTSCENE_DURATION = 210;
   const GOD_PHASE_CUTSCENE_SKIP_MIN = 24;
-  const GOD_BOSS_PHASE1_HP = 13;
-  const GOD_BOSS_PHASE2_HP = 17;
-  const GOD_BOSS_SHOT_DENSITY_MUL = 1.28;
+  const GOD_BOSS_PHASE1_HP = 15;
+  const GOD_BOSS_PHASE2_HP = 19;
+  const GOD_BOSS_SHOT_DENSITY_MUL = 1.18;
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
   const CANNON_EXTRA_COOLDOWN = 26;
@@ -5916,7 +5916,7 @@
 
     stage.boss.started = true;
     stage.boss.active = true;
-    stage.boss.maxHp = bossKind === "peacock" ? 8 : GOD_BOSS_PHASE1_HP;
+    stage.boss.maxHp = bossKind === "peacock" ? 9 : GOD_BOSS_PHASE1_HP;
     stage.boss.hp = stage.boss.maxHp;
     stage.boss.x = bossKind === "peacock"
       ? BOSS_ARENA.minX + Math.floor((BOSS_ARENA.maxX - BOSS_ARENA.minX) * 0.48)
@@ -5927,7 +5927,7 @@
     stage.boss.dir = -1;
     stage.boss.mode = "intro";
     stage.boss.modeTimer = bossKind === "peacock" ? 34 : 42;
-    stage.boss.shotCooldown = bossKind === "peacock" ? 34 : 28;
+    stage.boss.shotCooldown = bossKind === "peacock" ? 31 : 28;
     stage.boss.attackCycle = 0;
     stage.boss.spiralAngle = 0;
     stage.boss.invuln = bossKind === "peacock" ? 20 : 24;
@@ -5965,7 +5965,7 @@
       stage.boss.attackCycle = 0;
       stage.boss.mode = "intro";
       stage.boss.modeTimer = 40;
-      stage.boss.shotCooldown = 28;
+      stage.boss.shotCooldown = 26;
       const twin = {
         kind: "peacock",
         active: true,
@@ -5981,7 +5981,7 @@
         maxHp: stage.boss.maxHp,
         mode: "intro",
         modeTimer: 52,
-        shotCooldown: 24,
+        shotCooldown: 22,
         attackCycle: 1,
         spiralAngle: 0,
         invuln: 22,
