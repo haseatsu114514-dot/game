@@ -38,6 +38,7 @@
     attack: false,
     attack2: false,
     special: false,
+    special2: false,
     start: false,
   };
 
@@ -46,6 +47,7 @@
     attack: false,
     attack2: false,
     special: false,
+    special2: false,
     start: false,
   };
 
@@ -83,6 +85,11 @@
   let proteinBurstUsedGauge = 0;
   let proteinBurstPower = 1;
   let proteinBurstMode = "laser";
+  let timeBurstTimer = 0;
+  let timeBurstDuration = 0;
+  let timeBurstMode = "none";
+  let timeBurstSlowScale = 1;
+  let timeBurstPhase = 0;
   let invincibleTimer = 0;
   let invincibleHitCooldown = 0;
   let impactShakeTimer = 0;
@@ -208,7 +215,7 @@
   const BLACK_FLASH_ENEMY_SLOW_SCALE = 0.84;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
-    { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 0.7, color: "#8db2d9" },
+    { short: "Danger", long: "Danger", threshold: 0, chargeMul: 0.7, color: "#8db2d9" },
     { short: "Badass", long: "Badass", threshold: 120, chargeMul: 0.9, color: "#79d9ff" },
     { short: "Apoc", long: "Apocalyptic", threshold: 280, chargeMul: 1.18, color: "#96f0b2" },
     { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.56, color: "#ffd47d" },
@@ -236,6 +243,16 @@
   const PROTEIN_BURST_LASER_DURATION = 56;
   const PROTEIN_BURST_METEOR_COUNT_MIN = 4;
   const PROTEIN_BURST_METEOR_COUNT_MAX = 9;
+  const TIME_BURST_MODE_NONE = "none";
+  const TIME_BURST_MODE_SLOW = "slow";
+  const TIME_BURST_MODE_STOP = "stop";
+  const TIME_BURST_SLOW_MIN_DURATION = 60;
+  const TIME_BURST_SLOW_MAX_DURATION = 120;
+  const TIME_BURST_STOP_DURATION = 180;
+  const TIME_BURST_SLOW_SCALE_MIN = 0.34;
+  const TIME_BURST_SLOW_SCALE_MAX = 0.62;
+  const TIME_BURST_RANK_GAIN_SLOW_MUL = 1.35;
+  const TIME_BURST_RANK_GAIN_STOP_MUL = 1.7;
   const OPENING_CUTSCENE_DURATION = 760;
   const PRE_BOSS_CUTSCENE_DURATION = 460;
   const PRE_BOSS_ENTRY_DURATION = 78;
@@ -337,6 +354,25 @@
     return proteinBurstGauge - before;
   }
 
+  function isTimeBurstActive() {
+    return timeBurstTimer > 0 && (timeBurstMode === TIME_BURST_MODE_SLOW || timeBurstMode === TIME_BURST_MODE_STOP);
+  }
+
+  function resetTimeBurstState() {
+    timeBurstTimer = 0;
+    timeBurstDuration = 0;
+    timeBurstMode = TIME_BURST_MODE_NONE;
+    timeBurstSlowScale = 1;
+    timeBurstPhase = 0;
+  }
+
+  function timeBurstRankGainMultiplier() {
+    if (!isTimeBurstActive()) return 1;
+    return timeBurstMode === TIME_BURST_MODE_STOP
+      ? TIME_BURST_RANK_GAIN_STOP_MUL
+      : TIME_BURST_RANK_GAIN_SLOW_MUL;
+  }
+
   function proteinBurstGainFromDefeat(power = 1) {
     const p = clamp(power, 0.8, 5.4);
     const rankMul = 1 + battleRankIndex * 0.14;
@@ -351,7 +387,8 @@
   }
 
   function blackFlashRankGainMultiplier() {
-    return blackFlashTimer > 0 ? BLACK_FLASH_RANK_GAIN_MUL : 1;
+    const flashMul = blackFlashTimer > 0 ? BLACK_FLASH_RANK_GAIN_MUL : 1;
+    return flashMul * timeBurstRankGainMultiplier();
   }
 
   function formatBlackFlashChanceText(chance) {
@@ -2164,7 +2201,63 @@
     spawnHitSparks(x, y);
   }
 
+  function triggerTimeBurst() {
+    if (isTimeBurstActive()) return false;
+    if (proteinBurstTimer > 0) return false;
+    if (proteinBurstGauge < PROTEIN_BURST_MIN) return false;
+
+    const spentGauge = proteinBurstGauge;
+    const fullStop = spentGauge >= PROTEIN_BURST_REQUIRE - 0.001;
+    const gaugeRatio = clamp(spentGauge / PROTEIN_BURST_REQUIRE, 0, 1);
+    const slowRatio = clamp(
+      (spentGauge - PROTEIN_BURST_MIN) / Math.max(1, PROTEIN_BURST_REQUIRE - PROTEIN_BURST_MIN),
+      0,
+      1
+    );
+
+    resetTimeBurstState();
+    timeBurstMode = fullStop ? TIME_BURST_MODE_STOP : TIME_BURST_MODE_SLOW;
+    timeBurstDuration = fullStop
+      ? TIME_BURST_STOP_DURATION
+      : Math.round(TIME_BURST_SLOW_MIN_DURATION + (TIME_BURST_SLOW_MAX_DURATION - TIME_BURST_SLOW_MIN_DURATION) * slowRatio);
+    timeBurstTimer = timeBurstDuration;
+    timeBurstSlowScale = fullStop
+      ? 0
+      : clamp(TIME_BURST_SLOW_SCALE_MAX - (TIME_BURST_SLOW_SCALE_MAX - TIME_BURST_SLOW_SCALE_MIN) * slowRatio, TIME_BURST_SLOW_SCALE_MIN, TIME_BURST_SLOW_SCALE_MAX);
+    timeBurstPhase = 0;
+
+    registerBurstActivationRankGain(player.x + player.w * 0.5, player.y + player.h * 0.52, gaugeRatio);
+    proteinBurstGauge = 0;
+
+    triggerImpact(
+      fullStop ? 3.4 : 2.7 + slowRatio * 0.9,
+      player.x + player.w * 0.5,
+      player.y + player.h * 0.5,
+      fullStop ? 5.6 : 4.2
+    );
+    for (let i = 0; i < 7; i += 1) {
+      const ang = (Math.PI * 2 * i) / 7 + i * 0.08;
+      const radius = 6 + i * 1.6;
+      const sx = player.x + player.w * 0.5 + Math.cos(ang) * radius;
+      const sy = player.y + player.h * 0.5 + Math.sin(ang) * radius * 0.7;
+      spawnWaveBurst(sx, sy, fullStop ? 1.2 : 0.9 + slowRatio * 0.5);
+    }
+    playPowerupSfx();
+    playKickSfx(fullStop ? 1.92 : 1.74 + slowRatio * 0.16);
+
+    if (fullStop) {
+      hudMessage = "BURST2: TIME STOP 3.0s";
+      hudTimer = 72;
+    } else {
+      const sec = (timeBurstDuration / 60).toFixed(1);
+      hudMessage = `BURST2: NEGATIVE SLOW ${sec}s`;
+      hudTimer = 62;
+    }
+    return true;
+  }
+
   function triggerProteinBurst() {
+    if (isTimeBurstActive()) return false;
     if (proteinBurstTimer > 0) return false;
     if (proteinBurstGauge < PROTEIN_BURST_MIN) return false;
 
@@ -2567,13 +2660,42 @@
   }
 
   function consumeBurstIfPressed(actions) {
-    if (!actions.specialPressed) return;
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
 
+    if (actions.special2Pressed) {
+      if (!triggerTimeBurst()) {
+        if (isTimeBurstActive() || proteinBurstTimer > 0) return;
+        hudMessage = `BURST2 ${Math.floor(proteinBurstGauge)}/${PROTEIN_BURST_MIN}+`;
+        hudTimer = 28;
+      }
+      return;
+    }
+
+    if (!actions.specialPressed) return;
     if (!triggerProteinBurst()) {
-      if (proteinBurstTimer > 0) return;
-      hudMessage = `BURST ${Math.floor(proteinBurstGauge)}/${PROTEIN_BURST_MIN}+`;
+      if (isTimeBurstActive() || proteinBurstTimer > 0) return;
+      hudMessage = `BURST1 ${Math.floor(proteinBurstGauge)}/${PROTEIN_BURST_MIN}+`;
       hudTimer = 28;
+    }
+  }
+
+  function timeBurstDtScale() {
+    if (!isTimeBurstActive()) return 1;
+    if (timeBurstMode === TIME_BURST_MODE_STOP) return 1;
+    return clamp(timeBurstSlowScale, TIME_BURST_SLOW_SCALE_MIN, TIME_BURST_SLOW_SCALE_MAX);
+  }
+
+  function updateTimeBurstState(rawDt) {
+    if (!isTimeBurstActive()) return;
+    timeBurstTimer = Math.max(0, timeBurstTimer - rawDt);
+    timeBurstPhase += rawDt;
+    if (timeBurstTimer > 0) return;
+
+    const wasStop = timeBurstMode === TIME_BURST_MODE_STOP;
+    resetTimeBurstState();
+    if (gameState === STATE.PLAY || gameState === STATE.BOSS) {
+      hudMessage = wasStop ? "TIME FLOW RETURN" : "SLOW END";
+      hudTimer = Math.max(hudTimer, 30);
     }
   }
 
@@ -3742,6 +3864,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    resetTimeBurstState();
     kickCombo = 0;
     kickComboTimer = 0;
     stompChainGuardTimer = 0;
@@ -3818,6 +3941,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    resetTimeBurstState();
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     playerHearts = MAX_HEARTS;
@@ -3901,6 +4025,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    resetTimeBurstState();
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     playerHearts = MAX_HEARTS;
@@ -6131,6 +6256,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    resetTimeBurstState();
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     attackCooldown = 0;
@@ -6213,6 +6339,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    resetTimeBurstState();
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     hitStopTimer = Math.max(hitStopTimer, 4);
@@ -7057,6 +7184,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    resetTimeBurstState();
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     stopInvincibleMusic();
@@ -7099,6 +7227,7 @@
       attack2Pressed: false,
       attack2Released: false,
       specialPressed: input.special && !prevInput.special,
+      special2Pressed: input.special2 && !prevInput.special2,
       startPressed: input.start && !prevInput.start,
     };
 
@@ -7106,6 +7235,7 @@
     prevInput.attack = input.attack;
     prevInput.attack2 = false;
     prevInput.special = input.special;
+    prevInput.special2 = input.special2;
     prevInput.start = input.start;
 
     return actions;
@@ -7115,6 +7245,8 @@
     if (hudTimer > 0) hudTimer -= dt;
     updateImpactEffects(dt);
     consumeBurstIfPressed(actions);
+    const worldStopped = isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_STOP;
+    const worldDt = worldStopped ? 0 : dt;
 
     if (hitStopTimer > 0) {
       hitStopTimer = Math.max(0, hitStopTimer - dt);
@@ -7171,26 +7303,26 @@
       player.anim += dt;
     }
 
-    updateCrumble(dt);
-    updatePopSpikes(dt);
-    updateFallBlocks(dt);
-    updateCannons(dt);
+    updateCrumble(worldDt);
+    updatePopSpikes(worldDt);
+    updateFallBlocks(worldDt);
+    updateCannons(worldDt);
 
     const solidsAfter = collectSolids();
-    updateEnemies(dt, solidsAfter);
-    updateHazardBullets(dt, solidsAfter);
-    updateProteins(dt);
-    updateHeartItems(dt);
-    updateLifeUpItems(dt);
-    updateBikes(dt);
-    updateCheckpointTokens(dt);
+    updateEnemies(worldDt, solidsAfter);
+    updateHazardBullets(worldDt, solidsAfter);
+    updateProteins(worldDt);
+    updateHeartItems(worldDt);
+    updateLifeUpItems(worldDt);
+    updateBikes(worldDt);
+    updateCheckpointTokens(worldDt);
     if (proteinBurstTimer <= 0) {
       updatePlayerAttack(dt, actions);
     }
     updatePlayerWaves(dt, solidsAfter);
-    updateHammerShards(dt, solidsAfter);
+    updateHammerShards(worldDt, solidsAfter);
     resolveEnemyContactDamage();
-    resolveBreakWalls(dt);
+    resolveBreakWalls(worldDt);
     resolveHazards();
     resolveGoal();
 
@@ -7201,6 +7333,8 @@
     if (hudTimer > 0) hudTimer -= dt;
     updateImpactEffects(dt);
     consumeBurstIfPressed(actions);
+    const worldStopped = isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_STOP;
+    const worldDt = worldStopped ? 0 : dt;
 
     if (hitStopTimer > 0) {
       hitStopTimer = Math.max(0, hitStopTimer - dt);
@@ -7257,29 +7391,29 @@
       player.anim += dt;
     }
 
-    updateProteins(dt);
-    updateHeartItems(dt);
-    updateLifeUpItems(dt);
-    updateBikes(dt);
-    updateBoss(dt, solids);
+    updateProteins(worldDt);
+    updateHeartItems(worldDt);
+    updateLifeUpItems(worldDt);
+    updateBikes(worldDt);
+    updateBoss(worldDt, solids);
     if (gameState !== STATE.BOSS) return;
-    updateGodGimmicks(dt);
+    updateGodGimmicks(worldDt);
     if (gameState !== STATE.BOSS) return;
-    updateBossShots(dt, solids);
+    updateBossShots(worldDt, solids);
     if (gameState !== STATE.BOSS) return;
-    updateEnemies(dt, solids);
-    updateHazardBullets(dt, solids);
+    updateEnemies(worldDt, solids);
+    updateHazardBullets(worldDt, solids);
     if (proteinBurstTimer <= 0) {
       updatePlayerAttack(dt, actions);
     }
     if (gameState !== STATE.BOSS) return;
     updatePlayerWaves(dt, solids);
     if (gameState !== STATE.BOSS) return;
-    updateHammerShards(dt, solids);
+    updateHammerShards(worldDt, solids);
     if (gameState !== STATE.BOSS) return;
     resolveEnemyContactDamage();
     resolveBossContactDamage();
-    resolveBreakWalls(dt);
+    resolveBreakWalls(worldDt);
     resolveHazards();
 
     cameraX = clamp(player.x + player.w * 0.5 - W * 0.45, BOSS_ARENA.minX - 120, stage.width - W);
@@ -7399,6 +7533,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    resetTimeBurstState();
     stage.playerWaves = [];
     stage.hammerShards = [];
     stage.burstMeteors = [];
@@ -7431,6 +7566,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    resetTimeBurstState();
     stopInvincibleMusic();
     stopBossMusic(true);
     stopStageMusic(true);
@@ -11678,6 +11814,43 @@
     ctx.fillRect(0, waveY - 3, W, 6);
   }
 
+  function drawTimeBurstOverlay() {
+    if (!isTimeBurstActive()) return;
+    const duration = Math.max(1, timeBurstDuration || (timeBurstMode === TIME_BURST_MODE_STOP ? TIME_BURST_STOP_DURATION : TIME_BURST_SLOW_MAX_DURATION));
+    const ratio = clamp(timeBurstTimer / duration, 0, 1);
+    const pulse = 0.5 + Math.sin(timeBurstPhase * 0.55 + player.anim * 0.08) * 0.5;
+
+    if (timeBurstMode === TIME_BURST_MODE_SLOW) {
+      ctx.save();
+      ctx.globalCompositeOperation = "difference";
+      const invAlpha = clamp(0.86 + pulse * 0.12, 0.78, 1);
+      ctx.fillStyle = `rgba(255, 255, 255, ${invAlpha})`;
+      ctx.fillRect(0, 24, W, H - 24);
+      ctx.restore();
+
+      ctx.fillStyle = `rgba(132, 244, 255, ${0.08 + ratio * 0.12})`;
+      ctx.fillRect(0, 24, W, H - 24);
+      for (let i = 0; i < 9; i += 1) {
+        const gy = 24 + ((Math.floor(timeBurstPhase * 3) + i * 9) % Math.max(1, H - 28));
+        ctx.fillStyle = `rgba(255, 245, 186, ${0.06 + ratio * 0.08 - i * 0.004})`;
+        ctx.fillRect(0, gy, W, 1);
+      }
+      return;
+    }
+
+    if (timeBurstMode === TIME_BURST_MODE_STOP) {
+      ctx.fillStyle = `rgba(232, 232, 232, ${0.08 + ratio * 0.16})`;
+      ctx.fillRect(0, 24, W, H - 24);
+      const lineCount = 12;
+      for (let i = 0; i < lineCount; i += 1) {
+        const ly = 24 + i * Math.floor((H - 24) / lineCount);
+        const alpha = 0.05 + pulse * 0.06 - i * 0.002;
+        ctx.fillStyle = `rgba(18, 18, 18, ${Math.max(0.02, alpha)})`;
+        ctx.fillRect(0, ly, W, 1);
+      }
+    }
+  }
+
   function drawProteinBurstLaserOverlay() {
     const laserModeActive = proteinBurstMode === PROTEIN_BURST_MODE_LASER && proteinBurstTimer > 0;
     if (proteinBurstLaserTimer <= 0 && !laserModeActive) return;
@@ -11786,12 +11959,20 @@
 
     ctx.save();
     ctx.translate(shakeX, shakeY);
+    const stopMonochrome = isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_STOP;
+    if (stopMonochrome) {
+      ctx.filter = "grayscale(1) contrast(1.1)";
+    }
     drawWorld();
     drawBattleRankStyleOverlay();
     drawBlackFlashOverlay();
     drawKickBurstOverlay();
     drawWaveFlashOverlay();
     drawProteinBurstLaserOverlay();
+    if (stopMonochrome) {
+      ctx.filter = "none";
+    }
+    drawTimeBurstOverlay();
     drawHUD();
 
     if (gameState === STATE.DEAD) {
@@ -11882,45 +12063,72 @@
     });
   }
 
-  let burstButton = document.getElementById("btn-special");
-  if (!burstButton) {
+  let burstButton1 = document.getElementById("btn-special");
+  if (!burstButton1) {
     const clusterRight = document.querySelector(".cluster-right");
     if (clusterRight) {
-      burstButton = document.createElement("button");
-      burstButton.id = "btn-special";
-      burstButton.className = "ctrl action special";
-      burstButton.textContent = "BURST";
-      clusterRight.appendChild(burstButton);
+      burstButton1 = document.createElement("button");
+      burstButton1.id = "btn-special";
+      burstButton1.className = "ctrl action special";
+      burstButton1.textContent = "burst1";
+      clusterRight.appendChild(burstButton1);
     }
   }
-  function refreshBurstButtonUi() {
-    if (!burstButton) return;
-    const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
-    const chargeRatio = clamp(proteinBurstGauge / PROTEIN_BURST_REQUIRE, 0, 1);
-    const tone = burstChargeTone(chargeRatio);
-    const ready = playable && proteinBurstGauge >= PROTEIN_BURST_MIN && proteinBurstTimer <= 0;
-    const full = proteinBurstGauge >= PROTEIN_BURST_REQUIRE;
+
+  let burstButton2 = document.getElementById("btn-special2");
+  if (!burstButton2) {
+    const clusterRight = document.querySelector(".cluster-right");
+    if (clusterRight) {
+      burstButton2 = document.createElement("button");
+      burstButton2.id = "btn-special2";
+      burstButton2.className = "ctrl action special";
+      burstButton2.textContent = "burst2";
+      clusterRight.appendChild(burstButton2);
+    }
+  }
+
+  function applyBurstButtonTone(button, ratio, tone, ready, full, playable) {
+    if (!button) return;
     const fillLight = clamp(tone.light + (ready ? 10 : 4) + (full ? 5 : 0), 46, 90);
     const topLight = clamp(tone.light * 0.66 + 11, 22, 62);
     const bottomLight = clamp(tone.light * 0.4 + 8, 16, 45);
     const borderLight = clamp(fillLight + 5, 52, 93);
-    const glowAlpha = clamp((ready ? 0.2 : 0.06) + chargeRatio * 0.22 + (full ? 0.1 : 0), 0.06, 0.6);
-    burstButton.style.setProperty("--burst-fill", `${Math.round(chargeRatio * 100)}%`);
-    burstButton.style.setProperty("--burst-alpha", (0.12 + chargeRatio * 0.62).toFixed(3));
-    burstButton.style.setProperty("--burst-hue", tone.hue.toFixed(1));
-    burstButton.style.setProperty("--burst-sat", `${tone.sat.toFixed(1)}%`);
-    burstButton.style.setProperty("--burst-fill-light", `${fillLight.toFixed(1)}%`);
-    burstButton.style.setProperty("--burst-top-light", `${topLight.toFixed(1)}%`);
-    burstButton.style.setProperty("--burst-bottom-light", `${bottomLight.toFixed(1)}%`);
-    burstButton.style.setProperty("--burst-border-light", `${borderLight.toFixed(1)}%`);
-    burstButton.style.setProperty("--burst-glow-alpha", glowAlpha.toFixed(3));
-    burstButton.disabled = !ready;
-    burstButton.classList.toggle("not-ready", playable && !ready);
-    burstButton.classList.toggle("ready", ready);
-    burstButton.classList.toggle("full", full);
-    burstButton.textContent = full ? "BURST!" : "BURST";
+    const glowAlpha = clamp((ready ? 0.2 : 0.06) + ratio * 0.22 + (full ? 0.1 : 0), 0.06, 0.6);
+    button.style.setProperty("--burst-fill", `${Math.round(ratio * 100)}%`);
+    button.style.setProperty("--burst-alpha", (0.12 + ratio * 0.62).toFixed(3));
+    button.style.setProperty("--burst-hue", tone.hue.toFixed(1));
+    button.style.setProperty("--burst-sat", `${tone.sat.toFixed(1)}%`);
+    button.style.setProperty("--burst-fill-light", `${fillLight.toFixed(1)}%`);
+    button.style.setProperty("--burst-top-light", `${topLight.toFixed(1)}%`);
+    button.style.setProperty("--burst-bottom-light", `${bottomLight.toFixed(1)}%`);
+    button.style.setProperty("--burst-border-light", `${borderLight.toFixed(1)}%`);
+    button.style.setProperty("--burst-glow-alpha", glowAlpha.toFixed(3));
+    button.disabled = !ready;
+    button.classList.toggle("not-ready", playable && !ready);
+    button.classList.toggle("ready", ready);
+    button.classList.toggle("full", full);
+  }
+
+  function refreshBurstButtonUi() {
+    if (!burstButton1 && !burstButton2) return;
+    const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    const chargeRatio = clamp(proteinBurstGauge / PROTEIN_BURST_REQUIRE, 0, 1);
+    const tone1 = burstChargeTone(chargeRatio);
+    const tone2 = {
+      hue: (tone1.hue + 84) % 360,
+      sat: clamp(tone1.sat + 6, 28, 98),
+      light: clamp(tone1.light + 2, 38, 86),
+    };
+    const busy = proteinBurstTimer > 0 || isTimeBurstActive();
+    const ready = playable && proteinBurstGauge >= PROTEIN_BURST_MIN && !busy;
+    const full = proteinBurstGauge >= PROTEIN_BURST_REQUIRE;
+    applyBurstButtonTone(burstButton1, chargeRatio, tone1, ready, full, playable);
+    applyBurstButtonTone(burstButton2, chargeRatio, tone2, ready, full, playable);
+    if (burstButton1) burstButton1.textContent = full ? "burst1!" : "burst1";
+    if (burstButton2) burstButton2.textContent = full ? "burst2!" : "burst2";
     if (!ready) {
       releaseHoldButtonByKey("special");
+      releaseHoldButtonByKey("special2");
     }
   }
 
@@ -11929,6 +12137,7 @@
   bindHoldButton("btn-jump", "jump");
   bindHoldButton("btn-attack", "attack");
   bindHoldButton("btn-special", "special");
+  bindHoldButton("btn-special2", "special2");
   refreshBurstButtonUi();
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -11980,6 +12189,7 @@
     KeyJ: "attack",
     KeyF: "attack",
     KeyK: "special",
+    KeyL: "special2",
     Enter: "start",
   };
 
@@ -12009,15 +12219,18 @@
     input.attack = false;
     input.attack2 = false;
     input.special = false;
+    input.special2 = false;
     input.start = false;
   });
   window.addEventListener("pagehide", () => {
     releaseAllHoldButtons();
+    input.special2 = false;
     input.start = false;
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       releaseAllHoldButtons();
+      input.special2 = false;
       input.start = false;
     }
   });
@@ -12058,9 +12271,13 @@
   function loop(now) {
     const rawDt = Math.min(2.4, (now - last) / 16.6667);
     last = now;
+    updateTimeBurstState(rawDt);
 
     let dt = rawDt;
     const inCombat = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    if (inCombat && isTimeBurstActive()) {
+      dt *= timeBurstDtScale();
+    }
     if (inCombat && blackFlashSlowTimer > 0) {
       const slowRatio = clamp(blackFlashSlowTimer / BLACK_FLASH_SLOW_DURATION, 0, 1);
       const dtScale = 1 - slowRatio * (1 - BLACK_FLASH_SLOW_SCALE);

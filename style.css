@@ -102,7 +102,10 @@ body {
 
 .cluster-right {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "special1 special2"
+    "jump attack";
   gap: 8px;
   width: 334px;
 }
@@ -110,6 +113,22 @@ body {
 .cluster-right .ctrl {
   width: 100%;
   min-width: 0;
+}
+
+.cluster-right #btn-special {
+  grid-area: special1;
+}
+
+.cluster-right #btn-special2 {
+  grid-area: special2;
+}
+
+.cluster-right #btn-jump {
+  grid-area: jump;
+}
+
+.cluster-right #btn-attack {
+  grid-area: attack;
 }
 
 .ctrl {
@@ -148,7 +167,6 @@ body {
   --burst-bottom-light: 22%;
   --burst-border-light: 64%;
   --burst-glow-alpha: 0.22;
-  grid-column: 1 / -1;
   background:
     linear-gradient(
       90deg,
@@ -268,13 +286,17 @@ body {
     width: 100%;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-      "special special"
+      "special1 special2"
       "jump attack";
     gap: 12px;
   }
 
   .cluster-right #btn-special {
-    grid-area: special;
+    grid-area: special1;
+  }
+
+  .cluster-right #btn-special2 {
+    grid-area: special2;
   }
 
   .cluster-right #btn-jump {
