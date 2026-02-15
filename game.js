@@ -9319,19 +9319,21 @@
     } else if (isMorningStar) {
       const swing = clamp(1 - ratio, 0, 1);
       const pulse = 0.5 + Math.sin((attackEffectPhase + effectPower * 3.2) * 0.9) * 0.5;
-      const chainLen = Math.floor(18 + effectPower * 24 + swing * 6);
+      const chainLen = Math.floor(10 + effectPower * 16 + swing * 3);
       const anchorX = dir > 0 ? frontX + 4 : frontX - 4;
       const anchorY = baseY - 6;
-      const travelX = 6 + chainLen;
-      const travelY = -14 + Math.floor(swing * 18);
+      const maxVisualReach = Math.max(12, Math.floor(reach * 0.86));
+      const travelX = Math.min(maxVisualReach, 4 + chainLen);
+      const travelY = -10 + Math.floor(swing * 14);
       const tipX = dir > 0 ? anchorX + travelX : anchorX - travelX;
       const tipY = anchorY + travelY;
 
       for (let i = 0; i < 2; i += 1) {
         const ghostT = clamp(swing - 0.14 * (i + 1), 0, 1);
         if (ghostT <= 0.01) continue;
-        const gx = dir > 0 ? anchorX + (6 + chainLen * ghostT) : anchorX - (6 + chainLen * ghostT);
-        const gy = anchorY + (-14 + Math.floor(ghostT * 18));
+        const ghostTravelX = Math.min(maxVisualReach, 4 + chainLen * ghostT);
+        const gx = dir > 0 ? anchorX + ghostTravelX : anchorX - ghostTravelX;
+        const gy = anchorY + (-10 + Math.floor(ghostT * 14));
         const alpha = 0.22 - i * 0.08;
         ctx.strokeStyle = `rgba(140, 212, 255, ${alpha})`;
         ctx.beginPath();
