@@ -209,6 +209,7 @@
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [0.08, 0.5, 0.6, 0.7, 0.8, 0.9];
   const BLACK_FLASH_LOW_CHANCE_RANK_BONUS_MAX = 0.04;
+  const BLACK_FLASH_BURST_GAIN_MUL = 1.3;
   const BLACK_FLASH_DAMAGE_MUL = 1.3;
   const BLACK_FLASH_RANK_GAIN_MUL = 1.3;
   const BLACK_FLASH_SLOW_DURATION = 20;
@@ -349,7 +350,8 @@
 
   function addProteinBurstGauge(amount) {
     if (proteinBurstTimer > 0) return 0;
-    const add = Math.max(0, amount || 0);
+    const baseAdd = Math.max(0, amount || 0);
+    const add = baseAdd * (isBlackFlashHighMode() ? BLACK_FLASH_BURST_GAIN_MUL : 1);
     if (add <= 0) return 0;
     const before = proteinBurstGauge;
     proteinBurstGauge = clamp(proteinBurstGauge + add, 0, PROTEIN_BURST_REQUIRE);
