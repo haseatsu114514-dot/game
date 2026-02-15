@@ -90,6 +90,7 @@
   let timeBurstMode = "none";
   let timeBurstSlowScale = 1;
   let timeBurstPhase = 0;
+  let timeBurstStopDeadlineMs = 0;
   let invincibleTimer = 0;
   let invincibleHitCooldown = 0;
   let impactShakeTimer = 0;
@@ -370,6 +371,7 @@
     timeBurstMode = TIME_BURST_MODE_NONE;
     timeBurstSlowScale = 1;
     timeBurstPhase = 0;
+    timeBurstStopDeadlineMs = 0;
   }
 
   function timeBurstRankGainMultiplier() {
@@ -2258,6 +2260,7 @@
       ? 0
       : clamp(TIME_BURST_SLOW_SCALE_MAX - (TIME_BURST_SLOW_SCALE_MAX - TIME_BURST_SLOW_SCALE_MIN) * slowRatio, TIME_BURST_SLOW_SCALE_MIN, TIME_BURST_SLOW_SCALE_MAX);
     timeBurstPhase = 0;
+    timeBurstStopDeadlineMs = fullStop ? performance.now() + 3000 : 0;
 
     registerBurstActivationRankGain(player.x + player.w * 0.5, player.y + player.h * 0.52, gaugeRatio);
     proteinBurstGauge = 0;
@@ -2720,12 +2723,49 @@
 
   function updateTimeBurstState(rawDt) {
     if (!isTimeBurstActive()) return;
-    timeBurstTimer = Math.max(0, timeBurstTimer - rawDt);
+    if (timeBurstMode === TIME_BURST_MODE_STOP && timeBurstStopDeadlineMs > 0) {
+      const remainingMs = Math.max(0, timeBurstStopDeadlineMs - performance.now());
+      timeBurstTimer = Math.min(timeBurstTimer, remainingMs / 16.6667);
+    } else {
+      timeBurstTimer = Math.max(0, timeBurstTimer - rawDt);
+    }
     timeBurstPhase += rawDt;
     if (timeBurstTimer > 0) return;
 
     const wasStop = timeBurstMode === TIME_BURST_MODE_STOP;
     resetTimeBurstState();
+    if (wasStop) {
+      timeStopSilenceActive = false;
+      try {
+        if (stageMusic) stageMusic.muted = false;
+        if (bossMusic) bossMusic.muted = false;
+        if (invincibleMusic) invincibleMusic.muted = false;
+      } catch (_e) {
+        // Ignore media errors and keep gameplay responsive.
+      }
+      if (audioCtx && bgmMaster && bgmMaster.gain) {
+        try {
+          bgmMaster.gain.setValueAtTime(1, audioCtx.currentTime);
+        } catch (_e) {
+          try {
+            bgmMaster.gain.value = 1;
+          } catch (_e2) {
+            // Ignore gain update errors.
+          }
+        }
+      }
+      if (!openingThemeActive && invincibleTimer <= 0) {
+        try {
+          if (gameState === STATE.PLAY && stageMusic && stageMusic.paused) {
+            stageMusic.play().catch(() => {});
+          } else if (gameState === STATE.BOSS && bossMusic && bossMusic.paused) {
+            bossMusic.play().catch(() => {});
+          }
+        } catch (_e) {
+          // Ignore play errors and let schedule/audio loop recover naturally.
+        }
+      }
+    }
     if (gameState === STATE.PLAY || gameState === STATE.BOSS) {
       hudMessage = wasStop ? "TIME FLOW RETURN" : "SLOW END";
       hudTimer = Math.max(hudTimer, 30);
