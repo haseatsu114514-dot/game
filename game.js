@@ -1305,6 +1305,12 @@
     }
   }
 
+  function registerGimmickBreakRank(x, y, power = 1, styleKey = "gimmick_break") {
+    const p = clamp(power, 0.8, 3.6);
+    const rankPower = 0.86 + p * 0.24;
+    registerNoDamageDefeat(x, y, rankPower, styleKey);
+  }
+
   function playEnemyDefeatSfx(power = 1) {
     if (!audioCtx || audioCtx.state !== "running") return;
     const now = audioCtx.currentTime;
@@ -3544,6 +3550,7 @@
     const cx = cannon.x + (cannon.dir > 0 ? 1 : -1);
     const cy = cannon.y + 2;
     spawnGimmickBreakFx(cx, cy, 1.1 + power * 0.4);
+    registerGimmickBreakRank(cx, cy, 1.05 + power * 0.22, "gimmick_cannon");
     if (cannon.bossArenaTarget) {
       registerBossArenaTargetDestroyed("gimmick", cx, cy);
     }
@@ -3567,6 +3574,7 @@
     const cx = block.x + block.w * 0.5;
     const cy = block.y + block.h * 0.45;
     spawnGimmickBreakFx(cx, cy, 0.9 + power * 0.35);
+    registerGimmickBreakRank(cx, cy, 0.95 + power * 0.2, "gimmick_fall");
     if (block.bossArenaTarget) {
       registerBossArenaTargetDestroyed("gimmick", cx, cy);
     }
@@ -3583,6 +3591,7 @@
     const cx = trap.x + trap.w * 0.5;
     const cy = trap.y + trap.h * 0.5;
     spawnGimmickBreakFx(cx, cy, 0.86 + power * 0.32);
+    registerGimmickBreakRank(cx, cy, 0.9 + power * 0.18, "gimmick_trap");
     if (trap.bossArenaTarget) {
       registerBossArenaTargetDestroyed("gimmick", cx, cy);
     }
@@ -3596,6 +3605,7 @@
     const cx = solid.x + solid.w * 0.5;
     const cy = solid.y + solid.h * 0.5;
     spawnGimmickBreakFx(cx, cy, 0.84 + power * 0.3);
+    registerGimmickBreakRank(cx, cy, 0.88 + power * 0.17, "gimmick_crumble");
     if (solid.bossArenaTarget) {
       registerBossArenaTargetDestroyed("gimmick", cx, cy);
     }
