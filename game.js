@@ -202,12 +202,12 @@
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
-    { short: "C", long: "C", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
-    { short: "B", long: "B", threshold: 120, chargeMul: 1.24, color: "#79d9ff" },
-    { short: "A", long: "A", threshold: 280, chargeMul: 1.46, color: "#96f0b2" },
-    { short: "S", long: "S", threshold: 520, chargeMul: 1.72, color: "#ffd47d" },
-    { short: "SS", long: "SS", threshold: 820, chargeMul: 2.02, color: "#ffa27e" },
-    { short: "SSS", long: "SSS", threshold: 1220, chargeMul: 2.34, color: "#ff5f73" },
+    { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
+    { short: "Badass", long: "Badass", threshold: 120, chargeMul: 1.24, color: "#79d9ff" },
+    { short: "Apoc", long: "Apocalyptic", threshold: 280, chargeMul: 1.46, color: "#96f0b2" },
+    { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.72, color: "#ffd47d" },
+    { short: "SS", long: "SS sick style", threshold: 820, chargeMul: 2.02, color: "#ffa27e" },
+    { short: "SSS", long: "SSS special sexy style", threshold: 1220, chargeMul: 2.34, color: "#ff5f73" },
   ];
   const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
