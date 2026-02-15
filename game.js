@@ -9108,6 +9108,10 @@
     }
   }
 
+  function drawCutsceneHero(x, y, facing, animFrame) {
+    drawHero(x, y, facing, animFrame, 1);
+  }
+
   function drawCutscene() {
     const t = cutsceneTime;
     const dangerScene = t >= 260;
@@ -9116,7 +9120,7 @@
 
     if (!dangerScene) {
       const introBob = Math.sin(t * 0.14) * 1.1;
-      drawHero(88, 110 + introBob, 1, t * 1.05, 1.12);
+      drawCutsceneHero(88, 110 + introBob, 1, t * 1.05);
       drawBoyfriend(126, 108 + introBob * 0.45);
 
       ctx.fillStyle = "rgba(255, 225, 174, 0.22)";
@@ -9132,7 +9136,7 @@
       const k = clamp((t - 260) / 430, 0, 1);
       const vanX = 128 + k * 126;
       const run = Math.sin(t * 0.22) * 1.1;
-      drawHero(70 + run + k * 12, 111, 1, t * 1.2, 1.08);
+      drawCutsceneHero(70 + run + k * 12, 111, 1, t * 1.2);
 
       drawKidnapVan(vanX - 12, 104 + Math.sin(t * 0.13) * 1);
       drawBoyfriend(vanX + 6, 102 + Math.sin(t * 0.18) * 0.7);
@@ -9229,7 +9233,7 @@
 
       const approach = clamp(t / 146, 0, 1);
       const heroX = 62 + approach * 94;
-      drawHero(heroX, 112, 1, t * 1.1, 1.08);
+      drawCutsceneHero(heroX, 112, 1, t * 1.1);
 
       const bossX = 216 + Math.sin(t * 0.1) * 1.2;
       const bossY = 106;
@@ -9346,7 +9350,7 @@
 
       const heroX = 36 + approach * 122 + enter * 16;
       const heroY = 112 - enter * 4;
-      drawHero(heroX, heroY, 1, t * 1.3);
+      drawCutsceneHero(heroX, heroY, 1, t * 1.3);
 
       const doorW = Math.max(7, Math.floor(26 - doorOpen * 18));
       ctx.fillStyle = "#11141d";
@@ -9398,7 +9402,7 @@
       ctx.fillRect(roomX + 51, roomY + 43, 2, 1);
       ctx.fillRect(roomX + 73, roomY + 43, 2, 1);
 
-      drawHero(66, 112, 1, t * 1.2);
+      drawCutsceneHero(66, 112, 1, t * 1.2);
 
       if (descend > 0.01) {
         const beamX = roomX + 102;
@@ -9641,7 +9645,7 @@
       drawCutsceneCityBackdrop(t * 0.85, false);
       const heroX = 102 + Math.sin(t * 0.08) * 1.2;
       const heroY = 106;
-      drawHero(heroX, heroY, 1, t * 1.02, 1.06);
+      drawCutsceneHero(heroX, heroY, 1, t * 1.02);
 
       ctx.fillStyle = "#24324b";
       ctx.fillRect(186, 110, 18, 24);
@@ -9681,7 +9685,7 @@
     if (t < 180) {
       drawCutsceneCityBackdrop(t * 0.8, true);
       const carryBob = Math.sin(t * 0.14) * 1.3;
-      drawHero(106, 106 + carryBob, 1, t * 1.08, 1.06);
+      drawCutsceneHero(106, 106 + carryBob, 1, t * 1.08);
       drawBoyfriend(124 + cameraX, 108 + carryBob * 0.45);
       ctx.fillStyle = "#f4e5e8";
       ctx.fillRect(124, 111 + carryBob * 0.45, 11, 4);
@@ -9699,7 +9703,7 @@
     if (t < 360) {
       drawMansionInteriorBackdrop();
       const talkBob = Math.sin(t * 0.11) * 1.1;
-      drawHero(88, 108 + talkBob, 1, t * 0.95, 1.04);
+      drawCutsceneHero(88, 108 + talkBob, 1, t * 0.95);
       drawBoyfriend(176 + cameraX, 108 - talkBob * 0.35);
 
       const goonXs = [134, 214];
@@ -9743,7 +9747,7 @@
       const heroX = 84 + approach * 40 + sway * 0.4;
       const bfX = 212 - approach * 34 - sway * 0.4;
       const y = 106;
-      drawHero(heroX, y, 1, t * 1.1, 1.05);
+      drawCutsceneHero(heroX, y, 1, t * 1.1);
       drawBoyfriend(bfX + cameraX, y + 1);
 
       if (approach > 0.3) {
@@ -9807,7 +9811,7 @@
       const bfX = 192 - sway - vow * 9;
       const heroY = 104;
       const bfY = 104;
-      drawHero(heroX, heroY, 1, t * 1.05, 1.06);
+      drawCutsceneHero(heroX, heroY, 1, t * 1.05);
       drawBoyfriend(bfX + cameraX, bfY);
 
       ctx.fillStyle = "#f7f3ee";
@@ -9858,7 +9862,7 @@
     ctx.fillText("HAPPY WEDDING", 84, 52);
     ctx.font = "14px monospace";
     ctx.fillText("THE END", 124, 76);
-    drawHero(110, 96, 1, t * 1.1, 1.12);
+    drawCutsceneHero(110, 96, 1, t * 1.1);
     drawBoyfriend(188 + cameraX, 96);
     ctx.fillStyle = "#ffdca2";
     ctx.fillRect(156, 100, 3, 2);
