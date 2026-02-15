@@ -173,7 +173,7 @@
   const INVINCIBLE_BGM_VOL = 0.44;
   const CLEAR_BGM_VOL = 0.4;
   const SE_GAIN_BOOST = 1.42;
-  const INVINCIBLE_DURATION = 900;
+  const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
   const INVINCIBLE_BONUS_POP_LIFE = 44;
   const INVINCIBLE_BGM_FADE_SEC = 1.2;
@@ -3397,7 +3397,7 @@
       const started = startInvincibleMode(INVINCIBLE_DURATION);
       playPowerupSfx();
       triggerImpact(1.25, bike.x + bike.w * 0.5, floatY + bike.h * 0.5, 2.2);
-      hudMessage = started ? "バイク搭乗! 15秒 無敵" : "無敵中! 時間は延長されない";
+      hudMessage = started ? "バイク搭乗! 10秒 無敵" : "無敵中! 時間は延長されない";
       hudTimer = 90;
     }
   }
@@ -5988,6 +5988,14 @@
     const s = clamp(scale, 1, 1.8);
     const spriteW = 14;
     const spriteH = 25;
+    const missingHearts = clamp(MAX_HEARTS - playerHearts, 0, MAX_HEARTS);
+    const damageTier = Math.min(4, Math.floor(missingHearts));
+    const jacketMain = damageTier >= 3 ? "#0c1018" : damageTier >= 1 ? "#10141d" : "#11151f";
+    const jacketShade = damageTier >= 3 ? "#171e2b" : "#1b2230";
+    const jacketEdge = damageTier >= 2 ? "#090c13" : "#0d1019";
+    const sleeveMain = damageTier >= 2 ? "#0b0f18" : "#0e121d";
+    const shirtMain = damageTier >= 3 ? "#dfd7d1" : "#f5f2ef";
+    const shirtShade = damageTier >= 2 ? "#d5ccc6" : "#e8dfd9";
 
     ctx.save();
     const drawY = Math.floor(py + spriteH - spriteH * s);
@@ -6035,24 +6043,53 @@
 
     // Neck + rider jacket + white inner shirt.
     paint("#f3ddd1", 6, 12, 2, 1);
-    paint("#11151f", 1, 12, 12, 8);
-    paint("#1b2230", 2, 12, 10, 7);
-    paint("#0d1019", 3, 13, 3, 4);
-    paint("#0d1019", 8, 13, 3, 4);
+    paint(jacketMain, 1, 12, 12, 8);
+    paint(jacketShade, 2, 12, 10, 7);
+    paint(jacketEdge, 3, 13, 3, 4);
+    paint(jacketEdge, 8, 13, 3, 4);
     paint("#2b3447", 3, 13, 2, 2);
     paint("#2b3447", 9, 13, 2, 2);
-    paint("#f5f2ef", 5, 14, 4, 5);
-    paint("#e8dfd9", 5, 18, 4, 1);
+    paint(shirtMain, 5, 14, 4, 5);
+    paint(shirtShade, 5, 18, 4, 1);
     paint("#bfc8d9", 9, 14, 1, 5);
     paint("#8e99ad", 4, 19, 6, 1);
 
+    if (damageTier > 0) {
+      paint("#090b11", 4, 15, 1, 1);
+      paint("#090b11", 8, 17, 1, 1);
+      paint("#07080d", 6, 19, 1, 1);
+      paint("#2f191a", 9, 16, 1, 1);
+    }
+    if (damageTier > 1) {
+      paint("#05060a", 2, 16, 2, 1);
+      paint("#05060a", 10, 18, 2, 1);
+      paint("#2d1718", 6, 15, 2, 1);
+      paint("#2d1718", 5, 17, 1, 1);
+    }
+    if (damageTier > 2) {
+      paint("#04050a", 1, 14, 2, 2);
+      paint("#04050a", 11, 16, 2, 2);
+      paint("#2a1314", 5, 14, 3, 1);
+      paint("#2a1314", 7, 18, 2, 1);
+    }
+    if (damageTier > 3) {
+      paint("#030409", 3, 12, 2, 1);
+      paint("#030409", 9, 12, 2, 1);
+      paint("#240f10", 6, 16, 2, 2);
+      paint("#240f10", 4, 18, 1, 1);
+    }
+
     // Arms (jacket sleeves).
-    paint("#0e121d", 0, 13 + armA + armKickLift, 2, 6);
+    paint(sleeveMain, 0, 13 + armA + armKickLift, 2, 6);
     paint("#2b3447", 1, 14 + armA + armKickLift, 1, 3);
     paint("#f4e0d3", 0, 19 + armA + armKickLift, 2, 1);
-    paint("#0e121d", 12, 13 + armB - armKickLift, 2, 6);
+    paint(sleeveMain, 12, 13 + armB - armKickLift, 2, 6);
     paint("#2b3447", 12, 14 + armB - armKickLift, 1, 3);
     paint("#f4e0d3", 12, 19 + armB - armKickLift, 2, 1);
+    if (damageTier > 1) {
+      paint("#05060a", 0, 16 + armA + armKickLift, 1, 2);
+      paint("#05060a", 13, 15 + armB - armKickLift, 1, 2);
+    }
 
     // Legs and boots.
     if (kp > 0.04) {
@@ -7820,7 +7857,7 @@
     ctx.fillStyle = "#f5ebf1";
     ctx.font = "10px monospace";
     ctx.fillText("彼氏救出アクション / 都会ステージ", 66, 134);
-    ctx.fillText("バイクで15秒無敵・踏みつけ&チャージ攻撃", 52, 146);
+    ctx.fillText("バイクで10秒無敵・踏みつけ&チャージ攻撃", 52, 146);
 
     const blink = Math.floor(t / 24) % 2 === 0;
     if (blink) {
