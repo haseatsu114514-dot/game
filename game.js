@@ -2054,6 +2054,8 @@
         { x: 980, y: 136, label: "CP-A" },
         { x: 2060, y: 136, label: "CP-B" },
         { x: 3180, y: 136, label: "CP-C" },
+        { x: 4380, y: 136, label: "CP-D" },
+        { x: 5250, y: 136, label: "CP-E" },
       ];
 
       const groundSegments = [
@@ -2062,6 +2064,7 @@
         [1810, 950],
         [2820, 960],
         [3840, 920],
+        [4820, 1220],
       ];
       for (const [x, w] of groundSegments) {
         addSolid(x, groundY, w, 24);
@@ -2075,9 +2078,14 @@
       addSolid(3140, 118, 130, 10, { kind: "crumble", state: "solid", collapseAt: 32 });
       addSolid(3560, 110, 128, 10);
       addSolid(4020, 118, 120, 10);
+      addSolid(4440, 116, 120, 10);
+      addSolid(4880, 110, 120, 10, { kind: "crumble", state: "solid", collapseAt: 28 });
+      addSolid(5280, 106, 130, 10);
+      addSolid(5710, 114, 118, 10, { kind: "crumble", state: "solid", collapseAt: 24 });
 
       addSolid(1510, 100, 24, 60);
       addSolid(3320, 98, 24, 62);
+      addSolid(5120, 98, 24, 62);
 
       enemies.push(
         { x: 430, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.38, minX: 340, maxX: 540, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
@@ -2090,10 +2098,16 @@
         { x: 4010, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.52, minX: 3880, maxX: 4090, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 120, hopInterval: 120 },
         { kind: "peacock", x: 2100, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.38, minX: 1980, maxX: 2230, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.0, chargeCooldown: 76, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
         { kind: "peacock", x: 3620, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.4, minX: 3510, maxX: 3750, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.08, chargeCooldown: 78, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+        { x: 4380, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.54, minX: 4260, maxX: 4460, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 4680, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.56, minX: 4550, maxX: 4790, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 116, hopInterval: 116, forceShooter: true },
+        { kind: "peacock", x: 5010, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.42, minX: 4890, maxX: 5150, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.12, chargeCooldown: 74, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+        { x: 5340, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.58, minX: 5220, maxX: 5450, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 5670, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.6, minX: 5550, maxX: 5810, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 104, hopInterval: 104 },
+        { kind: "peacock", x: 5870, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.44, minX: 5740, maxX: 5960, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.2, chargeCooldown: 72, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       );
       for (let i = 0; i < enemies.length; i += 1) {
         const enemy = enemies[i];
-        enemy.shooter = enemy.kind !== "peacock" && (i === 2 || i === 6);
+        enemy.shooter = enemy.kind !== "peacock" && (enemy.forceShooter || i === 2 || i === 6 || i === 10);
         enemy.shootInterval = enemy.shooter ? 176 + i * 9 : 0;
         enemy.shootCooldown = enemy.shooter ? 104 + i * 7 : 0;
         enemy.flash = 0;
@@ -2101,12 +2115,22 @@
 
       fallBlocks.push(
         { x: 1180, y: 8, w: 22, h: 44, triggerX: 1120, state: "idle", vy: 0, timer: 0, warnDuration: 52 },
-        { x: 2960, y: 8, w: 22, h: 44, triggerX: 2890, state: "idle", vy: 0, timer: 0, warnDuration: 48 }
+        { x: 2960, y: 8, w: 22, h: 44, triggerX: 2890, state: "idle", vy: 0, timer: 0, warnDuration: 48 },
+        { x: 4520, y: 8, w: 22, h: 44, triggerX: 4450, state: "idle", vy: 0, timer: 0, warnDuration: 44 },
+        { x: 5480, y: 8, w: 22, h: 44, triggerX: 5410, state: "idle", vy: 0, timer: 0, warnDuration: 40 }
       );
       cannons.push(
         { x: 1670, y: 142, dir: -1, triggerX: 1600, interval: 170, cool: 60, active: false },
         { x: 2510, y: 142, dir: 1, triggerX: 2440, interval: 162, cool: 56, active: false },
-        { x: 3460, y: 142, dir: -1, triggerX: 3380, interval: 154, cool: 54, active: false }
+        { x: 3460, y: 142, dir: -1, triggerX: 3380, interval: 154, cool: 54, active: false },
+        { x: 4980, y: 142, dir: -1, triggerX: 4900, interval: 148, cool: 52, active: false },
+        { x: 5670, y: 142, dir: 1, triggerX: 5580, interval: 142, cool: 50, active: false }
+      );
+      popSpikes.push(
+        { x: 1080, y: groundY - 14, w: 26, h: 14, triggerX: 1010, state: "idle", timer: 0, raise: 0, warnDuration: 44, activeDuration: 18, coolDuration: 86, warningPulse: 0 },
+        { x: 2680, y: groundY - 14, w: 26, h: 14, triggerX: 2600, state: "idle", timer: 0, raise: 0, warnDuration: 42, activeDuration: 18, coolDuration: 84, warningPulse: 0 },
+        { x: 4560, y: groundY - 14, w: 26, h: 14, triggerX: 4480, state: "idle", timer: 0, raise: 0, warnDuration: 40, activeDuration: 18, coolDuration: 82, warningPulse: 0 },
+        { x: 5560, y: groundY - 14, w: 26, h: 14, triggerX: 5480, state: "idle", timer: 0, raise: 0, warnDuration: 38, activeDuration: 18, coolDuration: 80, warningPulse: 0 }
       );
       for (const block of fallBlocks) {
         block.destroyed = false;
@@ -2117,6 +2141,10 @@
         cannon.debrisTimer = 0;
         cannon.warning = false;
         cannon.muzzleFlash = 0;
+      }
+      for (const trap of popSpikes) {
+        trap.destroyed = false;
+        trap.debrisTimer = 0;
       }
 
       addProtein(101, 180, 136);
@@ -2138,16 +2166,24 @@
       addProtein(117, 3990, 132);
       addProtein(118, 4230, 110);
       addProtein(119, 4460, 132);
+      addProtein(120, 4720, 108);
+      addProtein(121, 4960, 132);
+      addProtein(122, 5210, 104);
+      addProtein(123, 5450, 132);
+      addProtein(124, 5680, 108);
+      addProtein(125, 5900, 132);
 
       addBike(101, 2440, 108);
       addHeartItem(101, 1420, 96);
       addHeartItem(102, 3320, 96);
+      addHeartItem(103, 5010, 94);
       addLifeUpItem(101, 2870, 88);
 
-      const checkpointTokenIds = [1, 3];
+      const checkpointTokenIds = [1, 3, 5];
       const checkpointTokenAnchors = {
         1: { x: 1010, y: 102 },
         3: { x: 3210, y: 98 },
+        5: { x: 5260, y: 98 },
       };
       for (const i of checkpointTokenIds) {
         const cp = checkpoints[i];
@@ -2167,7 +2203,7 @@
       return {
         id: 1,
         theme: "city_basic",
-        width: 4860,
+        width: 6120,
         groundY,
         solids,
         enemies,
@@ -2189,13 +2225,13 @@
         playerWaves: [],
         hammerShards: [],
         checkpoints,
-        goal: { x: 4208, y: 112, w: 24, h: 48 },
-        bossArena: { minX: 4260, maxX: 4740 },
+        goal: { x: 5460, y: 112, w: 24, h: 48 },
+        bossArena: { minX: 5520, maxX: 6020 },
         boss: {
           kind: "peacock",
           started: false,
           active: false,
-          x: 4500,
+          x: 5760,
           y: 124,
           w: 24,
           h: 36,
@@ -2224,6 +2260,8 @@
       { x: 5200, y: 136, label: "CP-4" },
       { x: 6040, y: 136, label: "CP-5" },
       { x: 8060, y: 136, label: "CP-6" },
+      { x: 9300, y: 136, label: "CP-7" },
+      { x: 10180, y: 136, label: "CP-8" },
     ];
 
     const groundSegments = [
@@ -2246,6 +2284,11 @@
       [7420, 420],
       [7888, 372],
       [8360, 500],
+      [8920, 420],
+      [9400, 380],
+      [9840, 420],
+      [10320, 430],
+      [10820, 320],
     ];
 
     for (const [x, w] of groundSegments) {
@@ -2272,6 +2315,12 @@
     addSolid(7790, 114, 110, 10, { kind: "crumble", state: "solid", collapseAt: 14 });
     addSolid(8090, 120, 120, 10);
     addSolid(8460, 108, 120, 10, { kind: "crumble", state: "solid", collapseAt: 13 });
+    addSolid(8920, 118, 110, 10);
+    addSolid(9260, 108, 120, 10, { kind: "crumble", state: "solid", collapseAt: 12 });
+    addSolid(9680, 114, 124, 10);
+    addSolid(10060, 104, 132, 10, { kind: "crumble", state: "solid", collapseAt: 12 });
+    addSolid(10460, 110, 120, 10);
+    addSolid(10880, 102, 120, 10, { kind: "crumble", state: "solid", collapseAt: 11 });
 
     addSolid(1220, 104, 26, 56);
     addSolid(2060, 96, 20, 64);
@@ -2281,6 +2330,9 @@
     addSolid(6480, 98, 24, 62);
     addSolid(8020, 100, 24, 60);
     addSolid(8420, 98, 24, 62);
+    addSolid(9500, 98, 24, 62);
+    addSolid(10140, 96, 24, 64);
+    addSolid(10760, 98, 24, 62);
 
     // Break walls removed with hammer/glove abolition.
 
@@ -2308,7 +2360,14 @@
       { x: 7920, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.76, minX: 7800, maxX: 8030, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 88, hopInterval: 88 },
       { kind: "peacock", x: 8180, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.52, minX: 8060, maxX: 8290, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.6, chargeCooldown: 74, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       { x: 8440, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.78, minX: 8320, maxX: 8510, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true },
-      { kind: "peacock", x: 8620, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.54, minX: 8500, maxX: 8720, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.65, chargeCooldown: 76, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 }
+      { kind: "peacock", x: 8620, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.54, minX: 8500, maxX: 8720, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.65, chargeCooldown: 76, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 9040, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.78, minX: 8940, maxX: 9160, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+      { kind: "peacock", x: 9300, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.54, minX: 9180, maxX: 9420, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.68, chargeCooldown: 72, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 9560, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.8, minX: 9460, maxX: 9680, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 82, hopInterval: 82 },
+      { x: 9840, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.82, minX: 9730, maxX: 9960, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true },
+      { kind: "peacock", x: 10140, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.56, minX: 10020, maxX: 10280, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.72, chargeCooldown: 70, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 10620, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.84, minX: 10520, maxX: 10750, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 78, hopInterval: 78 },
+      { kind: "peacock", x: 10930, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.58, minX: 10820, maxX: 11020, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.75, chargeCooldown: 68, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 }
     );
 
     for (let i = 0; i < enemies.length; i += 1) {
@@ -2331,7 +2390,10 @@
       { x: 6460, y: 6, w: 24, h: 48, triggerX: 6400, state: "idle", vy: 0, timer: 0, warnDuration: 34 },
       { x: 7240, y: 8, w: 24, h: 48, triggerX: 7180, state: "idle", vy: 0, timer: 0, warnDuration: 32 },
       { x: 8120, y: 8, w: 24, h: 48, triggerX: 8060, state: "idle", vy: 0, timer: 0, warnDuration: 30 },
-      { x: 8520, y: 8, w: 24, h: 48, triggerX: 8460, state: "idle", vy: 0, timer: 0, warnDuration: 28 }
+      { x: 8520, y: 8, w: 24, h: 48, triggerX: 8460, state: "idle", vy: 0, timer: 0, warnDuration: 28 },
+      { x: 9180, y: 8, w: 24, h: 48, triggerX: 9110, state: "idle", vy: 0, timer: 0, warnDuration: 30 },
+      { x: 10020, y: 8, w: 24, h: 48, triggerX: 9950, state: "idle", vy: 0, timer: 0, warnDuration: 28 },
+      { x: 10780, y: 8, w: 24, h: 48, triggerX: 10700, state: "idle", vy: 0, timer: 0, warnDuration: 26 }
     );
 
     cannons.push(
@@ -2343,7 +2405,18 @@
       { x: 6760, y: 142, dir: 1, triggerX: 6700, interval: 112, cool: 38, active: false },
       { x: 7360, y: 142, dir: -1, triggerX: 7300, interval: 108, cool: 36, active: false },
       { x: 8020, y: 142, dir: 1, triggerX: 7950, interval: 104, cool: 34, active: false },
-      { x: 8440, y: 142, dir: -1, triggerX: 8380, interval: 100, cool: 32, active: false }
+      { x: 8440, y: 142, dir: -1, triggerX: 8380, interval: 100, cool: 32, active: false },
+      { x: 9180, y: 142, dir: -1, triggerX: 9100, interval: 100, cool: 34, active: false },
+      { x: 9940, y: 142, dir: 1, triggerX: 9860, interval: 96, cool: 32, active: false },
+      { x: 10640, y: 142, dir: -1, triggerX: 10560, interval: 92, cool: 30, active: false }
+    );
+    popSpikes.push(
+      { x: 1460, y: groundY - 14, w: 26, h: 14, triggerX: 1370, state: "idle", timer: 0, raise: 0, warnDuration: 44, activeDuration: 18, coolDuration: 88, warningPulse: 0 },
+      { x: 3180, y: groundY - 14, w: 26, h: 14, triggerX: 3090, state: "idle", timer: 0, raise: 0, warnDuration: 42, activeDuration: 18, coolDuration: 84, warningPulse: 0 },
+      { x: 4860, y: groundY - 14, w: 26, h: 14, triggerX: 4780, state: "idle", timer: 0, raise: 0, warnDuration: 40, activeDuration: 18, coolDuration: 84, warningPulse: 0 },
+      { x: 6760, y: groundY - 14, w: 26, h: 14, triggerX: 6680, state: "idle", timer: 0, raise: 0, warnDuration: 38, activeDuration: 18, coolDuration: 82, warningPulse: 0 },
+      { x: 9220, y: groundY - 14, w: 26, h: 14, triggerX: 9140, state: "idle", timer: 0, raise: 0, warnDuration: 38, activeDuration: 18, coolDuration: 82, warningPulse: 0 },
+      { x: 10480, y: groundY - 14, w: 26, h: 14, triggerX: 10400, state: "idle", timer: 0, raise: 0, warnDuration: 36, activeDuration: 18, coolDuration: 80, warningPulse: 0 }
     );
 
     for (const block of fallBlocks) {
@@ -2356,6 +2429,10 @@
       cannon.debrisTimer = 0;
       cannon.warning = false;
       cannon.muzzleFlash = 0;
+    }
+    for (const trap of popSpikes) {
+      trap.destroyed = false;
+      trap.debrisTimer = 0;
     }
 
     addProtein(1, 180, 136);
@@ -2411,15 +2488,30 @@
     addProtein(51, 8580, 102);
     addProtein(52, 8720, 132);
     addProtein(53, 8820, 102);
+    addProtein(54, 8960, 132);
+    addProtein(55, 9140, 102);
+    addProtein(56, 9340, 132);
+    addProtein(57, 9510, 102);
+    addProtein(58, 9700, 132);
+    addProtein(59, 9890, 96);
+    addProtein(60, 10070, 132);
+    addProtein(61, 10240, 96);
+    addProtein(62, 10440, 132);
+    addProtein(63, 10610, 98);
+    addProtein(64, 10790, 132);
+    addProtein(65, 10940, 94);
+    addProtein(66, 11060, 132);
 
     // Bike = rare invincibility item.
     addBike(1, 3360, 102);
     addBike(2, 5660, 106);
+    addBike(3, 9720, 102);
 
     // Rare heart recovery pickups.
     addHeartItem(1, 1480, 110);
     addHeartItem(2, 4480, 102);
     addHeartItem(3, 8360, 102);
+    addHeartItem(4, 10140, 100);
 
     // Rare 1UP item (single spawn in stage).
     addLifeUpItem(1, 6488, 78);
@@ -2434,9 +2526,10 @@
       5: { x: 5460, y: 102 },
       6: { x: 6340, y: 98 },
       7: { x: 7890, y: 92 },
+      8: { x: 10220, y: 92 },
     };
 
-    const checkpointTokenIds = [2, 5, 7];
+    const checkpointTokenIds = [2, 5, 8];
     for (const i of checkpointTokenIds) {
       if (i >= checkpoints.length) continue;
       const cp = checkpoints[i];
@@ -2455,7 +2548,7 @@
     return {
       id: 2,
       theme: "city_deluxe",
-      width: 8960,
+      width: 11320,
       groundY,
       solids,
       enemies,
@@ -2477,13 +2570,13 @@
       playerWaves: [],
       hammerShards: [],
       checkpoints,
-      goal: { x: 8108, y: 112, w: 24, h: 48 },
-      bossArena: { minX: 8160, maxX: 8840 },
+      goal: { x: 10380, y: 112, w: 24, h: 48 },
+      bossArena: { minX: 10440, maxX: 11120 },
       boss: {
         kind: "god",
         started: false,
         active: false,
-        x: 8420,
+        x: 10820,
         y: 124,
         w: 24,
         h: 36,
@@ -3242,22 +3335,52 @@
 
   function updatePopSpikes(dt) {
     for (const trap of stage.popSpikes) {
-      if (!trap.armed && player.x + player.w > trap.triggerX) {
-        trap.armed = true;
-        trap.timer = trap.delay;
-        trap.warningPulse = 0;
+      if (trap.destroyed) {
+        trap.debrisTimer = Math.max(0, (trap.debrisTimer || 0) - dt);
+        continue;
       }
 
-      if (trap.armed && !trap.active) {
-        trap.warningPulse += dt;
-        trap.timer -= dt;
-        if (trap.timer <= 0) {
-          trap.active = true;
+      trap.warningPulse = (trap.warningPulse || 0) + dt;
+      const warnDuration = trap.warnDuration || 40;
+      const activeDuration = trap.activeDuration || 18;
+      const coolDuration = trap.coolDuration || 84;
+      const activeRange = player.x + player.w > trap.x - 160 && player.x < trap.x + trap.w + 220;
+      const state = trap.state || "idle";
+
+      if (state === "idle") {
+        trap.raise = Math.max(0, (trap.raise || 0) - 0.16 * dt);
+        if (player.x + player.w > trap.triggerX) {
+          trap.state = "warning";
+          trap.timer = warnDuration;
         }
+        continue;
       }
 
-      if (trap.active && trap.raise < 1) {
-        trap.raise = Math.min(1, trap.raise + 0.1 * dt);
+      if (state === "warning") {
+        trap.timer = (trap.timer || warnDuration) - dt;
+        trap.raise = Math.max(0, (trap.raise || 0) - 0.12 * dt);
+        if (trap.timer <= 0) {
+          trap.state = "active";
+          trap.timer = activeDuration;
+        }
+        continue;
+      }
+
+      if (state === "active") {
+        trap.raise = Math.min(1, (trap.raise || 0) + 0.16 * dt);
+        trap.timer = (trap.timer || activeDuration) - dt;
+        if (trap.timer <= 0) {
+          trap.state = "cooldown";
+          trap.timer = coolDuration;
+        }
+        continue;
+      }
+
+      trap.raise = Math.max(0, (trap.raise || 0) - 0.2 * dt);
+      trap.timer = (trap.timer || coolDuration) - dt;
+      if (trap.timer <= 0 && activeRange) {
+        trap.state = "warning";
+        trap.timer = warnDuration;
       }
     }
   }
@@ -3380,6 +3503,22 @@
     return true;
   }
 
+  function destroyPopSpike(trap, power = 1) {
+    if (trap.destroyed) return false;
+    trap.destroyed = true;
+    trap.state = "destroyed";
+    trap.timer = 0;
+    trap.raise = 0;
+    trap.debrisTimer = 84;
+    const cx = trap.x + trap.w * 0.5;
+    const cy = trap.y + trap.h * 0.5;
+    spawnGimmickBreakFx(cx, cy, 0.86 + power * 0.32);
+    if (trap.bossArenaTarget) {
+      registerBossArenaTargetDestroyed("gimmick", cx, cy);
+    }
+    return true;
+  }
+
   function destroyCrumbleSolid(solid, power = 1) {
     if (solid.kind !== "crumble" || solid.state === "gone") return false;
     solid.state = "gone";
@@ -3409,6 +3548,16 @@
       if (block.destroyed || block.state === "gone") continue;
       if (!overlap(hitBox, block)) continue;
       if (destroyFallBlock(block, power)) {
+        broken += 1;
+      }
+    }
+
+    for (const trap of stage.popSpikes) {
+      if (trap.destroyed) continue;
+      const trapTop = trap.y + trap.h - Math.max(2, Math.round(trap.h * Math.max(0.15, trap.raise || 0)));
+      const trapHit = { x: trap.x, y: trapTop, w: trap.w, h: Math.max(2, trap.h) };
+      if (!overlap(hitBox, trapHit)) continue;
+      if (destroyPopSpike(trap, power)) {
         broken += 1;
       }
     }
@@ -4883,6 +5032,7 @@
     }
     stage.cannons = stage.cannons.filter((c) => c.x < BOSS_ARENA.minX - 16 || c.x > BOSS_ARENA.maxX + 16);
     stage.fallBlocks = stage.fallBlocks.filter((b) => b.x + b.w < BOSS_ARENA.minX - 10 || b.x > BOSS_ARENA.maxX + 10);
+    stage.popSpikes = stage.popSpikes.filter((t) => t.x + t.w < BOSS_ARENA.minX - 10 || t.x > BOSS_ARENA.maxX + 10);
 
     stage.boss.started = true;
     stage.boss.active = true;
@@ -5779,6 +5929,23 @@
       if (block.state !== "fall") continue;
       if (overlap(player, block)) {
         killPlayer("落下ブロックで即死");
+        return;
+      }
+    }
+
+    for (const trap of stage.popSpikes) {
+      if (trap.destroyed || trap.state !== "active") continue;
+      const rise = clamp(trap.raise || 0, 0, 1);
+      if (rise < 0.35) continue;
+      const activeH = Math.max(3, Math.floor(trap.h * rise));
+      const hit = {
+        x: trap.x + 2,
+        y: trap.y + trap.h - activeH,
+        w: Math.max(4, trap.w - 4),
+        h: activeH,
+      };
+      if (overlap(player, hit)) {
+        killPlayer("電撃ポールに接触");
         return;
       }
     }
@@ -8151,6 +8318,68 @@
     }
   }
 
+  function drawPopSpikeTrap(trap) {
+    const x = Math.floor(trap.x - cameraX);
+    const y = Math.floor(trap.y);
+
+    if (trap.destroyed) {
+      const debris = trap.debrisTimer || 0;
+      if (debris <= 0) return;
+      const blink = Math.floor((debris + player.anim) * 0.24) % 2 === 0;
+      ctx.fillStyle = "#262d3e";
+      ctx.fillRect(x, stage.groundY - 3, trap.w, 3);
+      ctx.fillStyle = "#3b4963";
+      ctx.fillRect(x + 2, stage.groundY - 3, Math.max(2, trap.w - 4), 1);
+      ctx.fillStyle = "#48556d";
+      ctx.fillRect(x + 3, stage.groundY - 6, 3, 2);
+      ctx.fillRect(x + trap.w - 6, stage.groundY - 6, 3, 2);
+      if (blink) {
+        ctx.fillStyle = "rgba(255, 206, 138, 0.72)";
+        ctx.fillRect(x + Math.floor(trap.w * 0.4), stage.groundY - 8, 2, 1);
+      }
+      return;
+    }
+
+    const state = trap.state || "idle";
+    const warning = state === "warning";
+    const active = state === "active";
+    const rise = clamp(trap.raise || 0, 0, 1);
+
+    ctx.fillStyle = "#2a3347";
+    ctx.fillRect(x - 1, stage.groundY - 4, trap.w + 2, 4);
+    ctx.fillStyle = "#3a4c66";
+    ctx.fillRect(x, stage.groundY - 3, trap.w, 3);
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(x + 1, stage.groundY - 3, Math.max(2, trap.w - 2), 1);
+
+    if (warning) {
+      const pulse = (Math.sin((trap.warningPulse || 0) * 0.26) * 0.5 + 0.5);
+      ctx.fillStyle = `rgba(255, 193, 118, ${0.22 + pulse * 0.26})`;
+      ctx.fillRect(x - 2, stage.groundY - 8, trap.w + 4, 2);
+      ctx.fillStyle = "#ffd08b";
+      for (let i = 1; i < trap.w - 2; i += 5) {
+        ctx.fillRect(x + i, stage.groundY - 8, 2, 1);
+      }
+    }
+
+    if (rise > 0.03) {
+      const h = Math.max(2, Math.floor(trap.h * rise));
+      const topY = y + trap.h - h;
+      ctx.fillStyle = active ? "rgba(255, 98, 132, 0.22)" : "rgba(122, 161, 224, 0.18)";
+      ctx.fillRect(x - 1, topY - 1, trap.w + 2, h + 2);
+      ctx.fillStyle = active ? "#ff6e93" : "#6f88ac";
+      ctx.fillRect(x + 2, topY, Math.max(3, trap.w - 4), h);
+      ctx.fillStyle = active ? "#ffd2df" : "#cddbf1";
+      ctx.fillRect(x + 3, topY + 1, Math.max(2, trap.w - 8), 1);
+      if (active) {
+        const jitter = Math.floor((trap.warningPulse || 0) * 0.9) % 3;
+        ctx.fillStyle = "rgba(255, 238, 174, 0.62)";
+        ctx.fillRect(x + 2 + jitter, topY + 2, 2, Math.max(1, h - 3));
+        ctx.fillRect(x + trap.w - 4 - jitter, topY + 2, 2, Math.max(1, h - 4));
+      }
+    }
+  }
+
   function drawGoal() {
     if (gameState === STATE.BOSS) return;
     const g = stage.goal;
@@ -8344,6 +8573,10 @@
 
     for (const block of stage.fallBlocks) {
       drawFallingBlock(block);
+    }
+
+    for (const trap of stage.popSpikes) {
+      drawPopSpikeTrap(trap);
     }
 
     for (const cannon of stage.cannons) {
