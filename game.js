@@ -8461,9 +8461,13 @@
 
   function drawHeroAfterimageTrail() {
     const speed = Math.abs(player.vx || 0);
-    const slowActive = isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_SLOW;
-    const slowRatio = slowActive
-      ? clamp(timeBurstTimer / Math.max(1, timeBurstDuration || TIME_BURST_SLOW_MAX_DURATION), 0, 1)
+    const burstAfterimageActive = isTimeBurstActive()
+      && (timeBurstMode === TIME_BURST_MODE_SLOW || timeBurstMode === TIME_BURST_MODE_STOP);
+    const burstDuration = timeBurstMode === TIME_BURST_MODE_STOP
+      ? TIME_BURST_STOP_DURATION
+      : TIME_BURST_SLOW_MAX_DURATION;
+    const burstRatio = burstAfterimageActive
+      ? clamp(timeBurstTimer / Math.max(1, timeBurstDuration || burstDuration), 0, 1)
       : 0;
     const blackRatio = clamp(
       Math.max(
@@ -8490,13 +8494,13 @@
       rushRatio * 0.22 +
       blackRatio * 0.46 +
       invRatio * 0.34 +
-      slowRatio * 0.56,
+      burstRatio * 0.56,
       0,
       1
     );
     if (trailPower <= 0.02) return;
 
-    const count = 2 + Math.floor(trailPower * 3) + (slowActive ? 1 : 0);
+    const count = 2 + Math.floor(trailPower * 3) + (burstAfterimageActive ? 1 : 0);
     const dir = player.facing || 1;
     const sway = Math.sin(player.anim * 0.2) * 0.55;
     for (let i = 0; i < count; i += 1) {
@@ -8507,7 +8511,7 @@
         0.07 +
         trailPower * 0.17 +
         blackRatio * 0.08 +
-        slowRatio * 0.1
+        burstRatio * 0.1
       ) * (1 - i / (count + 1));
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -8517,9 +8521,9 @@
         drawInvincibleBikeRide();
       } else {
         drawHero(player.x - cameraX, player.y, player.facing, player.anim - t * 2.4, 1);
-        if (slowActive) {
+        if (burstAfterimageActive) {
           ctx.globalCompositeOperation = "source-atop";
-          ctx.fillStyle = `rgba(132, 244, 255, ${0.34 + slowRatio * 0.22})`;
+          ctx.fillStyle = `rgba(132, 244, 255, ${0.34 + burstRatio * 0.22})`;
           ctx.fillRect(player.x - cameraX - 1, player.y - 1, player.w + 2, player.h + 2);
         }
       }
