@@ -457,7 +457,21 @@
     return Math.max(8, gain);
   }
 
+  function rescaleRankDrivenState(prevChargeMul, nextChargeMul) {
+    if (!Number.isFinite(prevChargeMul) || !Number.isFinite(nextChargeMul) || prevChargeMul <= 0 || nextChargeMul <= 0) {
+      return;
+    }
+    const ratio = clamp(nextChargeMul / prevChargeMul, 0.22, 1.4);
+    attackChargeTimer = clamp((attackChargeTimer || 0) * ratio, 0, ATTACK_CHARGE_MAX);
+    attack2ChargeTimer = clamp((attack2ChargeTimer || 0) * ratio, 0, ATTACK2_CHARGE_MAX);
+    if (ratio < 1 && player) {
+      // Drop current run momentum a little so speed buff doesn't linger after rank-down.
+      player.vx *= clamp(0.7 + ratio * 0.3, 0.72, 1);
+    }
+  }
+
   function resetBattleRank(showBreak = false) {
+    const prevChargeMul = battleRankChargeMultiplier();
     battleRankDefeats = 0;
     battleRankGauge = 0;
     battleRankIndex = 0;
@@ -466,9 +480,12 @@
     battleRankRecentStyles = [];
     battleRankFlashTimer = 0;
     battleRankBreakFlashTimer = showBreak ? 30 : 0;
+    const nextChargeMul = battleRankChargeMultiplier();
+    rescaleRankDrivenState(prevChargeMul, nextChargeMul);
   }
 
   function dropBattleRankOnDamage(showBreak = true) {
+    const prevChargeMul = battleRankChargeMultiplier();
     const maxIndex = BATTLE_RANK_DATA.length - 1;
     const currIndex = clamp(battleRankIndex, 0, maxIndex);
     const sTierIndex = Math.min(3, maxIndex);
@@ -485,6 +502,8 @@
     if (showBreak) {
       battleRankBreakFlashTimer = Math.max(battleRankBreakFlashTimer, 30);
     }
+    const nextChargeMul = battleRankChargeMultiplier();
+    rescaleRankDrivenState(prevChargeMul, nextChargeMul);
   }
 
   function clamp(n, min, max) {
