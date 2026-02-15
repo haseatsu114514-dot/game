@@ -466,9 +466,14 @@
       // On miss, reset the continuation chain back to the initial chance tier.
       blackFlashChain = 0;
       if (hadHighMode) {
-        const total = Math.max(1, blackFlashSessionHits);
-        blackFlashResultText = `黒閃合計 ${total}発`;
-        blackFlashResultTimer = BLACK_FLASH_RESULT_DURATION;
+        const total = Math.max(0, blackFlashSessionHits);
+        if (total >= 3) {
+          blackFlashResultText = `黒閃合計 ${total}発`;
+          blackFlashResultTimer = BLACK_FLASH_RESULT_DURATION;
+        } else {
+          blackFlashResultText = "";
+          blackFlashResultTimer = 0;
+        }
       }
       blackFlashSessionHits = 0;
       // Also clear any remaining Black Flash benefits so gameplay returns to normal immediately.
