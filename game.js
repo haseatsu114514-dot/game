@@ -2170,7 +2170,15 @@
   function spawnEnemyBlood(x, y, power = 1) {
     const p = clamp(power, 0.9, 5.4);
     const powerRatio = clamp((p - 0.9) / (5.4 - 0.9), 0, 1);
-    const count = 18 + Math.floor(p * 10 + p * p * 0.9);
+    const maxTier = Math.max(1, BATTLE_RANK_DATA.length - 1);
+    const tierRatio = clamp(battleRankIndex / maxTier, 0, 1);
+    const flowRatio = battleRankProgressRatio();
+    const rankBloodMul = 1 + tierRatio * 0.55 + flowRatio * 0.2;
+    const count = clamp(
+      Math.round((18 + p * 10 + p * p * 0.9) * rankBloodMul),
+      18,
+      170
+    );
     const palette = [
       { color: "#ff5a6e", dark: "#6f0a16" },
       { color: "#d51a2d", dark: "#560710" },
@@ -2208,7 +2216,11 @@
       });
     }
 
-    const mistCount = 6 + Math.floor(p * 3 + p * p * 0.4);
+    const mistCount = clamp(
+      Math.round((6 + p * 3 + p * p * 0.4) * (1 + tierRatio * 0.5 + flowRatio * 0.2)),
+      6,
+      56
+    );
     for (let i = 0; i < mistCount; i += 1) {
       const side = Math.random() * 2 - 1;
       const tone = Math.random() < 0.5 ? "#ff6a74" : "#c71326";
