@@ -200,11 +200,11 @@
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
     { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
-    { short: "Badass", long: "Badass", threshold: 120, chargeMul: 1.1, color: "#79d9ff" },
-    { short: "ApocalypticA", long: "ApocalypticA", threshold: 280, chargeMul: 1.22, color: "#96f0b2" },
-    { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.36, color: "#ffd47d" },
-    { short: "SS", long: "SS sick style", threshold: 820, chargeMul: 1.54, color: "#ffa27e" },
-    { short: "SSS", long: "SSS special sick style", threshold: 1220, chargeMul: 1.74, color: "#ff5f73" },
+    { short: "Badass", long: "Badass", threshold: 120, chargeMul: 1.24, color: "#79d9ff" },
+    { short: "ApocalypticA", long: "ApocalypticA", threshold: 280, chargeMul: 1.46, color: "#96f0b2" },
+    { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.72, color: "#ffd47d" },
+    { short: "SS", long: "SS sick style", threshold: 820, chargeMul: 2.02, color: "#ffa27e" },
+    { short: "SSS", long: "SSS special sick style", threshold: 1220, chargeMul: 2.34, color: "#ff5f73" },
   ];
   const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
@@ -335,7 +335,12 @@
   }
 
   function battleRankChargeMultiplier() {
-    return currentBattleRank().chargeMul;
+    const base = currentBattleRank().chargeMul;
+    const tierRatio = clamp(battleRankIndex / Math.max(1, BATTLE_RANK_DATA.length - 1), 0, 1);
+    const progressBoost = battleRankProgressRatio();
+    const tierBoostMul = 1 + tierRatio * 0.16;
+    const flowBoostMul = 1 + progressBoost * 0.14;
+    return base * tierBoostMul * flowBoostMul;
   }
 
   function battleRankProgressRatio() {
