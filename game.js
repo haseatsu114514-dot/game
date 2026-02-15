@@ -237,7 +237,16 @@
     { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.56, color: "#ffd47d" },
     { short: "SS", long: "SS sick style", threshold: 820, chargeMul: 2.08, color: "#ffa27e" },
     { short: "SSS", long: "SSS special sexy style", threshold: 1220, chargeMul: 2.88, color: "#ff5f73" },
+    { short: "EX", long: "Extra Xenoid", threshold: 2140, chargeMul: 3.24, color: "#ffe489" },
   ];
+  const BATTLE_RANK_SSS_INDEX = (() => {
+    const idx = BATTLE_RANK_DATA.findIndex((rank) => rank.short === "SSS");
+    return idx >= 0 ? idx : Math.max(0, BATTLE_RANK_DATA.length - 1);
+  })();
+  const BATTLE_RANK_EX_INDEX = (() => {
+    const idx = BATTLE_RANK_DATA.findIndex((rank) => rank.short === "EX");
+    return idx >= 0 ? idx : BATTLE_RANK_SSS_INDEX;
+  })();
   const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
   const INVINCIBLE_BONUS_POP_LIFE = 44;
@@ -423,8 +432,7 @@
     if (baseChance >= 0.5) {
       return clamp(baseChance, 0.01, 0.98);
     }
-    const maxTier = Math.max(1, BATTLE_RANK_DATA.length - 1);
-    const rankRatio = clamp(battleRankIndex / maxTier, 0, 1);
+    const rankRatio = battleRankCoreTierRatio();
     const rankBonus = BLACK_FLASH_LOW_CHANCE_RANK_BONUS_MAX * rankRatio;
     return clamp(baseChance + rankBonus, 0.01, 0.98);
   }
@@ -552,28 +560,50 @@
     return BATTLE_RANK_DATA[clamp(battleRankIndex, 0, BATTLE_RANK_DATA.length - 1)];
   }
 
+  function battleRankCoreTierRatio(rankIdx = battleRankIndex) {
+    const coreMax = Math.max(1, BATTLE_RANK_SSS_INDEX);
+    return clamp(rankIdx / coreMax, 0, 1);
+  }
+
+  function isExBattleRankActive() {
+    return BATTLE_RANK_EX_INDEX > BATTLE_RANK_SSS_INDEX && battleRankIndex >= BATTLE_RANK_EX_INDEX;
+  }
+
+  function battleRankExProgress() {
+    if (!isExBattleRankActive()) return 0;
+    const exRank = BATTLE_RANK_DATA[BATTLE_RANK_EX_INDEX];
+    return clamp((battleRankGauge - exRank.threshold) / 360, 0, 1);
+  }
+
   function battleRankChargeMultiplier() {
     const base = currentBattleRank().chargeMul;
-    const tierRatio = clamp(battleRankIndex / Math.max(1, BATTLE_RANK_DATA.length - 1), 0, 1);
+    const tierRatio = battleRankCoreTierRatio();
     const progressBoost = battleRankProgressRatio();
     const tierBoostMul = 1 + Math.pow(tierRatio, 1.2) * 0.22;
     const flowBoostMul = 1 + progressBoost * (0.06 + tierRatio * 0.18);
     const lowRankPenalty = battleRankIndex <= 0 ? 0.92 : 1;
-    return base * tierBoostMul * flowBoostMul * lowRankPenalty;
+    const exProgress = battleRankExProgress();
+    const exBoostMul = isExBattleRankActive() ? 1.06 + exProgress * 0.06 : 1;
+    return base * tierBoostMul * flowBoostMul * lowRankPenalty * exBoostMul;
   }
 
   function battleRankAttackBoost() {
-    const maxTier = Math.max(1, BATTLE_RANK_DATA.length - 1);
-    const tierRatio = clamp(battleRankIndex / maxTier, 0, 1);
+    const tierRatio = battleRankCoreTierRatio();
     const flowRatio = battleRankProgressRatio();
     const blend = clamp(tierRatio * 0.74 + flowRatio * 0.26, 0, 1);
+    const exProgress = battleRankExProgress();
+    const exRangeBonus = isExBattleRankActive() ? 0.04 + exProgress * 0.02 : 0;
+    const exPowerBonus = isExBattleRankActive() ? 0.05 + exProgress * 0.03 : 0;
+    const exKnockBonus = isExBattleRankActive() ? 0.04 + exProgress * 0.03 : 0;
+    const exGimmickBonus = isExBattleRankActive() ? 0.06 + exProgress * 0.04 : 0;
+    const exEffectBonus = isExBattleRankActive() ? 0.56 + exProgress * 0.24 : 0;
     return {
       blend,
-      rangeMul: 1 + blend * 0.34,
-      powerMul: 1 + blend * 0.28,
-      knockMul: 1 + blend * 0.24,
-      gimmickMul: 1 + blend * 0.34,
-      effectMul: 1 + blend * 0.64,
+      rangeMul: 1 + blend * 0.34 + exRangeBonus,
+      powerMul: 1 + blend * 0.28 + exPowerBonus,
+      knockMul: 1 + blend * 0.24 + exKnockBonus,
+      gimmickMul: 1 + blend * 0.34 + exGimmickBonus,
+      effectMul: 1 + blend * 0.64 + exEffectBonus,
     };
   }
 
@@ -2250,10 +2280,11 @@
   function spawnEnemyBlood(x, y, power = 1) {
     const p = clamp(power, 0.9, 5.4);
     const powerRatio = clamp((p - 0.9) / (5.4 - 0.9), 0, 1);
-    const maxTier = Math.max(1, BATTLE_RANK_DATA.length - 1);
-    const tierRatio = clamp(battleRankIndex / maxTier, 0, 1);
+    const tierRatio = battleRankCoreTierRatio();
     const flowRatio = battleRankProgressRatio();
-    const rankBloodMul = 1 + tierRatio * 0.55 + flowRatio * 0.2;
+    const exRatio = battleRankExProgress();
+    const exBloodBonus = isExBattleRankActive() ? 0.14 + exRatio * 0.18 : 0;
+    const rankBloodMul = 1 + tierRatio * 0.55 + flowRatio * 0.2 + exBloodBonus;
     const count = clamp(
       Math.round((18 + p * 10 + p * p * 0.9) * rankBloodMul * 1.12),
       18,
@@ -2297,7 +2328,7 @@
     }
 
     const mistCount = clamp(
-      Math.round((6 + p * 3 + p * p * 0.4) * (1 + tierRatio * 0.5 + flowRatio * 0.2) * 1.1),
+      Math.round((6 + p * 3 + p * p * 0.4) * (1 + tierRatio * 0.5 + flowRatio * 0.2 + exBloodBonus * 0.68) * 1.1),
       6,
       62
     );
@@ -12684,16 +12715,18 @@
   function drawBattleRankStyleOverlay() {
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
 
-    const maxTier = Math.max(1, BATTLE_RANK_DATA.length - 1);
-    const rankTier = clamp(battleRankIndex, 0, maxTier);
-    const tierRatio = rankTier / maxTier;
+    const rankTier = clamp(battleRankIndex, 0, BATTLE_RANK_DATA.length - 1);
+    const tierRatio = battleRankCoreTierRatio(rankTier);
     const progress = battleRankProgressRatio();
-    const stylePower = clamp(0.06 + tierRatio * 0.68 + progress * 0.26, 0.06, 1);
+    const exActive = isExBattleRankActive();
+    const exRatio = battleRankExProgress();
+    const exVisualBoost = exActive ? 0.22 + exRatio * 0.34 : 0;
+    const stylePower = clamp(0.06 + tierRatio * 0.68 + progress * 0.26 + exVisualBoost * 0.24, 0.06, 1.22);
     const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
     const phase = player.anim * (0.06 + stylePower * 0.03);
     const top = 24;
     const areaH = H - top;
-    const rainbowAlpha = 0.004 + stylePower * 0.016;
+    const rainbowAlpha = 0.004 + stylePower * 0.016 + exVisualBoost * 0.006;
     ctx.fillStyle = `rgba(108, 190, 255, ${rainbowAlpha})`;
     ctx.fillRect(0, top, W, areaH);
     ctx.fillStyle = `rgba(255, 132, 196, ${rainbowAlpha * 0.78})`;
@@ -12701,7 +12734,7 @@
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    const curtainCount = 1 + Math.floor(stylePower * 2.2);
+    const curtainCount = 1 + Math.floor(stylePower * 2.2) + (exActive ? 1 + Math.floor(exRatio * 2) : 0);
     for (let i = 0; i < curtainCount; i += 1) {
       const sweep = ((phase * 0.55 + i * 0.24) % 1 + 1) % 1;
       const x = Math.floor((sweep - 0.18) * W);
@@ -12716,12 +12749,12 @@
     }
     ctx.restore();
 
-    const edgeAlpha = 0.004 + stylePower * 0.016;
+    const edgeAlpha = 0.004 + stylePower * 0.016 + exVisualBoost * 0.007;
     ctx.fillStyle = `rgba(182, 236, 255, ${edgeAlpha})`;
     ctx.fillRect(0, top, 2, areaH);
     ctx.fillRect(W - 2, top, 2, areaH);
 
-    const sparkleCount = 1 + rankTier + Math.floor(progress * 3) + Math.floor(rankFlash * 2);
+    const sparkleCount = 1 + rankTier + Math.floor(progress * 3) + Math.floor(rankFlash * 2) + (exActive ? 8 + Math.floor(exRatio * 9) : 0);
     const drift = Math.floor(player.anim * (1.1 + stylePower * 1.2));
     for (let i = 0; i < sparkleCount; i += 1) {
       const sx = ((i * 37 + drift * 11) % (W + 18)) - 9;
@@ -12736,6 +12769,40 @@
         ctx.fillRect(sx - 1, sy, size + 2, 1);
         ctx.fillRect(sx, sy - 1, 1, size + 2);
       }
+    }
+
+    if (exActive) {
+      const pulse = 0.5 + Math.sin(player.anim * 0.22) * 0.5;
+      const burstAlpha = 0.06 + pulse * 0.06 + exRatio * 0.08;
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      const scanCount = 2 + Math.floor(exRatio * 3);
+      for (let i = 0; i < scanCount; i += 1) {
+        const sweep = ((phase * 0.38 + i * 0.28) % 1 + 1) % 1;
+        const x = Math.floor((sweep - 0.24) * W);
+        const width = Math.floor(92 + exVisualBoost * 76 + i * 14);
+        const hue = (220 + i * 38 + pulse * 70 + player.anim * 0.24) % 360;
+        const grad = ctx.createLinearGradient(x, top, x + width, H);
+        grad.addColorStop(0, `hsla(${hue}, 100%, 72%, 0)`);
+        grad.addColorStop(0.5, `hsla(${(hue + 48) % 360}, 100%, 78%, ${0.06 + exRatio * 0.09})`);
+        grad.addColorStop(1, `hsla(${(hue + 96) % 360}, 100%, 72%, 0)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, top, width, areaH);
+      }
+      const core = ctx.createRadialGradient(
+        W * 0.5,
+        top + areaH * 0.48,
+        8,
+        W * 0.5,
+        top + areaH * 0.48,
+        146 + exRatio * 44
+      );
+      core.addColorStop(0, `rgba(255, 252, 220, ${burstAlpha})`);
+      core.addColorStop(0.44, `rgba(132, 214, 255, ${burstAlpha * 0.8})`);
+      core.addColorStop(1, "rgba(22, 10, 44, 0)");
+      ctx.fillStyle = core;
+      ctx.fillRect(0, top, W, areaH);
+      ctx.restore();
     }
 
     if (rankFlash > 0.3) {
