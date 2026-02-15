@@ -10613,6 +10613,9 @@
     const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
     const pulse = 0.5 + Math.sin(player.anim * 0.14) * 0.5;
     const glamour = clamp(Math.pow(stylePower, 1.22), 0, 1);
+    const neon = clamp((glamour - 0.2) / 0.8, 0, 1);
+    const glitter = clamp((glamour - 0.42) / 0.58, 0, 1);
+    const fireworks = clamp((glamour - 0.68) / 0.32, 0, 1);
     const px = Math.floor(player.x - cameraX + player.w * 0.5);
     const py = Math.floor(player.y + player.h * 0.45);
     const top = 24;
@@ -10624,6 +10627,25 @@
     ctx.fillRect(0, top, W, H - top);
     ctx.fillStyle = `rgba(255, 252, 210, ${0.01 + glamour * 0.04 + rankFlash * 0.05})`;
     ctx.fillRect(0, top, W, H - top);
+
+    if (neon > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const curtainCount = 1 + Math.floor(neon * 4);
+      for (let i = 0; i < curtainCount; i += 1) {
+        const sweep = ((phase * 0.8 + i * 0.26) % 1 + 1) % 1;
+        const x = Math.floor((sweep - 0.2) * W);
+        const width = Math.floor(70 + neon * 150 + i * 8);
+        const grad = ctx.createLinearGradient(x, top, x + width, H);
+        const hueA = (phase * 220 + i * 34 + tierRatio * 120) % 360;
+        grad.addColorStop(0, `hsla(${hueA}, 92%, 58%, 0)`);
+        grad.addColorStop(0.5, `hsla(${(hueA + 42) % 360}, 96%, 68%, ${0.06 + neon * 0.16})`);
+        grad.addColorStop(1, `hsla(${(hueA + 88) % 360}, 92%, 62%, 0)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, top, width, H - top);
+      }
+      ctx.restore();
+    }
 
     const ribbonCount = 2 + Math.floor(glamour * 8);
     for (let i = 0; i < ribbonCount; i += 1) {
@@ -10677,6 +10699,26 @@
       }
     }
 
+    if (glitter > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const confettiCount = 4 + Math.floor(glitter * 24) + Math.floor(rankFlash * 10);
+      const driftX = Math.floor(player.anim * (2.4 + glitter * 2.6));
+      const driftY = Math.floor(player.anim * (1.4 + glitter * 1.9));
+      for (let i = 0; i < confettiCount; i += 1) {
+        const cx = ((i * 41 + driftX * 9) % (W + 24)) - 12;
+        const cy = top + ((i * 67 + driftY * 7) % Math.max(1, H - top - 14));
+        const hue = (i * 57 + driftX * 8 + tierRatio * 140) % 360;
+        const twinkle = 0.5 + Math.sin(phase * 5.3 + i * 0.9) * 0.5;
+        const radius = 1 + ((i + driftY) % 3) + glitter * 1.4;
+        ctx.fillStyle = `hsla(${hue}, 98%, ${64 + twinkle * 16}%, ${0.09 + glitter * 0.22})`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
     const auraBase = 10 + glamour * 24;
     const auraCount = 1 + Math.floor(glamour * 5);
     for (let i = 0; i < auraCount; i += 1) {
@@ -10686,6 +10728,37 @@
       ctx.beginPath();
       ctx.arc(px, py, Math.max(4, radius), 0, Math.PI * 2);
       ctx.stroke();
+    }
+
+    if (fireworks > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const burstCount = 2 + Math.floor(fireworks * 5);
+      for (let i = 0; i < burstCount; i += 1) {
+        const t = phase * 0.8 + i * 0.7;
+        const cx = Math.floor(W * (0.2 + (((t * 0.37) % 1 + 1) % 1) * 0.6));
+        const cy = Math.floor(top + (H - top) * (0.16 + (((t * 0.51) % 1 + 1) % 1) * 0.62));
+        const rayCount = 8 + Math.floor(fireworks * 9);
+        const rayLen = 10 + fireworks * 22;
+        const hue = (t * 180 + i * 72 + tierRatio * 150) % 360;
+        for (let r = 0; r < rayCount; r += 1) {
+          const ang = (Math.PI * 2 * r) / rayCount + phase * 0.3;
+          const ex = cx + Math.cos(ang) * (rayLen + (r % 2) * 4);
+          const ey = cy + Math.sin(ang) * (rayLen + (r % 2) * 4);
+          ctx.strokeStyle = `hsla(${(hue + r * 12) % 360}, 100%, 70%, ${0.14 + fireworks * 0.22})`;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+        }
+      }
+      const cornerAlpha = 0.05 + fireworks * 0.16 + rankFlash * 0.08;
+      ctx.fillStyle = `rgba(255, 208, 112, ${cornerAlpha})`;
+      ctx.fillRect(0, top, 20 + fireworks * 24, 3 + fireworks * 3);
+      ctx.fillRect(W - (20 + fireworks * 24), top, 20 + fireworks * 24, 3 + fireworks * 3);
+      ctx.fillRect(0, H - (4 + fireworks * 4), 24 + fireworks * 24, 4 + fireworks * 4);
+      ctx.fillRect(W - (24 + fireworks * 24), H - (4 + fireworks * 4), 24 + fireworks * 24, 4 + fireworks * 4);
+      ctx.restore();
     }
 
     if (rankFlash > 0.3) {
