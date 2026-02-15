@@ -11093,22 +11093,24 @@
 
     const blackFlashChainActive = blackFlashChain > 0;
     const blackFlashChance = blackFlashChanceWithRank();
-    const blackFlashChanceStyle = blackFlashChanceHudColor(blackFlashChance);
-    const text = formatBlackFlashChanceText(blackFlashChance);
-    const textW = Math.ceil(ctx.measureText(text).width);
-    const padX = 3;
-    const boxW = textW + padX * 2 + 1;
-    const boxX = W - boxW - 3;
-    const boxY = 3;
-    ctx.fillStyle = `rgba(20, 12, 18, ${0.78 + (blackFlashChainActive ? 0.08 : 0)})`;
-    ctx.fillRect(boxX, boxY, boxW, 8);
-    const chanceBarAlpha = blackFlashChainActive
-      ? clamp(0.88 + Math.sin(player.anim * 0.28) * 0.08, 0.78, 0.98)
-      : 0.92;
-    ctx.fillStyle = `rgba(${blackFlashChanceStyle.barRgb}, ${chanceBarAlpha})`;
-    ctx.fillRect(boxX, boxY + 7, boxW - 1, 1);
-    ctx.fillStyle = blackFlashChanceStyle.text;
-    ctx.fillText(text, boxX + padX, boxY + 1);
+    if (blackFlashChance >= 0.5) {
+      const blackFlashChanceStyle = blackFlashChanceHudColor(blackFlashChance);
+      const text = formatBlackFlashChanceText(blackFlashChance);
+      const textW = Math.ceil(ctx.measureText(text).width);
+      const padX = 3;
+      const boxW = textW + padX * 2 + 1;
+      const boxX = W - boxW - 3;
+      const boxY = 3;
+      ctx.fillStyle = `rgba(20, 12, 18, ${0.78 + (blackFlashChainActive ? 0.08 : 0)})`;
+      ctx.fillRect(boxX, boxY, boxW, 8);
+      const chanceBarAlpha = blackFlashChainActive
+        ? clamp(0.88 + Math.sin(player.anim * 0.28) * 0.08, 0.78, 0.98)
+        : 0.92;
+      ctx.fillStyle = `rgba(${blackFlashChanceStyle.barRgb}, ${chanceBarAlpha})`;
+      ctx.fillRect(boxX, boxY + 7, boxW - 1, 1);
+      ctx.fillStyle = blackFlashChanceStyle.text;
+      ctx.fillText(text, boxX + padX, boxY + 1);
+    }
 
     const rank = currentBattleRank();
     const rankProgress = battleRankProgressRatio();
