@@ -2252,9 +2252,9 @@
     const flowRatio = battleRankProgressRatio();
     const rankBloodMul = 1 + tierRatio * 0.55 + flowRatio * 0.2;
     const count = clamp(
-      Math.round((18 + p * 10 + p * p * 0.9) * rankBloodMul),
+      Math.round((18 + p * 10 + p * p * 0.9) * rankBloodMul * 1.12),
       18,
-      170
+      188
     );
     const palette = [
       { color: "#ff5a6e", dark: "#6f0a16" },
@@ -2294,9 +2294,9 @@
     }
 
     const mistCount = clamp(
-      Math.round((6 + p * 3 + p * p * 0.4) * (1 + tierRatio * 0.5 + flowRatio * 0.2)),
+      Math.round((6 + p * 3 + p * p * 0.4) * (1 + tierRatio * 0.5 + flowRatio * 0.2) * 1.1),
       6,
-      56
+      62
     );
     for (let i = 0; i < mistCount; i += 1) {
       const side = Math.random() * 2 - 1;
