@@ -172,6 +172,7 @@
   let pendingStageResumeAfterInvincible = false;
   let audioUnlockedByUser = false;
   let openingThemeMutedAutoplayTried = false;
+  let timeStopSilenceActive = false;
   let rilaVoiceNextAt = 0;
   let enemyDefeatSeNextAt = 0;
   let uiSeNextAt = 0;
@@ -614,6 +615,7 @@
   }
 
   function seLevel(v) {
+    if (timeStopSilenceActive) return 0.0001;
     return Math.max(0.0001, v * SE_GAIN_BOOST);
   }
 
@@ -2707,7 +2709,7 @@
 
   function timeBurstDtScale() {
     if (!isTimeBurstActive()) return 1;
-    if (timeBurstMode === TIME_BURST_MODE_STOP) return 1;
+    if (timeBurstMode === TIME_BURST_MODE_STOP) return 0;
     return clamp(timeBurstSlowScale, TIME_BURST_SLOW_SCALE_MIN, TIME_BURST_SLOW_SCALE_MAX);
   }
 
@@ -2722,6 +2724,34 @@
     if (gameState === STATE.PLAY || gameState === STATE.BOSS) {
       hudMessage = wasStop ? "TIME FLOW RETURN" : "SLOW END";
       hudTimer = Math.max(hudTimer, 30);
+    }
+  }
+
+  function applyTimeStopSilence() {
+    const inCombat = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    const shouldSilence = inCombat && isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_STOP;
+    if (shouldSilence === timeStopSilenceActive) return;
+    timeStopSilenceActive = shouldSilence;
+
+    try {
+      if (stageMusic) stageMusic.muted = shouldSilence;
+      if (bossMusic) bossMusic.muted = shouldSilence;
+      if (invincibleMusic) invincibleMusic.muted = shouldSilence;
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
+
+    if (audioCtx && bgmMaster && bgmMaster.gain) {
+      const gainValue = shouldSilence ? 0 : 1;
+      try {
+        bgmMaster.gain.setValueAtTime(gainValue, audioCtx.currentTime);
+      } catch (_e) {
+        try {
+          bgmMaster.gain.value = gainValue;
+        } catch (_e2) {
+          // Ignore gain update errors.
+        }
+      }
     }
   }
 
@@ -7313,8 +7343,7 @@
     if (hudTimer > 0) hudTimer -= dt;
     updateImpactEffects(dt);
     consumeBurstIfPressed(actions);
-    const worldStopped = isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_STOP;
-    const worldDt = worldStopped ? 0 : dt;
+    const worldDt = dt * (isTimeBurstActive() ? timeBurstDtScale() : 1);
 
     if (hitStopTimer > 0) {
       hitStopTimer = Math.max(0, hitStopTimer - dt);
@@ -7401,8 +7430,7 @@
     if (hudTimer > 0) hudTimer -= dt;
     updateImpactEffects(dt);
     consumeBurstIfPressed(actions);
-    const worldStopped = isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_STOP;
-    const worldDt = worldStopped ? 0 : dt;
+    const worldDt = dt * (isTimeBurstActive() ? timeBurstDtScale() : 1);
 
     if (hitStopTimer > 0) {
       hitStopTimer = Math.max(0, hitStopTimer - dt);
@@ -12225,12 +12253,10 @@
     const rawDt = Math.min(2.4, (now - last) / 16.6667);
     last = now;
     updateTimeBurstState(rawDt);
+    applyTimeStopSilence();
 
     let dt = rawDt;
     const inCombat = gameState === STATE.PLAY || gameState === STATE.BOSS;
-    if (inCombat && isTimeBurstActive()) {
-      dt *= timeBurstDtScale();
-    }
     if (inCombat && blackFlashSlowTimer > 0) {
       const slowRatio = clamp(blackFlashSlowTimer / BLACK_FLASH_SLOW_DURATION, 0, 1);
       const dtScale = 1 - slowRatio * (1 - BLACK_FLASH_SLOW_SCALE);
