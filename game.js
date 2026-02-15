@@ -10436,28 +10436,35 @@
     const laserY = Math.floor(topY + sweep * (H - topY - 8));
     const pulse = 0.5 + Math.sin(proteinBurstLaserPhase * 0.9) * 0.5;
     const fastPulse = 0.5 + Math.sin(proteinBurstLaserPhase * 1.7) * 0.5;
+    const hueBase = (proteinBurstLaserPhase * 5.6 + player.anim * 2.2) % 360;
+    const stripeH = Math.max(8, Math.floor((H - topY) / 6));
 
-    ctx.fillStyle = `rgba(120, 225, 255, ${0.12 + intensity * 0.24})`;
-    ctx.fillRect(0, topY, W, H - topY);
-    ctx.fillStyle = `rgba(255, 212, 150, ${0.06 + intensity * 0.16})`;
-    ctx.fillRect(0, topY + 4, W, H - topY - 4);
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.04 + fastPulse * 0.1 * intensity})`;
+    for (let i = 0; i < 6; i += 1) {
+      const hue = (hueBase + i * 54) % 360;
+      const alpha = 0.05 + intensity * 0.09 + (i % 2 === 0 ? pulse * 0.03 : fastPulse * 0.03);
+      ctx.fillStyle = `hsla(${hue}, 95%, 62%, ${alpha})`;
+      ctx.fillRect(0, topY + i * stripeH, W, stripeH + 2);
+    }
+
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.05 + fastPulse * 0.1 * intensity})`;
     ctx.fillRect(0, topY, W, H - topY);
 
-    for (let i = 0; i < 13; i += 1) {
+    for (let i = 0; i < 15; i += 1) {
       const x = Math.floor((W / 12) * i + Math.sin((proteinBurstLaserPhase + i) * 0.7) * 6);
       const w = i % 2 === 0 ? 2 : 1;
-      ctx.fillStyle = `rgba(164, 246, 255, ${0.2 + intensity * 0.26})`;
+      const hue = (hueBase + i * 22 + pulse * 26) % 360;
+      ctx.fillStyle = `hsla(${hue}, 96%, 66%, ${0.16 + intensity * 0.26})`;
       ctx.fillRect(x, topY, w, H - topY);
-      ctx.fillStyle = `rgba(255, 248, 190, ${0.16 + intensity * 0.18})`;
+      ctx.fillStyle = `hsla(${(hue + 42) % 360}, 90%, 78%, ${0.12 + intensity * 0.16})`;
       ctx.fillRect(x + 1, topY, 1, H - topY);
     }
 
     const px = Math.floor(player.x - cameraX + player.w * 0.5);
     const py = Math.floor(player.y + player.h * 0.4);
-    for (let i = 0; i < 3; i += 1) {
-      const spread = 8 + i * 7 + fastPulse * 2;
-      ctx.strokeStyle = `rgba(184, 246, 255, ${0.22 + intensity * 0.14 - i * 0.05})`;
+    for (let i = 0; i < 5; i += 1) {
+      const spread = 8 + i * 6 + fastPulse * 2;
+      const hue = (hueBase + i * 70) % 360;
+      ctx.strokeStyle = `hsla(${hue}, 98%, 76%, ${0.16 + intensity * 0.13 - i * 0.02})`;
       ctx.beginPath();
       ctx.moveTo(px - spread, py);
       ctx.lineTo(px + spread, py);
@@ -10469,14 +10476,18 @@
     }
 
     if (proteinBurstLaserTimer > 0) {
-      ctx.fillStyle = `rgba(255, 248, 182, ${0.56 + pulse * 0.3})`;
-      ctx.fillRect(0, laserY - 2, W, 6);
-      ctx.fillStyle = `rgba(145, 239, 255, ${0.58 + ratio * 0.34})`;
-      ctx.fillRect(0, laserY - 7, W, 14);
+      for (let i = 0; i < 7; i += 1) {
+        const hue = (hueBase + i * 46 + fastPulse * 40) % 360;
+        const bandY = laserY - 7 + i * 2;
+        ctx.fillStyle = `hsla(${hue}, 100%, 64%, ${0.28 + ratio * 0.2})`;
+        ctx.fillRect(0, bandY, W, 2);
+      }
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.34 + ratio * 0.28})`;
+      ctx.fillRect(0, laserY - 1, W, 3);
       ctx.fillStyle = `rgba(255, 255, 255, ${0.36 + ratio * 0.28})`;
       ctx.fillRect(0, laserY, W, 2);
       const mirrorY = Math.floor(topY + (1 - sweep) * (H - topY - 8));
-      ctx.fillStyle = `rgba(255, 208, 140, ${0.22 + ratio * 0.18})`;
+      ctx.fillStyle = `hsla(${(hueBase + 180) % 360}, 90%, 70%, ${0.22 + ratio * 0.18})`;
       ctx.fillRect(0, mirrorY - 1, W, 3);
     }
   }
