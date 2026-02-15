@@ -198,6 +198,7 @@
   const INVINCIBLE_BGM_VOL = 0.44;
   const CLEAR_BGM_VOL = 0.4;
   const SE_GAIN_BOOST = 1.86;
+  const PROTEIN_LIFE_UP_STEP = 45;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [1 / 16, 1 / 4, 1 / 2, 1 / 1.5];
   const BLACK_FLASH_SLOW_DURATION = 20;
@@ -1490,6 +1491,27 @@
     }
   }
 
+  function registerProteinRankGain(x, y) {
+    const previousRank = battleRankIndex;
+    const gaugeCap = BATTLE_RANK_DATA[BATTLE_RANK_DATA.length - 1].threshold + 360;
+    const rankDamp = Math.max(0.72, 1 - battleRankIndex * 0.05);
+    const gain = 1.8 * rankDamp;
+    battleRankGauge = Math.min(gaugeCap, battleRankGauge + gain);
+    updateBattleRankTier();
+    battleRankFlashTimer = Math.max(battleRankFlashTimer, 4);
+
+    if (battleRankIndex > previousRank) {
+      const rank = currentBattleRank();
+      battleRankFlashTimer = Math.max(battleRankFlashTimer, 32);
+      battleRankBreakFlashTimer = 0;
+      playBattleRankUpSfx(battleRankIndex);
+      triggerImpact(0.88, x, y, 1.2);
+      spawnHitSparks(x, y, "#e8f6ff", "#8ccfff");
+      hudMessage = `RANK UP! ${rank.long}`;
+      hudTimer = Math.max(hudTimer, 28);
+    }
+  }
+
   function tryRegisterProjectileGraze(projectile, hitBox, power = 1) {
     if (!projectile || projectile.grazeAwarded) return false;
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return false;
@@ -2742,9 +2764,8 @@
       addProtein(125, 5900, 132);
 
       addBike(101, 2440, 108);
-      addHeartItem(101, 1420, 96);
+      // Keep heart items sparse.
       addHeartItem(103, 5010, 94);
-      addLifeUpItem(101, 2870, 88);
 
       const checkpointTokenIds = [1, 3, 5];
       const checkpointTokenAnchors = {
@@ -3086,8 +3107,7 @@
     addBike(2, 5660, 106);
     addBike(3, 9720, 102);
 
-    // Rare heart recovery pickups.
-    addHeartItem(1, 1480, 110);
+    // Rare heart recovery pickup.
     addHeartItem(4, 10140, 100);
 
     // Rare 1UP item (single spawn in stage).
@@ -4427,7 +4447,8 @@
       const speedPct = Math.round(pLv * 2.2);
       proteinRushTimer = Math.min(90, proteinRushTimer + 44);
       addProteinBurstGauge(PROTEIN_BURST_GAIN_PROTEIN);
-      const lifeUp = pLv % 30 === 0;
+      registerProteinRankGain(protein.x + protein.w * 0.5, floatY + protein.h * 0.5);
+      const lifeUp = pLv % PROTEIN_LIFE_UP_STEP === 0;
       if (lifeUp) {
         playerLives = Math.min(99, playerLives + 1);
         hudMessage = `PROTEIN ${pLv}! 1UP`;
