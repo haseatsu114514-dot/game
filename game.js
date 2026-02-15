@@ -256,8 +256,8 @@
   const TIME_BURST_MODE_SLOW = "slow";
   const TIME_BURST_MODE_STOP = "stop";
   const TIME_BURST_SLOW_MIN_DURATION = 60;
-  const TIME_BURST_SLOW_MAX_DURATION = 120;
-  const TIME_BURST_STOP_DURATION = 180;
+  const TIME_BURST_SLOW_MAX_DURATION = 180;
+  const TIME_BURST_STOP_DURATION = 240;
   const TIME_BURST_SLOW_SCALE_MIN = 0.22;
   const TIME_BURST_SLOW_SCALE_MAX = 0.45;
   const TIME_BURST_RANK_GAIN_SLOW_MUL = 1.35;
@@ -2279,7 +2279,7 @@
       ? 0
       : clamp(TIME_BURST_SLOW_SCALE_MAX - (TIME_BURST_SLOW_SCALE_MAX - TIME_BURST_SLOW_SCALE_MIN) * slowRatio, TIME_BURST_SLOW_SCALE_MIN, TIME_BURST_SLOW_SCALE_MAX);
     timeBurstPhase = 0;
-    timeBurstStopDeadlineMs = fullStop ? performance.now() + 3000 : 0;
+    timeBurstStopDeadlineMs = fullStop ? performance.now() + (TIME_BURST_STOP_DURATION / 60) * 1000 : 0;
 
     registerBurstActivationRankGain(player.x + player.w * 0.5, player.y + player.h * 0.52, gaugeRatio);
     proteinBurstGauge = 0;
@@ -2301,7 +2301,7 @@
     playKickSfx(fullStop ? 1.92 : 1.74 + slowRatio * 0.16);
 
     if (fullStop) {
-      hudMessage = "BURST2: TIME STOP 3.0s";
+      hudMessage = `BURST2: TIME STOP ${(TIME_BURST_STOP_DURATION / 60).toFixed(1)}s`;
       hudTimer = 72;
     } else {
       const sec = (timeBurstDuration / 60).toFixed(1);
