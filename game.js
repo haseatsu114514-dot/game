@@ -7969,10 +7969,27 @@
       ctx.fillStyle = moonGlow;
       ctx.fillRect(210, 0, 86, 76);
 
+      const skylineGlow = ctx.createLinearGradient(0, 58, 0, 146);
+      skylineGlow.addColorStop(0, "rgba(255, 142, 176, 0)");
+      skylineGlow.addColorStop(0.42, "rgba(255, 142, 176, 0.12)");
+      skylineGlow.addColorStop(1, "rgba(126, 219, 255, 0.2)");
+      ctx.fillStyle = skylineGlow;
+      ctx.fillRect(0, 58, W, 92);
+
       ctx.fillStyle = "rgba(255, 126, 177, 0.08)";
       ctx.fillRect(0, 70, W, 20);
       ctx.fillStyle = "rgba(120, 214, 255, 0.12)";
       ctx.fillRect(0, 88, W, 26);
+
+      const cloudShift = -Math.floor(cameraX * 0.05 + player.anim * 0.45) % (W + 72);
+      for (let i = -1; i < 6; i += 1) {
+        const cx = i * 72 + cloudShift;
+        const cy = 42 + ((i * 11) % 16);
+        ctx.fillStyle = "rgba(188, 218, 255, 0.07)";
+        ctx.fillRect(cx, cy, 38, 3);
+        ctx.fillStyle = "rgba(255, 196, 214, 0.05)";
+        ctx.fillRect(cx + 8, cy + 3, 24, 2);
+      }
 
       const twinkleSeed = Math.floor(player.anim * 0.7);
       for (let i = 0; i < 46; i += 1) {
@@ -8011,6 +8028,23 @@
 
     ctx.fillStyle = "rgba(184, 214, 255, 0.1)";
     ctx.fillRect(0, 82, W, 18);
+
+    const haze = ctx.createLinearGradient(0, 62, 0, 146);
+    haze.addColorStop(0, "rgba(255, 142, 172, 0)");
+    haze.addColorStop(0.36, "rgba(255, 142, 172, 0.08)");
+    haze.addColorStop(1, "rgba(142, 210, 255, 0.14)");
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, 62, W, 84);
+
+    const cloudShift = -Math.floor(cameraX * 0.045 + player.anim * 0.38) % (W + 68);
+    for (let i = -1; i < 5; i += 1) {
+      const cx = i * 68 + cloudShift;
+      const cy = 46 + ((i * 7) % 14);
+      ctx.fillStyle = "rgba(190, 220, 255, 0.06)";
+      ctx.fillRect(cx, cy, 34, 3);
+      ctx.fillStyle = "rgba(245, 190, 204, 0.045)";
+      ctx.fillRect(cx + 7, cy + 3, 20, 1);
+    }
 
     const twinkleSeed = Math.floor(player.anim * 0.6);
     for (let i = 0; i < 30; i += 1) {
@@ -8105,6 +8139,30 @@
         ctx.fillRect(x + 1, 144, 1, 8);
         ctx.fillStyle = "#2f394b";
       }
+
+      const signShift = -Math.floor(cameraX * 0.34) % 96;
+      const signBlink = Math.floor(player.anim * 0.2) % 3;
+      for (let i = -1; i < 5; i += 1) {
+        const sx = i * 96 + 20 + signShift;
+        const sy = 86 + (i % 2) * 8;
+        ctx.fillStyle = "#1a2538";
+        ctx.fillRect(sx, sy, 32, 10);
+        ctx.fillStyle = "#2b3b59";
+        ctx.fillRect(sx + 1, sy + 1, 30, 8);
+        ctx.fillStyle = i % 2 === 0 ? "rgba(132, 240, 255, 0.52)" : "rgba(255, 152, 198, 0.5)";
+        ctx.fillRect(sx + 2, sy + 2, 28, 2);
+        ctx.fillStyle = signBlink === (i + 6) % 3 ? "#fff0b8" : "#9db0cf";
+        ctx.fillRect(sx + 4, sy + 5, 24, 2);
+      }
+
+      const trafficShift = -Math.floor(cameraX * 1.15 + player.anim * 1.4) % 54;
+      for (let i = -1; i < 8; i += 1) {
+        const tx = i * 54 + trafficShift;
+        ctx.fillStyle = "rgba(255, 134, 94, 0.24)";
+        ctx.fillRect(tx, 152, 18, 1);
+        ctx.fillStyle = "rgba(124, 228, 255, 0.2)";
+        ctx.fillRect(tx + 9, 154, 16, 1);
+      }
       return;
     }
 
@@ -8179,6 +8237,30 @@
       ctx.fillRect(x + 1, 144, 1, 8);
       ctx.fillStyle = "#2c3342";
     }
+
+    const signShift = -Math.floor(cameraX * 0.31) % 104;
+    const signBlink = Math.floor(player.anim * 0.22) % 2 === 0;
+    for (let i = -1; i < 4; i += 1) {
+      const sx = i * 104 + 28 + signShift;
+      const sy = 94 + (i % 2) * 7;
+      ctx.fillStyle = "#1a2133";
+      ctx.fillRect(sx, sy, 28, 9);
+      ctx.fillStyle = "#2b3550";
+      ctx.fillRect(sx + 1, sy + 1, 26, 7);
+      ctx.fillStyle = i % 2 === 0 ? "rgba(128, 236, 255, 0.4)" : "rgba(255, 166, 134, 0.36)";
+      ctx.fillRect(sx + 2, sy + 2, 24, 2);
+      ctx.fillStyle = signBlink ? "#ffeab7" : "#95a7c3";
+      ctx.fillRect(sx + 5, sy + 5, 18, 1);
+    }
+
+    const trafficShift = -Math.floor(cameraX * 1.05 + player.anim * 1.2) % 60;
+    for (let i = -1; i < 7; i += 1) {
+      const tx = i * 60 + trafficShift;
+      ctx.fillStyle = "rgba(255, 142, 102, 0.2)";
+      ctx.fillRect(tx, 152, 14, 1);
+      ctx.fillStyle = "rgba(132, 220, 255, 0.18)";
+      ctx.fillRect(tx + 10, 154, 12, 1);
+    }
   }
 
   function drawMansionInteriorBackdrop() {
@@ -8198,6 +8280,18 @@
       ctx.fillStyle = "rgba(255, 214, 152, 0.06)";
       ctx.fillRect(x + 6, 12, 1, 105);
       ctx.fillRect(x + 42, 12, 1, 105);
+    }
+
+    const colShift = -Math.floor(cameraX * 0.18) % 80;
+    for (let x = colShift - 80; x < W + 80; x += 80) {
+      ctx.fillStyle = "#2a1e33";
+      ctx.fillRect(x + 8, 14, 12, 116);
+      ctx.fillStyle = "#5a405f";
+      ctx.fillRect(x + 10, 16, 8, 4);
+      ctx.fillStyle = "#221826";
+      ctx.fillRect(x + 11, 24, 6, 102);
+      ctx.fillStyle = "rgba(255, 225, 183, 0.08)";
+      ctx.fillRect(x + 12, 24, 1, 98);
     }
 
     const windowShift = -Math.floor(cameraX * 0.1) % 104;
@@ -8253,6 +8347,15 @@
       ctx.fillRect(x, 148, 12, 1);
       ctx.fillRect(x + 6, 160, 10, 1);
     }
+
+    ctx.fillStyle = "rgba(255, 210, 220, 0.08)";
+    for (let x = 0; x < W; x += 28) {
+      ctx.fillRect(x, 167, 14, 1);
+    }
+    ctx.fillStyle = "rgba(120, 190, 255, 0.06)";
+    for (let y = 140; y < H; y += 8) {
+      ctx.fillRect(0, y, W, 1);
+    }
   }
 
   function drawSolid(s) {
@@ -8281,8 +8384,19 @@
     for (let x = 2; x < s.w - 1; x += 6) {
       ctx.fillRect(ox + x, oy + 4, 1, Math.max(0, s.h - 8));
     }
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    for (let y = 6; y < s.h - 3; y += 7) {
+      ctx.fillRect(ox + 2, oy + y, Math.max(1, s.w - 4), 1);
+    }
+    ctx.fillStyle = "rgba(15,18,25,0.2)";
+    for (let y = 8; y < s.h - 4; y += 9) {
+      const notch = 2 + ((Math.floor(s.x + s.y + y) / 3) % 4);
+      ctx.fillRect(ox + notch, oy + y, 2, 1);
+    }
     ctx.fillStyle = "rgba(0,0,0,0.14)";
     ctx.fillRect(ox + 1, oy + s.h - 2, s.w - 2, 1);
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.fillRect(ox + s.w - 2, oy + 1, 1, s.h - 2);
 
     if (s.isWall) {
       ctx.fillStyle = "#2a1a18";
@@ -8353,12 +8467,18 @@
     paint("#141a2c", 1, 5, 12, 3);
     paint("#1f2740", 2, 4, 10, 2);
     paint("#2a344e", 3, 3, 8, 1);
+    paint("#3a4c6b", 4, 3, 5, 1);
+    paint("#1e2a43", 3, 2, 2, 1);
+    paint("#1e2a43", 9, 2, 2, 1);
     paint("#12182a", 0, 8, 3, 2);
     paint("#12182a", 11, 8, 3, 2);
     paint("#1a2136", 1, 9, 4, 2);
     paint("#1a2136", 9, 9, 4, 2);
     paint("#0a0c13", 5, 4, 4, 4);
     paint("#07090f", 6, 5, 2, 4);
+    paint("#05060b", 4, 4, 1, 4);
+    paint("#05060b", 8, 4, 1, 4);
+    paint("#364865", 6, 3, 1, 2);
 
     // Face: softer cute look, larger eyes, small blush.
     paint("#f8e9e1", 4, 6, 6, 6);
@@ -8369,11 +8489,15 @@
     paint("#2a1c1d", 8, 6, 2, 1);
     paint("#6f4838", 5, 7, 2, 2);
     paint("#6f4838", 8, 7, 2, 2);
+    paint("#7e5340", 5, 8, 2, 1);
+    paint("#7e5340", 8, 8, 2, 1);
     paint("#fff8f4", 5, 7, 1, 1);
     paint("#fff8f4", 8, 7, 1, 1);
     paint("#f2c8bb", 4, 9, 1, 1);
     paint("#f2c8bb", 10, 9, 1, 1);
     paint("#c48a83", 6, 10, 2, 1);
+    paint("#fffdf8", 6, 11, 1, 1);
+    paint("#e3b3a8", 7, 11, 1, 1);
 
     // Neck + rider jacket + white inner shirt.
     paint("#f3ddd1", 6, 12, 2, 1);
@@ -8383,10 +8507,14 @@
     paint(jacketEdge, 8, 13, 3, 4);
     paint("#2b3447", 3, 13, 2, 2);
     paint("#2b3447", 9, 13, 2, 2);
+    paint("#d8dde8", 2, 13, 1, 1);
+    paint("#d8dde8", 11, 13, 1, 1);
     paint(shirtMain, 5, 14, 4, 5);
     paint(shirtShade, 5, 18, 4, 1);
     paint("#bfc8d9", 9, 14, 1, 5);
     paint("#8e99ad", 4, 19, 6, 1);
+    paint("#a7b3c8", 7, 13, 1, 6);
+    paint("#eff2f8", 6, 14, 1, 3);
 
     if (damageTier > 0) {
       paint("#090b11", 4, 15, 1, 1);
@@ -8417,9 +8545,11 @@
     paint(sleeveMain, 0, 13 + armA + armKickLift, 2, 6);
     paint("#2b3447", 1, 14 + armA + armKickLift, 1, 3);
     paint("#f4e0d3", 0, 19 + armA + armKickLift, 2, 1);
+    paint("#1c2332", 0, 14 + armA + armKickLift, 1, 4);
     paint(sleeveMain, 12, 13 + armB - armKickLift, 2, 6);
     paint("#2b3447", 12, 14 + armB - armKickLift, 1, 3);
     paint("#f4e0d3", 12, 19 + armB - armKickLift, 2, 1);
+    paint("#1c2332", 13, 14 + armB - armKickLift, 1, 4);
     if (damageTier > 1) {
       paint("#05060a", 0, 16 + armA + armKickLift, 1, 2);
       paint("#05060a", 13, 15 + armB - armKickLift, 1, 2);
@@ -8450,11 +8580,18 @@
       paint("#324975", 4, 20, 2, 2);
       paint("#24345a", 7, 20, 4, 3 + legB);
       paint("#324975", 8, 20, 2, 2);
+      paint("#3f5688", 4, 21, 1, 1);
+      paint("#3f5688", 8, 21, 1, 1);
       paint("#161118", 3, 23 + legA, 4, 1);
       paint("#161118", 7, 23 + legB, 4, 1);
       paint("#2b1f27", 3, 24 + legA, 4, 1);
       paint("#2b1f27", 7, 24 + legB, 4, 1);
     }
+
+    // Subtle silhouette polish for readability on bright backgrounds.
+    paint("#05060c", 0, 3, 1, 17);
+    paint("#05060c", 13, 3, 1, 17);
+    paint("#05060c", 2, 24, 10, 1);
 
     ctx.restore();
   }
@@ -8546,6 +8683,7 @@
     paint("#ba3333", 3, 4, 10, 1);
     paint("#922326", 10, 2, 3, 3);
     paint("#df5353", 4, 2, 4, 1);
+    paint("#ff8181", 5, 1, 3, 1);
     paint("#7d2025", 9, 5, 5, 1);
     paint("#2a1f29", 12, 5, 2, 2);
 
@@ -8560,6 +8698,9 @@
     paint("#7f5746", 6, 9, 2, 1);
     paint("#ddb9a4", 10, 8, 1, 2);
     paint("#f0d5c2", 6, 11, 2, 1);
+    paint("#fdf3ec", 6, 6, 1, 1);
+    paint("#fdf3ec", 8, 6, 1, 1);
+    paint("#d7a996", 7, 10, 1, 1);
 
     // Hoodie + jacket torso.
     paint("#1e2737", 4, 12, 6, 2);
@@ -8567,14 +8708,18 @@
     paint("#2f4f7a", 3, 14, 10, 8);
     paint("#466d9e", 4, 14, 8, 4);
     paint("#2a405f", 7, 14, 1, 8);
+    paint("#6d88b3", 5, 14, 5, 1);
     paint("#f1f4f8", 6, 15, 3, 4);
     paint("#d8dde4", 6, 19, 3, 1);
+    paint("#9fb2d0", 7, 15, 1, 4);
 
     // Arms and hands.
     paint("#20293a", 1, 14, 2, 6);
     paint("#20293a", 13, 14, 2, 6);
     paint("#f0d5c2", 1, 19, 1, 2);
     paint("#f0d5c2", 14, 19, 1, 2);
+    paint("#2e3b53", 2, 15, 1, 3);
+    paint("#2e3b53", 13, 15, 1, 3);
 
     // Pants + sneakers.
     paint("#324457", 4, 22, 8, 1);
@@ -8586,6 +8731,11 @@
     paint("#171a22", 9, 27, 4, 1);
     paint("#f3f4f8", 6, 27, 1, 1);
     paint("#f3f4f8", 12, 27, 1, 1);
+
+    // Pixel silhouette to keep him readable against mansion lights.
+    paint("#0d111a", 1, 1, 1, 24);
+    paint("#0d111a", 13, 1, 1, 24);
+    paint("#0d111a", 3, 27, 10, 1);
   }
 
   function drawEnemyHpPips(enemy, x, y) {
@@ -8612,6 +8762,8 @@
       const x = Math.floor(enemy.x - cameraX);
       const y = Math.floor(enemy.y);
       const blink = Math.floor((player.anim + enemy.x) * 0.12) % 2 === 0;
+      ctx.fillStyle = "rgba(8, 12, 20, 0.36)";
+      ctx.fillRect(x + 1, y + 17, 11, 2);
 
       ctx.fillStyle = "#171220";
       ctx.fillRect(x + 1, y, 11, 1);
@@ -8636,6 +8788,8 @@
       ctx.fillRect(x + 3, y + 9, 7, 2);
       ctx.fillStyle = "#8ea2c4";
       ctx.fillRect(x + 6, y + 9, 1, 4);
+      ctx.fillStyle = "#cfd9eb";
+      ctx.fillRect(x + 7, y + 10, 1, 2);
 
       ctx.fillStyle = "#2a2d3b";
       ctx.fillRect(x + 2, y + 14, 3, 2);
@@ -8659,6 +8813,8 @@
       const charge = enemy.mode === "charge";
       const windup = enemy.mode === "windup";
       const dir = enemy.dir;
+      ctx.fillStyle = "rgba(8, 14, 18, 0.38)";
+      ctx.fillRect(x + 3, y + 17, 10, 2);
 
       const bodyMain = enemy.kicked ? "#36596a" : charge ? "#2a7fcb" : "#2f9ac9";
       const bodyShade = enemy.kicked ? "#24434f" : charge ? "#245f9a" : "#2c7a9f";
@@ -8678,6 +8834,8 @@
       ctx.fillRect(tailX + 2, y + 7, 1, 2);
       ctx.fillStyle = tailGlow;
       ctx.fillRect(tailX + 1, y + 11, 3, 1);
+      ctx.fillStyle = "rgba(220, 255, 238, 0.45)";
+      ctx.fillRect(tailX + 1, y + 6, 1, 4);
 
       ctx.fillStyle = bodyMain;
       ctx.fillRect(x + 4, y + 8, 8, 6);
@@ -8685,6 +8843,8 @@
       ctx.fillRect(x + 5, y + 10, 6, 3);
       ctx.fillStyle = charge ? "#64d9c5" : "#57d4b8";
       ctx.fillRect(x + 7, y + 6, 3, 4);
+      ctx.fillStyle = charge ? "#97eddf" : "#88e6d1";
+      ctx.fillRect(x + 8, y + 7, 1, 2);
 
       ctx.fillStyle = "#0f1520";
       ctx.fillRect(x + 8, y + 4, 3, 3);
@@ -8719,6 +8879,8 @@
     if (enemy.kind === "bruiser") {
       const x = Math.floor(enemy.x - cameraX);
       const y = Math.floor(enemy.y);
+      ctx.fillStyle = "rgba(10, 14, 20, 0.4)";
+      ctx.fillRect(x + 1, y + 18, 14, 2);
       const armor = enemy.kicked ? "#3d4d63" : "#50627b";
       const armorHi = enemy.kicked ? "#586f8a" : "#7187a6";
       const armorDark = enemy.kicked ? "#2c394b" : "#38495f";
@@ -8753,6 +8915,9 @@
       ctx.fillStyle = armorHi;
       ctx.fillRect(x + 0, y + 11, 1, 2);
       ctx.fillRect(x + 15, y + 11, 1, 2);
+      ctx.fillStyle = "#d5dfef";
+      ctx.fillRect(x + 3, y + 9, 1, 1);
+      ctx.fillRect(x + 12, y + 9, 1, 1);
 
       ctx.fillStyle = "#2b3346";
       ctx.fillRect(x + 3, y + 15, 4, 2);
@@ -8772,6 +8937,8 @@
 
     const x = Math.floor(enemy.x - cameraX);
     const y = Math.floor(enemy.y);
+    ctx.fillStyle = "rgba(8, 10, 16, 0.35)";
+    ctx.fillRect(x + 2, y + 17, 10, 2);
     const coat = enemy.kicked ? "#533948" : "#3b2737";
     const coatHi = enemy.kicked ? "#6a4c5d" : "#58405a";
 
@@ -8796,6 +8963,8 @@
     ctx.fillRect(x + 3, y + 10, 8, 2);
     ctx.fillStyle = "#7988a5";
     ctx.fillRect(x + 6, y + 10, 1, 5);
+    ctx.fillStyle = "#d8dff1";
+    ctx.fillRect(x + 7, y + 10, 1, 3);
     ctx.fillStyle = "#1e2535";
     ctx.fillRect(x + 1, y + 10, 2, 3);
     ctx.fillRect(x + 11, y + 10, 2, 3);
@@ -8823,6 +8992,8 @@
     const warn = b.mode === "windup" || b.mode === "dash";
     const cast = b.mode === "shoot";
     const rage = b.hp <= Math.ceil(b.maxHp * 0.4);
+    ctx.fillStyle = "rgba(6, 14, 20, 0.36)";
+    ctx.fillRect(x + 2, y + 36, 20, 2);
 
     ctx.fillStyle = "#0e1723";
     ctx.fillRect(x + 3, y + 8, 18, 18);
@@ -8853,6 +9024,9 @@
     ctx.fillStyle = rage ? "#8ef0d3" : "#7be9cf";
     ctx.fillRect(x - 4, y + 8, 3, 13);
     ctx.fillRect(x + 24, y + 8, 3, 13);
+    ctx.fillStyle = "rgba(243, 255, 232, 0.48)";
+    ctx.fillRect(x - 3, y + 9, 1, 8);
+    ctx.fillRect(x + 25, y + 9, 1, 8);
     ctx.fillStyle = "#f6e0a3";
     ctx.fillRect(x - 3, y + 15, 1, 2);
     ctx.fillRect(x + 25, y + 15, 1, 2);
@@ -8879,6 +9053,8 @@
     const b = stage.boss;
     const x = Math.floor(b.x - cameraX);
     const y = Math.floor(b.y);
+    ctx.fillStyle = "rgba(8, 12, 20, 0.34)";
+    ctx.fillRect(x + 2, y + b.h + 1, Math.max(6, b.w - 4), 2);
     if (b.kind === "peacock") {
       for (const pb of getBossEntities(true).filter((boss) => boss.kind === "peacock")) {
         if (pb.hp <= 0) continue;
@@ -8934,6 +9110,8 @@
       ctx.fillRect(x + 6, y + 14, 12, 6);
       ctx.fillStyle = "#93a0bc";
       ctx.fillRect(x + 11, y + 14, 2, 11);
+      ctx.fillStyle = "#f2f5ff";
+      ctx.fillRect(x + 11, y + 15, 1, 4);
       ctx.fillStyle = mantle;
       ctx.fillRect(x + 2, y + 18, 20, 12);
       ctx.fillStyle = mantleHi;
@@ -9021,6 +9199,8 @@
     ctx.fillRect(x + 9, y + 14, 6, 3);
     ctx.fillStyle = "#f8fbff";
     ctx.fillRect(x + 10, y + 17, 4, 2);
+    ctx.fillStyle = "rgba(255, 246, 218, 0.5)";
+    ctx.fillRect(x + 8, y + 18, 8, 1);
 
     ctx.fillStyle = warn ? "#c4ccd9" : (phase2 ? "#b9b5cf" : "#b6c0d0");
     ctx.fillRect(x + 3, y + 18, 18, 11);
@@ -9082,6 +9262,8 @@
 
     ctx.fillStyle = "rgba(120, 220, 255, 0.18)";
     ctx.fillRect(x - 2, y - 2, 14, 16);
+    ctx.fillStyle = "rgba(255, 244, 196, 0.14)";
+    ctx.fillRect(x - 1, y - 1, 12, 14);
 
     // Cap
     ctx.fillStyle = "#0f1320";
@@ -9104,6 +9286,8 @@
     ctx.fillRect(x + 3, y + 6, 1, 2);
     ctx.fillRect(x + 4, y + 6, 2, 1);
     ctx.fillRect(x + 4, y + 7, 1, 1);
+    ctx.fillStyle = "#7db6ff";
+    ctx.fillRect(x + 2, y + 5, 6, 1);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(x + 3, y + 4, 1, 1);
     ctx.fillRect(x + 7, y + 4, 1, 1);
@@ -9128,6 +9312,8 @@
     ctx.fillStyle = "#ff86a3";
     ctx.fillRect(x + 3, y + 2, 1, 1);
     ctx.fillRect(x + 7, y + 2, 1, 1);
+    ctx.fillStyle = "#ffd0dc";
+    ctx.fillRect(x + 4, y + 3, 2, 1);
 
     if (pulse) {
       ctx.fillStyle = "#ffe1e8";
@@ -9157,6 +9343,9 @@
     ctx.fillRect(x + 5, y + 4, 2, 1);
     ctx.fillRect(x + 5, y + 7, 2, 1);
     ctx.fillRect(x + 5, y + 5, 1, 1);
+    ctx.fillStyle = "#d6ffe2";
+    ctx.fillRect(x + 4, y + 4, 1, 1);
+    ctx.fillRect(x + 8, y + 4, 1, 1);
 
     if (blink) {
       ctx.fillStyle = "#e6ffe9";
@@ -9424,6 +9613,11 @@
     ctx.fillRect(x + 12, y + 2, 4, 1);
     ctx.fillStyle = "#c04f62";
     ctx.fillRect(x + 11, y + 7, 5, 1);
+    ctx.fillStyle = "#d4e8ff";
+    ctx.fillRect(x + 9, y + 5, 1, 1);
+    ctx.fillRect(x + 15, y + 5, 1, 1);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.34)";
+    ctx.fillRect(x + 7, y + 8, 15, 1);
 
     // Rider-only invincible sprite so it clearly looks like Rila is riding the bike.
     const riderBounce = Math.sin(player.anim * 0.44) * 0.5;
@@ -9445,6 +9639,7 @@
     paint("#162038", 1, 5, 10, 1);
     paint("#111a2e", 0, 6, 3, 2);
     paint("#111a2e", 9, 6, 3, 2);
+    paint("#293a58", 3, 3, 5, 1);
     paint("#05070b", 5, 2, 2, 4);
     paint("#080b14", 4, 4, 1, 2);
     paint("#080b14", 7, 4, 1, 2);
@@ -9459,12 +9654,15 @@
     paint("#fff8f4", 4, 6, 1, 1);
     paint("#fff8f4", 7, 6, 1, 1);
     paint("#c48a83", 5, 8, 2, 1);
+    paint("#f8efe8", 5, 5, 2, 1);
 
     // Front bangs overlay while riding.
     paint("#0a0f1b", 3, 5, 1, 2);
     paint("#05070b", 5, 5, 2, 2);
     paint("#0a0f1b", 8, 5, 1, 2);
     paint("#162038", 6, 5, 1, 1);
+    paint("#101a2c", 4, 4, 1, 2);
+    paint("#101a2c", 7, 4, 1, 2);
 
     // Neck + rider jacket torso.
     paint("#f3ddd1", 5, 9, 2, 1);
@@ -9473,6 +9671,9 @@
     paint("#f5f2ef", 4, 11, 3, 2);
     paint("#2b3447", 2, 10, 2, 2);
     paint("#2b3447", 8, 10, 2, 2);
+    paint("#d4dae6", 2, 10, 1, 1);
+    paint("#d4dae6", 9, 10, 1, 1);
+    paint("#a0afc7", 6, 10, 1, 4);
 
     // Arms reaching handle.
     paint("#0d111a", 0, 10, 2, 3);
@@ -9487,6 +9688,8 @@
     paint("#324975", 5, 14, 3, 1);
     paint("#171b24", 7, 16, 3, 1);
     paint("#2b1f27", 8, 15, 3, 1);
+    paint("#060910", 0, 3, 1, 12);
+    paint("#060910", 11, 3, 1, 12);
     ctx.restore();
 
     ctx.save();
@@ -10123,6 +10326,8 @@
     const flash = (c.muzzleFlash || 0) > 0;
     const muzzleX = c.dir < 0 ? x - 10 : x + 11;
     const muzzleY = y + 1;
+    ctx.fillStyle = "rgba(10, 12, 18, 0.34)";
+    ctx.fillRect(x - 5, y + 8, 12, 2);
 
     ctx.fillStyle = "#20242f";
     ctx.fillRect(x - 6, y - 4, 14, 11);
@@ -10144,6 +10349,8 @@
 
     ctx.fillStyle = "#6e7d92";
     ctx.fillRect(x - 3, y + 6, 8, 2);
+    ctx.fillStyle = "#cdd8ea";
+    ctx.fillRect(x - 1, y - 2, 3, 1);
 
     if (warnBlink) {
       ctx.fillStyle = "rgba(255, 146, 110, 0.68)";
@@ -10196,6 +10403,10 @@
     ctx.fillRect(x, y, block.w, block.h);
     ctx.fillStyle = warn ? "#f0b3a0" : "#7e5a4e";
     ctx.fillRect(x, y, block.w, 3);
+    ctx.fillStyle = "rgba(255, 236, 208, 0.08)";
+    for (let yy = 5; yy < block.h - 3; yy += 6) {
+      ctx.fillRect(x + 2, y + yy, Math.max(2, block.w - 4), 1);
+    }
     ctx.fillStyle = "rgba(0,0,0,0.18)";
     ctx.fillRect(x + 1, y + block.h - 2, block.w - 2, 1);
     if (warn) {
@@ -10244,6 +10455,8 @@
     ctx.fillRect(x, stage.groundY - 3, trap.w, 3);
     ctx.fillStyle = "rgba(255,255,255,0.18)";
     ctx.fillRect(x + 1, stage.groundY - 3, Math.max(2, trap.w - 2), 1);
+    ctx.fillStyle = "rgba(8, 14, 22, 0.24)";
+    ctx.fillRect(x + 2, stage.groundY - 1, Math.max(2, trap.w - 4), 1);
 
     if (warning) {
       const pulse = (Math.sin((trap.warningPulse || 0) * 0.26) * 0.5 + 0.5);
@@ -10264,6 +10477,8 @@
       ctx.fillRect(x + 2, topY, Math.max(3, trap.w - 4), h);
       ctx.fillStyle = active ? "#ffd2df" : "#cddbf1";
       ctx.fillRect(x + 3, topY + 1, Math.max(2, trap.w - 8), 1);
+      ctx.fillStyle = active ? "rgba(255, 248, 226, 0.3)" : "rgba(224, 240, 255, 0.24)";
+      ctx.fillRect(x + 3, topY + h - 2, Math.max(2, trap.w - 8), 1);
       if (active) {
         const jitter = Math.floor((trap.warningPulse || 0) * 0.9) % 3;
         ctx.fillStyle = "rgba(255, 238, 174, 0.62)";
@@ -10293,6 +10508,8 @@
       ctx.fillRect(gx + 6, gy + 12, gw - 12, 2);
       ctx.fillStyle = "#ff8fbe";
       ctx.fillRect(gx + 8, gy + 18, gw - 16, 1);
+      ctx.fillStyle = "rgba(255, 240, 214, 0.15)";
+      ctx.fillRect(gx + 7, gy + 26, gw - 14, 2);
 
       ctx.fillStyle = "#111a2b";
       ctx.fillRect(x - 1, y - 1, g.w + 2, g.h + 2);
@@ -10333,12 +10550,16 @@
     ctx.fillRect(mx + 4, my + 10, mw - 8, mh - 14);
     ctx.fillStyle = "#36415d";
     ctx.fillRect(mx + 8, my + 14, mw - 16, 6);
+    ctx.fillStyle = "rgba(255, 220, 178, 0.16)";
+    ctx.fillRect(mx + 10, my + 22, mw - 20, 2);
 
     // Entrance canopy.
     ctx.fillStyle = "#2c354b";
     ctx.fillRect(x - 8, y - 8, g.w + 16, 8);
     ctx.fillStyle = "#141a28";
     ctx.fillRect(x - 6, y - 6, g.w + 12, 3);
+    ctx.fillStyle = "rgba(255, 236, 186, 0.24)";
+    ctx.fillRect(x - 4, y - 7, g.w + 8, 1);
 
     // Windows.
     ctx.fillStyle = "#1a2336";
@@ -10378,6 +10599,8 @@
     ctx.fillRect(x - 4, y + g.h - 4, g.w + 8, 4);
     ctx.fillStyle = "#9f7a4d";
     ctx.fillRect(x - 2, y + g.h - 4, g.w + 4, 1);
+    ctx.fillStyle = "rgba(255, 244, 202, 0.2)";
+    ctx.fillRect(x + 2, y + g.h - 5, g.w - 4, 1);
 
     if (stage.boss.active) {
       ctx.fillStyle = "rgba(180,20,20,0.45)";
@@ -10449,8 +10672,14 @@
       drawSkyGradient();
       drawParallax();
     }
-    ctx.fillStyle = godBossRoom ? "rgba(6,8,12,0.12)" : "rgba(8,10,16,0.1)";
+    ctx.fillStyle = godBossRoom ? "rgba(6,8,12,0.09)" : "rgba(8,10,16,0.07)";
     ctx.fillRect(0, 0, W, H - 18);
+    const polishGlow = ctx.createLinearGradient(0, 44, 0, 150);
+    polishGlow.addColorStop(0, "rgba(255, 206, 178, 0)");
+    polishGlow.addColorStop(0.52, "rgba(255, 206, 178, 0.05)");
+    polishGlow.addColorStop(1, "rgba(140, 224, 255, 0.08)");
+    ctx.fillStyle = polishGlow;
+    ctx.fillRect(0, 44, W, 110);
 
     ctx.save();
 
@@ -11744,8 +11973,13 @@
   function drawPs1Overlay() {
     const filmTick = Math.floor((player.anim + titleTimer) * 0.8);
 
-    ctx.fillStyle = "rgba(10,12,18,0.1)";
+    ctx.fillStyle = "rgba(10,12,18,0.06)";
     for (let y = 0; y < H; y += 2) {
+      ctx.fillRect(0, y, W, 1);
+    }
+
+    for (let y = 1; y < H; y += 4) {
+      ctx.fillStyle = "rgba(255, 236, 210, 0.018)";
       ctx.fillRect(0, y, W, 1);
     }
 
@@ -11758,24 +11992,42 @@
       214
     );
     vignette.addColorStop(0, "rgba(0,0,0,0)");
-    vignette.addColorStop(1, "rgba(0,0,0,0.28)");
+    vignette.addColorStop(1, "rgba(0,0,0,0.2)");
     ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    const centerBloom = ctx.createRadialGradient(
+      W * 0.5,
+      H * 0.52,
+      10,
+      W * 0.5,
+      H * 0.52,
+      120
+    );
+    centerBloom.addColorStop(0, "rgba(255, 238, 210, 0.08)");
+    centerBloom.addColorStop(1, "rgba(255, 238, 210, 0)");
+    ctx.fillStyle = centerBloom;
     ctx.fillRect(0, 0, W, H);
 
     for (let y = 0; y < H; y += 4) {
       for (let x = 0; x < W; x += 4) {
-        const p = (x + y + filmTick) % 8;
-        if (p < 2) continue;
-        ctx.fillStyle = p < 5 ? "rgba(220, 190, 160, 0.028)" : "rgba(150, 190, 255, 0.022)";
+        const p = (x + y + filmTick) % 10;
+        if (p < 3) continue;
+        ctx.fillStyle = p < 6 ? "rgba(220, 190, 160, 0.022)" : "rgba(150, 190, 255, 0.018)";
         ctx.fillRect(x, y, 2, 2);
       }
     }
 
-    ctx.fillStyle = "rgba(170,205,255,0.05)";
+    ctx.fillStyle = "rgba(170,205,255,0.042)";
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = "rgba(255, 166, 140, 0.03)";
+    ctx.fillStyle = "rgba(255, 166, 140, 0.026)";
     ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "rgba(132, 210, 255, 0.022)";
+    ctx.fillRect(0, 0, 2, H);
+    ctx.fillStyle = "rgba(255, 174, 150, 0.022)";
+    ctx.fillRect(W - 2, 0, 2, H);
   }
 
   function drawBattleRankStyleOverlay() {
