@@ -1223,20 +1223,23 @@
 
   function triggerBlackFlashEffect(x, y, power = 1) {
     const p = clamp(power, 0.8, 4.8);
-    blackFlashTimer = Math.max(blackFlashTimer, 28 + p * 3.4);
-    blackFlashPower = Math.max(blackFlashPower, 1.8 + p * 0.64);
+    blackFlashTimer = Math.max(blackFlashTimer, 40 + p * 4.4);
+    blackFlashPower = Math.max(blackFlashPower, 2.4 + p * 0.9);
     blackFlashX = x;
     blackFlashY = y;
     blackFlashSlowTimer = Math.max(blackFlashSlowTimer, BLACK_FLASH_SLOW_DURATION + p * 2.4);
-    triggerImpact(2.9 + p * 0.62, x, y, 4.4 + p * 0.72);
-    spawnWaveBurst(x, y, 1.2 + p * 0.26);
-    spawnWaveBurst(x, y, 0.9 + p * 0.2);
+    triggerImpact(3.8 + p * 0.82, x, y, 5.8 + p * 1.05);
+    for (let i = 0; i < 5; i += 1) {
+      spawnWaveBurst(x, y, 0.95 + p * 0.22 + i * 0.12);
+    }
     spawnHitSparks(x, y, "#ffc0c0", "#ff4747");
     spawnHitSparks(x, y, "#2a0b12", "#77111e");
     spawnHitSparks(x, y, "#ffffff", "#ff6a75");
+    spawnHitSparks(x, y, "#d7f2ff", "#67a8ff");
+    spawnHitSparks(x, y, "#ffe8ff", "#b671ff");
     playBlackFlashSfx(p);
     hudMessage = "黒閃! CRITICAL x2";
-    hudTimer = Math.max(hudTimer, 34);
+    hudTimer = Math.max(hudTimer, 44);
   }
 
   function playBattleRankUpSfx(rankIndex = 0) {
@@ -10308,61 +10311,78 @@
   function drawBlackFlashOverlay() {
     if (blackFlashTimer <= 0 || blackFlashPower <= 0.01) return;
 
-    const ratio = clamp(blackFlashTimer / 38, 0, 1);
-    const power = clamp(blackFlashPower, 0, 6);
+    const ratio = clamp(blackFlashTimer / 52, 0, 1);
+    const power = clamp(blackFlashPower, 0, 8);
     const sx = Math.floor(blackFlashX - cameraX);
     const sy = Math.floor(blackFlashY);
     const pulse = 0.5 + Math.sin((player.anim + blackFlashTimer) * 0.32) * 0.5;
+    const pulse2 = 0.5 + Math.sin((player.anim + blackFlashTimer) * 0.58 + 1.2) * 0.5;
 
-    ctx.fillStyle = `rgba(0, 0, 0, ${0.3 * ratio * (0.9 + power * 0.24)})`;
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.34 * ratio * (0.9 + power * 0.24)})`;
     ctx.fillRect(0, 24, W, H - 24);
-    ctx.fillStyle = `rgba(190, 12, 30, ${0.18 * ratio * (0.9 + pulse * 0.8)})`;
+    ctx.fillStyle = `rgba(190, 12, 30, ${0.24 * ratio * (0.9 + pulse * 0.8)})`;
     ctx.fillRect(0, 24, W, H - 24);
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.06 * ratio * (0.7 + pulse * 0.7)})`;
+    ctx.fillStyle = `rgba(86, 148, 255, ${0.12 * ratio * (0.7 + pulse2 * 0.8)})`;
+    ctx.fillRect(0, 24, W, H - 24);
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.08 * ratio * (0.7 + pulse * 0.7)})`;
     ctx.fillRect(0, 24, W, H - 24);
 
-    for (let i = 0; i < 18; i += 1) {
-      const ang = (Math.PI * 2 * i) / 18 + player.anim * 0.06;
-      const len = 18 + power * 11 + (i % 2 === 0 ? 8 : 0);
+    for (let i = 0; i < 28; i += 1) {
+      const ang = (Math.PI * 2 * i) / 28 + player.anim * 0.08;
+      const len = 24 + power * 12 + (i % 2 === 0 ? 10 : 0);
       const ex = Math.floor(sx + Math.cos(ang) * len);
       const ey = Math.floor(sy + Math.sin(ang) * len * 0.72);
-      ctx.strokeStyle = `rgba(255, 44, 66, ${0.58 * ratio})`;
+      ctx.strokeStyle = `rgba(255, 44, 66, ${0.66 * ratio})`;
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
       ctx.stroke();
-      ctx.strokeStyle = `rgba(16, 8, 10, ${0.48 * ratio})`;
+      ctx.strokeStyle = `rgba(16, 8, 10, ${0.52 * ratio})`;
       ctx.beginPath();
       ctx.moveTo(sx + 1, sy + 1);
       ctx.lineTo(ex + 1, ey + 1);
       ctx.stroke();
     }
 
-    const ringR = Math.floor(9 + power * 7 + pulse * 3);
-    ctx.strokeStyle = `rgba(255, 164, 184, ${0.44 * ratio})`;
+    const ringR = Math.floor(11 + power * 9 + pulse * 4);
+    ctx.strokeStyle = `rgba(255, 164, 184, ${0.5 * ratio})`;
     ctx.beginPath();
     ctx.arc(sx, sy, ringR, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.strokeStyle = `rgba(255, 54, 74, ${0.62 * ratio})`;
+    ctx.strokeStyle = `rgba(255, 54, 74, ${0.74 * ratio})`;
     ctx.beginPath();
     ctx.arc(sx, sy, Math.max(4, ringR - 6), 0, Math.PI * 2);
     ctx.stroke();
+    ctx.strokeStyle = `rgba(120, 202, 255, ${0.42 * ratio})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, Math.max(5, ringR - 12), 0, Math.PI * 2);
+    ctx.stroke();
 
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.34 * ratio})`;
-    ctx.fillRect(sx - 3, sy - 3, 6, 6);
-    ctx.fillStyle = `rgba(255, 30, 50, ${0.78 * ratio})`;
-    ctx.fillRect(sx - 14, sy - 2, 28, 4);
-    ctx.fillRect(sx - 2, sy - 14, 4, 28);
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.4 * ratio})`;
+    ctx.fillRect(sx - 4, sy - 4, 8, 8);
+    ctx.fillStyle = `rgba(255, 30, 50, ${0.86 * ratio})`;
+    ctx.fillRect(sx - 18, sy - 2, 36, 4);
+    ctx.fillRect(sx - 2, sy - 18, 4, 36);
     ctx.fillStyle = `rgba(10, 6, 8, ${0.6 * ratio})`;
-    ctx.fillRect(sx - 11, sy - 1, 22, 2);
-    ctx.fillRect(sx - 1, sy - 11, 2, 22);
+    ctx.fillRect(sx - 14, sy - 1, 28, 2);
+    ctx.fillRect(sx - 1, sy - 14, 2, 28);
 
-    const slashW = Math.floor(22 + power * 8);
+    const slashW = Math.floor(28 + power * 10);
     const slashY = sy + Math.floor(Math.sin((player.anim + blackFlashTimer) * 0.35) * 2);
-    ctx.fillStyle = `rgba(255, 90, 120, ${0.28 * ratio})`;
+    ctx.fillStyle = `rgba(255, 90, 120, ${0.34 * ratio})`;
     ctx.fillRect(sx - slashW, slashY - 1, slashW * 2, 2);
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.22 * ratio})`;
+    ctx.fillStyle = `rgba(128, 206, 255, ${0.22 * ratio})`;
+    ctx.fillRect(sx - slashW + 4, slashY + 2, slashW * 2 - 8, 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.28 * ratio})`;
     ctx.fillRect(sx - slashW + 2, slashY, slashW * 2 - 4, 1);
+
+    for (let i = 0; i < 7; i += 1) {
+      const gy = 24 + ((Math.floor(player.anim * 3) + i * 11) % (H - 28));
+      const gAlpha = 0.06 + ratio * 0.16 - i * 0.01;
+      if (gAlpha <= 0.01) continue;
+      ctx.fillStyle = `rgba(255, ${80 + i * 18}, ${120 + i * 10}, ${gAlpha})`;
+      ctx.fillRect(0, gy, W, 1);
+    }
   }
 
   function drawKickBurstOverlay() {
