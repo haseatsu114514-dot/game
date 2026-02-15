@@ -627,7 +627,6 @@
   }
 
   function resetBattleRank(showBreak = false) {
-    const prevChargeMul = battleRankChargeMultiplier();
     battleRankDefeats = 0;
     battleRankGauge = 0;
     battleRankIndex = 0;
@@ -636,8 +635,25 @@
     battleRankRecentStyles = [];
     battleRankFlashTimer = 0;
     battleRankBreakFlashTimer = showBreak ? 30 : 0;
-    const nextChargeMul = battleRankChargeMultiplier();
-    rescaleRankDrivenState(prevChargeMul, nextChargeMul);
+
+    // Full reset: clear any rank-driven combat momentum so no buff lingers after death/continue.
+    attackChargeTimer = 0;
+    attack2ChargeTimer = 0;
+    attackMaxHoldTimer = 0;
+    attackMashCount = 0;
+    attackMashTimer = 0;
+    hyakuretsuTimer = 0;
+    hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
+    attackEffectTimer = 0;
+    attackEffectPhase = 0;
+    attackEffectMode = "none";
+    attackEffectPower = 0;
+    waveFlashTimer = 0;
+    waveFlashPower = 0;
+    if (player) {
+      player.vx = 0;
+    }
   }
 
   function dropBattleRankOnDamage(showBreak = true) {
