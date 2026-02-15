@@ -197,6 +197,7 @@
   const PINCH_BGM_RATE_MAX = 1.18;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [1 / 16, 1 / 4, 1 / 2, 1 / 1.5];
+  const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
     { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
     { short: "Badass", long: "Badass", threshold: 120, chargeMul: 1.1, color: "#79d9ff" },
@@ -370,9 +371,10 @@
       battleRankRecentStyles.shift();
     }
 
-    const highRankDamp = 1 - battleRankIndex * 0.04;
-    gain *= Math.max(0.72, highRankDamp);
-    return Math.max(4, gain);
+    const highRankDamp = 1 - battleRankIndex * 0.03;
+    gain *= Math.max(0.8, highRankDamp);
+    gain *= BATTLE_RANK_GAIN_MULT;
+    return Math.max(8, gain);
   }
 
   function resetBattleRank(showBreak = false) {
