@@ -4845,7 +4845,7 @@
     const comboYOffset = comboType === "kick" ? 5 : comboType === "upper" ? 1 : 2;
     const comboBaseY = comboType === "kick" ? 11 : comboType === "upper" ? 7 : 6;
     const strikeYOffset = strongWave ? 0 : morningStarStrike ? 0 : comboPunch ? comboYOffset : 2;
-    const strikeBaseY = morningStarStrike ? 8 : comboPunch ? comboBaseY : strongWave ? 4 : 6;
+    const strikeBaseY = morningStarStrike ? 10 : comboPunch ? comboBaseY : strongWave ? 4 : 6;
     const comboHitH = comboType === "kick" ? 10 + Math.floor(chargeRatio * 2) : comboType === "upper" ? 13 + Math.floor(chargeRatio * 2) : 10 + Math.floor(chargeRatio * 2);
     const comboReachBonus = comboType === "kick" ? 3 : comboType === "upper" ? 1 : 0;
     const comboPowerBonus = comboType === "kick" ? 0.16 : comboType === "upper" ? 0.22 : comboType === "punch" ? 0.08 : 0;
@@ -4921,7 +4921,7 @@
       };
       hitBox = {
         x: dir > 0 ? player.x + player.w - 1 : player.x - reach + 1,
-        y: player.y + 8,
+        y: player.y + 10,
         w: reach,
         h: 12 + Math.floor(chargeRatio * 3) + rankHitHBonus,
       };
@@ -5030,7 +5030,7 @@
       const enemyCenterY = enemy.y + enemy.h * 0.5;
       const tipHit = isMorningStarTipHit(enemy);
       hitX = enemy.x + enemy.w * 0.5;
-      hitY = enemy.y + enemy.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.34 : 0.42);
+      hitY = enemy.y + enemy.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.42 : 0.42);
       const bf = tryBlackFlash(
         hitX,
         hitY,
@@ -5100,7 +5100,7 @@
       const bossCenterX = boss.x + boss.w * 0.5;
       const tipHit = isMorningStarTipHit(boss);
       hitX = bossCenterX;
-      hitY = boss.y + boss.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.34 : 0.45);
+      hitY = boss.y + boss.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.42 : 0.45);
       const bf = tryBlackFlash(hitX, hitY, 1.3 + chargeRatio * 1.6 + comboStage * 0.35 + (tipHit ? 0.14 : 0));
       const bossDamageBase = 1 + bossDamageBonus();
       const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * rankPowerMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1) * (tipHit ? 1.24 : 1)));
@@ -9584,7 +9584,7 @@
         : morningStarReady
           ? 20 + Math.floor(chargeRatio * 18) + (morningStarLongReady ? 10 : 0)
           : 12 + Math.floor(chargeRatio * 50);
-      const previewY = player.y + (morningStarReady ? -2 : waveReady ? 4 : 6);
+      const previewY = player.y + (morningStarReady ? 1 : waveReady ? 4 : 6);
       const previewH = morningStarReady
         ? 22 + Math.floor(chargeRatio * 2)
         : 13 + Math.floor(chargeRatio * 8);
@@ -9618,33 +9618,6 @@
         ctx.beginPath();
         ctx.arc(cx, cy - 1, Math.max(3, spinR - 3), 0, Math.PI * 2);
         ctx.stroke();
-      } else if (morningStarReady && !waveReady) {
-        const anchorX = dir > 0 ? cx + 6 : cx - 6;
-        const anchorY = cy - 5;
-        const tipX = dir > 0 ? px + pw - 2 : px + 2;
-        const tipY = py + Math.floor(ph * 0.4);
-        const chainLinks = 9;
-        for (let i = 0; i <= chainLinks; i += 1) {
-          const t = i / chainLinks;
-          const lx = Math.round(anchorX + (tipX - anchorX) * t);
-          const sag = Math.sin(t * Math.PI) * (1.2 + chargeRatio * 1.4);
-          const ly = Math.round(anchorY + (tipY - anchorY) * t + sag);
-          ctx.fillStyle = i % 2 === 0
-            ? `rgba(218, 214, 204, ${0.44 + chargeRatio * 0.24})`
-            : `rgba(142, 136, 126, ${0.4 + chargeRatio * 0.2})`;
-          ctx.fillRect(lx, ly, 2, 1);
-        }
-        const ballX = tipX - 3;
-        const ballY = tipY - 3;
-        ctx.fillStyle = "rgba(108, 104, 100, 0.9)";
-        ctx.fillRect(ballX, ballY, 7, 7);
-        ctx.fillStyle = "rgba(170, 164, 154, 0.92)";
-        ctx.fillRect(ballX + 1, ballY + 1, 5, 5);
-        ctx.fillStyle = "rgba(234, 230, 218, 0.9)";
-        ctx.fillRect(ballX + 3, ballY - 2, 1, 2);
-        ctx.fillRect(ballX + 3, ballY + 7, 1, 2);
-        ctx.fillRect(ballX - 2, ballY + 3, 2, 1);
-        ctx.fillRect(ballX + 7, ballY + 3, 2, 1);
       } else {
         ctx.fillStyle = `rgba(${previewTone}, ${fillAlpha})`;
         ctx.fillRect(px, py, pw, ph);
@@ -9747,7 +9720,7 @@
       const spin = attackEffectPhase * 1.85 + swing * 1.9;
       const radius = 14 + visualPower * 15 + swing * 3;
       const anchorX = cx;
-      const anchorY = cy - 2;
+      const anchorY = cy + 1;
       const tipX = Math.round(anchorX + Math.cos(spin) * radius);
       const tipY = Math.round(anchorY + Math.sin(spin) * radius * 0.72);
 
@@ -9757,7 +9730,7 @@
         const lx = Math.round(anchorX + (tipX - anchorX) * t);
         const ly = Math.round(anchorY + (tipY - anchorY) * t + Math.sin(t * Math.PI) * 0.7);
         ctx.fillStyle = i % 2 === 0 ? "#ccc7bb" : "#948f84";
-        ctx.fillRect(lx, ly, 2, 1);
+        ctx.fillRect(lx - 1, ly - 1, 3, 2);
       }
 
       const ballX = tipX - 3;
@@ -9800,6 +9773,8 @@
     const frontX = dir > 0 ? cx + 7 : cx - 7;
     const baseY = isWave
       ? cy - 1
+      : isMorningStar
+        ? cy + 3
       : isCombo
         ? (comboMove === "kick" ? cy + 4 : comboMove === "upper" ? cy + 1 : cy + 1)
         : cy + 1;
@@ -9889,7 +9864,7 @@
       const pulse = 0.5 + Math.sin((attackEffectPhase + visualPower * 3.2) * 0.9) * 0.5;
       const chainLen = Math.floor(10 + visualPower * 16 + swing * 3);
       const anchorX = dir > 0 ? frontX + 4 : frontX - 4;
-      const anchorY = baseY - 6;
+      const anchorY = baseY - 4;
       const maxVisualReach = Math.max(12, Math.floor(reach * 0.86));
       const travelX = Math.min(maxVisualReach, 4 + chainLen);
       const travelY = -10 + Math.floor(swing * 14);
@@ -9902,7 +9877,7 @@
         const lx = Math.round(anchorX + (tipX - anchorX) * t);
         const ly = Math.round(anchorY + (tipY - anchorY) * t + Math.sin(t * Math.PI) * 0.85);
         ctx.fillStyle = i % 2 === 0 ? "#c7c2b6" : "#8e887d";
-        ctx.fillRect(lx, ly, 2, 1);
+        ctx.fillRect(lx - 1, ly - 1, 3, 2);
       }
 
       const ballX = tipX - 3;
