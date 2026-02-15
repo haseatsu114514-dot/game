@@ -196,7 +196,7 @@
   const BOSS_BGM_VOL = 0.41;
   const INVINCIBLE_BGM_VOL = 0.44;
   const CLEAR_BGM_VOL = 0.4;
-  const SE_GAIN_BOOST = 1.62;
+  const SE_GAIN_BOOST = 1.86;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [1 / 16, 1 / 4, 1 / 2, 1 / 1.5];
   const BLACK_FLASH_SLOW_DURATION = 20;
@@ -343,7 +343,7 @@
   }
 
   function formatBlackFlashChanceText(chance) {
-    return `黒閃率 ${(chance * 100).toFixed(1)}%`;
+    return `黒閃継続率 ${(chance * 100).toFixed(1)}%`;
   }
 
   function resolveBlackFlashAttempt(forcedChance = null) {
@@ -363,10 +363,11 @@
   function rollBlackFlashHit(x, y, power = 1) {
     const chance = blackFlashChanceWithRank();
     const triggered = resolveBlackFlashAttempt(chance);
+    blackFlashChanceHudText = formatBlackFlashChanceText(blackFlashChanceWithRank());
+    blackFlashChanceHudTimer = blackFlashChain > 0 ? 180 : 0;
     if (triggered) {
       triggerBlackFlashEffect(x, y, power);
-      blackFlashChanceHudText = formatBlackFlashChanceText(chance);
-      blackFlashChanceHudTimer = 150;
+      blackFlashChanceHudTimer = 180;
     }
     return triggered;
   }
@@ -1234,6 +1235,19 @@
     punch.start(now);
     punch.stop(now + 0.11);
 
+    const impact = audioCtx.createOscillator();
+    const impactGain = audioCtx.createGain();
+    impact.type = "sawtooth";
+    impact.frequency.setValueAtTime(980 + power * 120, now + 0.002);
+    impact.frequency.exponentialRampToValueAtTime(260 + power * 40, now + 0.06);
+    impactGain.gain.setValueAtTime(0.0001, now + 0.001);
+    impactGain.gain.exponentialRampToValueAtTime(seLevel(0.075 + power * 0.01), now + 0.005);
+    impactGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.072);
+    impact.connect(impactGain);
+    impactGain.connect(audioCtx.destination);
+    impact.start(now + 0.001);
+    impact.stop(now + 0.08);
+
     if (bgmNoiseBuffer) {
       const src = audioCtx.createBufferSource();
       const bp = audioCtx.createBiquadFilter();
@@ -1243,7 +1257,7 @@
       bp.frequency.setValueAtTime(1500 + power * 80, now);
       bp.Q.setValueAtTime(0.9, now);
       ng.gain.setValueAtTime(0.0001, now);
-      ng.gain.exponentialRampToValueAtTime(seLevel(0.05), now + 0.003);
+      ng.gain.exponentialRampToValueAtTime(seLevel(0.066), now + 0.003);
       ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
       src.connect(bp);
       bp.connect(ng);
@@ -1519,6 +1533,36 @@
     gain.connect(audioCtx.destination);
     osc.start(now);
     osc.stop(now + 0.09);
+
+    const ping = audioCtx.createOscillator();
+    const pingGain = audioCtx.createGain();
+    ping.type = "triangle";
+    ping.frequency.setValueAtTime(1780, now + 0.003);
+    ping.frequency.exponentialRampToValueAtTime(980, now + 0.05);
+    pingGain.gain.setValueAtTime(0.0001, now + 0.002);
+    pingGain.gain.exponentialRampToValueAtTime(seLevel(0.062), now + 0.006);
+    pingGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+    ping.connect(pingGain);
+    pingGain.connect(audioCtx.destination);
+    ping.start(now + 0.002);
+    ping.stop(now + 0.08);
+
+    if (bgmNoiseBuffer) {
+      const src = audioCtx.createBufferSource();
+      const hp = audioCtx.createBiquadFilter();
+      const ng = audioCtx.createGain();
+      src.buffer = bgmNoiseBuffer;
+      hp.type = "highpass";
+      hp.frequency.setValueAtTime(1900, now);
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(seLevel(0.038), now + 0.003);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+      src.connect(hp);
+      hp.connect(ng);
+      ng.connect(audioCtx.destination);
+      src.start(now);
+      src.stop(now + 0.06);
+    }
   }
 
   function playCheckpointSfx() {
@@ -1681,6 +1725,37 @@
     gain.connect(audioCtx.destination);
     osc.start(now);
     osc.stop(now + 0.08);
+
+    const whizz = audioCtx.createOscillator();
+    const whizzGain = audioCtx.createGain();
+    whizz.type = "triangle";
+    whizz.frequency.setValueAtTime(cannon ? 1040 : 1380, now + 0.002);
+    whizz.frequency.exponentialRampToValueAtTime(cannon ? 420 : 560, now + 0.055);
+    whizzGain.gain.setValueAtTime(0.0001, now + 0.001);
+    whizzGain.gain.exponentialRampToValueAtTime(seLevel(cannon ? 0.038 : 0.044), now + 0.004);
+    whizzGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.062);
+    whizz.connect(whizzGain);
+    whizzGain.connect(audioCtx.destination);
+    whizz.start(now + 0.001);
+    whizz.stop(now + 0.07);
+
+    if (bgmNoiseBuffer) {
+      const src = audioCtx.createBufferSource();
+      const bp = audioCtx.createBiquadFilter();
+      const ng = audioCtx.createGain();
+      src.buffer = bgmNoiseBuffer;
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(cannon ? 820 : 1700, now);
+      bp.Q.setValueAtTime(1.1, now);
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(seLevel(cannon ? 0.03 : 0.036), now + 0.002);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+      src.connect(bp);
+      bp.connect(ng);
+      ng.connect(audioCtx.destination);
+      src.start(now);
+      src.stop(now + 0.055);
+    }
   }
 
   function playWaveShotSfx(power = 1) {
@@ -1696,7 +1771,7 @@
     lead.frequency.setValueAtTime(640 + p * 260, now);
     lead.frequency.exponentialRampToValueAtTime(240 + p * 70, now + 0.16);
     leadGain.gain.setValueAtTime(0.0001, now);
-    leadGain.gain.exponentialRampToValueAtTime(seLevel(0.115), now + 0.006);
+    leadGain.gain.exponentialRampToValueAtTime(seLevel(0.132), now + 0.006);
     leadGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.17);
     lead.connect(leadGain);
     leadGain.connect(audioCtx.destination);
@@ -1709,7 +1784,7 @@
     sub.frequency.setValueAtTime(220 + p * 70, now);
     sub.frequency.exponentialRampToValueAtTime(88, now + 0.18);
     subGain.gain.setValueAtTime(0.0001, now);
-    subGain.gain.exponentialRampToValueAtTime(seLevel(0.062), now + 0.01);
+    subGain.gain.exponentialRampToValueAtTime(seLevel(0.074), now + 0.01);
     subGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
     sub.connect(subGain);
     subGain.connect(audioCtx.destination);
@@ -1722,12 +1797,25 @@
     spark.frequency.setValueAtTime(1500 + p * 420, now);
     spark.frequency.exponentialRampToValueAtTime(620 + p * 150, now + 0.1);
     sparkGain.gain.setValueAtTime(0.0001, now);
-    sparkGain.gain.exponentialRampToValueAtTime(seLevel(0.05 + p * 0.014), now + 0.004);
+    sparkGain.gain.exponentialRampToValueAtTime(seLevel(0.064 + p * 0.018), now + 0.004);
     sparkGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
     spark.connect(sparkGain);
     sparkGain.connect(audioCtx.destination);
     spark.start(now);
     spark.stop(now + 0.12);
+
+    const flare = audioCtx.createOscillator();
+    const flareGain = audioCtx.createGain();
+    flare.type = "square";
+    flare.frequency.setValueAtTime(2060 + p * 440, now + 0.002);
+    flare.frequency.exponentialRampToValueAtTime(820 + p * 180, now + 0.08);
+    flareGain.gain.setValueAtTime(0.0001, now + 0.001);
+    flareGain.gain.exponentialRampToValueAtTime(seLevel(0.054 + p * 0.014), now + 0.004);
+    flareGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.094);
+    flare.connect(flareGain);
+    flareGain.connect(audioCtx.destination);
+    flare.start(now + 0.001);
+    flare.stop(now + 0.1);
 
     if (bgmNoiseBuffer) {
       const src = audioCtx.createBufferSource();
@@ -1737,7 +1825,7 @@
       hp.type = "highpass";
       hp.frequency.setValueAtTime(1400, now);
       ng.gain.setValueAtTime(0.0001, now);
-      ng.gain.exponentialRampToValueAtTime(seLevel(0.052 + p * 0.024), now + 0.004);
+      ng.gain.exponentialRampToValueAtTime(seLevel(0.068 + p * 0.028), now + 0.004);
       ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
       src.connect(hp);
       hp.connect(ng);
@@ -10269,17 +10357,21 @@
       }
     }
 
-    if (blackFlashChanceHudTimer > 0) {
-      const alpha = clamp(blackFlashChanceHudTimer / 150, 0, 1);
-      const text = blackFlashChanceHudText || formatBlackFlashChanceText(blackFlashChanceWithRank());
+    const blackFlashChainActive = blackFlashChain > 0;
+    const showBlackFlashChanceHud = blackFlashChainActive || blackFlashChanceHudTimer > 0;
+    if (showBlackFlashChanceHud) {
+      const alpha = blackFlashChainActive ? 1 : clamp(blackFlashChanceHudTimer / 150, 0, 1);
+      const text = formatBlackFlashChanceText(blackFlashChanceWithRank());
       const textW = Math.ceil(ctx.measureText(text).width);
       const padX = 3;
       const boxW = textW + padX * 2 + 1;
       const boxX = W - boxW - 3;
       const boxY = invincibleTimer > 0 ? 3 : 12;
-      ctx.fillStyle = `rgba(20, 12, 18, ${0.5 + alpha * 0.28})`;
+      ctx.fillStyle = `rgba(20, 12, 18, ${0.5 + alpha * 0.28 + (blackFlashChainActive ? 0.06 : 0)})`;
       ctx.fillRect(boxX, boxY, boxW, 8);
-      ctx.fillStyle = `rgba(255, 96, 126, ${0.76 + alpha * 0.22})`;
+      ctx.fillStyle = blackFlashChainActive
+        ? `rgba(255, 96, 126, ${0.9 + Math.sin(player.anim * 0.28) * 0.08})`
+        : `rgba(255, 96, 126, ${0.76 + alpha * 0.22})`;
       ctx.fillRect(boxX, boxY + 7, Math.max(1, Math.floor((boxW - 1) * alpha)), 1);
       ctx.fillStyle = `rgba(255, 236, 242, ${0.72 + alpha * 0.28})`;
       ctx.fillText(text, boxX + padX, boxY + 1);
