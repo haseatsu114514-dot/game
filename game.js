@@ -380,6 +380,10 @@
     return timeBurstTimer > 0 && (timeBurstMode === TIME_BURST_MODE_SLOW || timeBurstMode === TIME_BURST_MODE_STOP);
   }
 
+  function isTimeBurstStopActive() {
+    return isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_STOP;
+  }
+
   function resetTimeBurstState() {
     timeBurstTimer = 0;
     timeBurstDuration = 0;
@@ -2314,7 +2318,7 @@
   function triggerImpact(intensity, x, y, hitStop = 0) {
     impactShakeTimer = Math.max(impactShakeTimer, 7 + intensity * 3.2);
     impactShakePower = Math.max(impactShakePower, 0.5 + intensity * 0.55);
-    if (hitStop > 0) {
+    if (hitStop > 0 && !isTimeBurstStopActive()) {
       hitStopTimer = Math.max(hitStopTimer, hitStop);
     }
     spawnHitSparks(x, y);
@@ -7865,7 +7869,9 @@
     if (hitStopTimer > 0) {
       hitStopTimer = Math.max(0, hitStopTimer - dt);
       player.anim += dt * 0.2;
-      return;
+      if (!isTimeBurstStopActive()) {
+        return;
+      }
     }
 
     const pLv = proteinLevel();
@@ -7952,7 +7958,9 @@
     if (hitStopTimer > 0) {
       hitStopTimer = Math.max(0, hitStopTimer - dt);
       player.anim += dt * 0.2;
-      return;
+      if (!isTimeBurstStopActive()) {
+        return;
+      }
     }
 
     const pLv = proteinLevel();
