@@ -203,12 +203,12 @@
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
-    { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
-    { short: "Badass", long: "Badass", threshold: 120, chargeMul: 1.24, color: "#79d9ff" },
-    { short: "Apoc", long: "Apocalyptic", threshold: 280, chargeMul: 1.46, color: "#96f0b2" },
-    { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.72, color: "#ffd47d" },
-    { short: "SS", long: "SS sick style", threshold: 820, chargeMul: 2.02, color: "#ffa27e" },
-    { short: "SSS", long: "SSS special sexy style", threshold: 1220, chargeMul: 2.34, color: "#ff5f73" },
+    { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 0.7, color: "#8db2d9" },
+    { short: "Badass", long: "Badass", threshold: 120, chargeMul: 0.9, color: "#79d9ff" },
+    { short: "Apoc", long: "Apocalyptic", threshold: 280, chargeMul: 1.18, color: "#96f0b2" },
+    { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.56, color: "#ffd47d" },
+    { short: "SS", long: "SS sick style", threshold: 820, chargeMul: 2.08, color: "#ffa27e" },
+    { short: "SSS", long: "SSS special sexy style", threshold: 1220, chargeMul: 2.88, color: "#ff5f73" },
   ];
   const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
@@ -399,9 +399,10 @@
     const base = currentBattleRank().chargeMul;
     const tierRatio = clamp(battleRankIndex / Math.max(1, BATTLE_RANK_DATA.length - 1), 0, 1);
     const progressBoost = battleRankProgressRatio();
-    const tierBoostMul = 1 + tierRatio * 0.16;
-    const flowBoostMul = 1 + progressBoost * 0.14;
-    return base * tierBoostMul * flowBoostMul;
+    const tierBoostMul = 1 + Math.pow(tierRatio, 1.2) * 0.22;
+    const flowBoostMul = 1 + progressBoost * (0.06 + tierRatio * 0.18);
+    const lowRankPenalty = battleRankIndex <= 0 ? 0.92 : 1;
+    return base * tierBoostMul * flowBoostMul * lowRankPenalty;
   }
 
   function battleRankProgressRatio() {
