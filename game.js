@@ -523,10 +523,8 @@
 
   function updatePinchBgmTension(dt) {
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
-    const pinch = playable ? pinchRatioByHearts() : 0;
-    const targetRate = playable
-      ? 1 + pinch * (PINCH_BGM_RATE_MAX - 1)
-      : 1;
+    const lowLifeOnly = playable && playerHearts <= 1 && playerHearts > 0;
+    const targetRate = lowLifeOnly ? PINCH_BGM_RATE_MAX : 1;
     setMusicRate(stageMusic, targetRate, dt);
     setMusicRate(bossMusic, targetRate, dt);
   }
