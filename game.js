@@ -77,7 +77,8 @@
   let damageInvulnTimer = 0;
   let hurtFlashTimer = 0;
   let proteinRushTimer = 0;
-  let proteinBurstGauge = 0;
+  let proteinBurstGauge1 = 0;
+  let proteinBurstGauge2 = 0;
   let proteinBurstTimer = 0;
   let proteinBurstBlastDone = false;
   let proteinBurstLaserTimer = 0;
@@ -249,6 +250,8 @@
   const PROTEIN_BURST_MIN = Math.ceil(PROTEIN_BURST_REQUIRE * 0.5);
   const PROTEIN_BURST_GAIN_PROTEIN = 0.6;
   const PROTEIN_BURST_GAIN_DEFEAT_BASE = 0.18;
+  const PROTEIN_BURST1_GAIN_MUL = 0.82;
+  const PROTEIN_BURST2_GAIN_MUL = 0.78;
   const PROTEIN_BURST_MODE_LASER = "laser";
   const PROTEIN_BURST_MODE_METEOR = "meteor";
   const PROTEIN_BURST_DURATION = 98;
@@ -371,9 +374,11 @@
     const baseAdd = Math.max(0, amount || 0);
     const add = baseAdd * (isBlackFlashHighMode() ? BLACK_FLASH_BURST_GAIN_MUL : 1);
     if (add <= 0) return 0;
-    const before = proteinBurstGauge;
-    proteinBurstGauge = clamp(proteinBurstGauge + add, 0, PROTEIN_BURST_REQUIRE);
-    return proteinBurstGauge - before;
+    const before1 = proteinBurstGauge1;
+    const before2 = proteinBurstGauge2;
+    proteinBurstGauge1 = clamp(proteinBurstGauge1 + add * PROTEIN_BURST1_GAIN_MUL, 0, PROTEIN_BURST_REQUIRE);
+    proteinBurstGauge2 = clamp(proteinBurstGauge2 + add * PROTEIN_BURST2_GAIN_MUL, 0, PROTEIN_BURST_REQUIRE);
+    return (proteinBurstGauge1 - before1) + (proteinBurstGauge2 - before2);
   }
 
   function isTimeBurstActive() {
@@ -2343,9 +2348,9 @@
   function triggerTimeBurst() {
     if (isTimeBurstActive()) return false;
     if (proteinBurstTimer > 0) return false;
-    if (proteinBurstGauge < PROTEIN_BURST_MIN) return false;
+    if (proteinBurstGauge2 < PROTEIN_BURST_MIN) return false;
 
-    const spentGauge = proteinBurstGauge;
+    const spentGauge = proteinBurstGauge2;
     const fullStop = spentGauge >= PROTEIN_BURST_REQUIRE - 0.001;
     const gaugeRatio = clamp(spentGauge / PROTEIN_BURST_REQUIRE, 0, 1);
     const slowRatio = clamp(
@@ -2367,7 +2372,7 @@
     timeBurstStopDeadlineMs = fullStop ? performance.now() + (TIME_BURST_STOP_DURATION / 60) * 1000 : 0;
 
     registerBurstActivationRankGain(player.x + player.w * 0.5, player.y + player.h * 0.52, gaugeRatio);
-    proteinBurstGauge = 0;
+    proteinBurstGauge2 = 0;
 
     triggerImpact(
       fullStop ? 3.4 : 2.7 + slowRatio * 0.9,
@@ -2399,9 +2404,9 @@
   function triggerProteinBurst() {
     if (isTimeBurstActive()) return false;
     if (proteinBurstTimer > 0) return false;
-    if (proteinBurstGauge < PROTEIN_BURST_MIN) return false;
+    if (proteinBurstGauge1 < PROTEIN_BURST_MIN) return false;
 
-    const spentGauge = proteinBurstGauge;
+    const spentGauge = proteinBurstGauge1;
     const fullBurst = spentGauge >= PROTEIN_BURST_REQUIRE - 0.001;
     const gaugeRatio = clamp(
       (spentGauge - PROTEIN_BURST_MIN) / Math.max(1, PROTEIN_BURST_REQUIRE - PROTEIN_BURST_MIN),
@@ -2415,7 +2420,7 @@
       : (0.72 + gaugeRatio * 0.76);
     registerBurstActivationRankGain(player.x + player.w * 0.5, player.y + player.h * 0.52, gaugeRatio);
 
-    proteinBurstGauge = 0;
+    proteinBurstGauge1 = 0;
     proteinBurstTimer = fullBurst ? PROTEIN_BURST_DURATION : PROTEIN_BURST_METEOR_DURATION;
     proteinBurstBlastDone = false;
     if (!stage.burstMeteors) stage.burstMeteors = [];
@@ -2805,7 +2810,7 @@
     if (actions.special2Pressed) {
       if (!triggerTimeBurst()) {
         if (isTimeBurstActive() || proteinBurstTimer > 0) return;
-        hudMessage = `BURST2 ${Math.floor(proteinBurstGauge)}/${PROTEIN_BURST_MIN}+`;
+        hudMessage = `BURST2 ${Math.floor(proteinBurstGauge2)}/${PROTEIN_BURST_MIN}+`;
         hudTimer = 28;
       }
       return;
@@ -2814,7 +2819,7 @@
     if (!actions.specialPressed) return;
     if (!triggerProteinBurst()) {
       if (isTimeBurstActive() || proteinBurstTimer > 0) return;
-      hudMessage = `BURST1 ${Math.floor(proteinBurstGauge)}/${PROTEIN_BURST_MIN}+`;
+      hudMessage = `BURST1 ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
       hudTimer = 28;
     }
   }
@@ -4378,7 +4383,8 @@
     placePlayerAtCheckpoint(cp);
     cameraX = 0;
     proteinRushTimer = 0;
-    proteinBurstGauge = 0;
+    proteinBurstGauge1 = 0;
+    proteinBurstGauge2 = 0;
     proteinBurstTimer = 0;
     proteinBurstBlastDone = false;
     proteinBurstLaserTimer = 0;
@@ -8162,7 +8168,8 @@
     resetBlackFlashState();
     resetBattleRank();
     stompChainGuardTimer = 0;
-    proteinBurstGauge = 0;
+    proteinBurstGauge1 = 0;
+    proteinBurstGauge2 = 0;
     proteinBurstTimer = 0;
     proteinBurstBlastDone = false;
     proteinBurstLaserTimer = 0;
@@ -8195,7 +8202,8 @@
     preBossCutsceneTimer = 0;
     godPhaseCutsceneTimer = 0;
     deadReason = "";
-    proteinBurstGauge = 0;
+    proteinBurstGauge1 = 0;
+    proteinBurstGauge2 = 0;
     proteinBurstTimer = 0;
     proteinBurstBlastDone = false;
     proteinBurstLaserTimer = 0;
@@ -12070,27 +12078,50 @@
     const burstBarX = 80;
     const burstBarY = 7;
     const burstBarW = bossActive ? 90 : 150;
-    const burstRatio = clamp(proteinBurstGauge / PROTEIN_BURST_REQUIRE, 0, 1);
-    const burstReady = proteinBurstGauge >= PROTEIN_BURST_MIN;
-    const burstTone = burstChargeTone(burstRatio);
-    const burstFillLight = clamp(burstTone.light + (burstReady ? 8 : 2), 44, 84);
-    const burstFillAlpha = clamp(0.62 + burstRatio * 0.3 + (burstReady ? 0.08 : 0), 0.58, 0.98);
+    const burstGap = 2;
+    const burstInnerW = Math.max(16, burstBarW - 2);
+    const burstSegW1 = Math.max(7, Math.floor((burstInnerW - burstGap) * 0.5));
+    const burstSegW2 = Math.max(7, burstInnerW - burstSegW1 - burstGap);
+    const burstSegX1 = burstBarX + 1;
+    const burstSegX2 = burstSegX1 + burstSegW1 + burstGap;
+
+    const burstRatio1 = clamp(proteinBurstGauge1 / PROTEIN_BURST_REQUIRE, 0, 1);
+    const burstRatio2 = clamp(proteinBurstGauge2 / PROTEIN_BURST_REQUIRE, 0, 1);
+    const burstReady1 = proteinBurstGauge1 >= PROTEIN_BURST_MIN;
+    const burstReady2 = proteinBurstGauge2 >= PROTEIN_BURST_MIN;
+    const burstTone1 = burstChargeTone(burstRatio1);
+    const burstTone2Base = burstChargeTone(burstRatio2);
+    const burstTone2 = {
+      hue: (burstTone2Base.hue + 84) % 360,
+      sat: clamp(burstTone2Base.sat + 6, 28, 98),
+      light: clamp(burstTone2Base.light + 2, 38, 86),
+    };
+
+    const drawBurstSegment = (x, w, ratio, tone, ready, active) => {
+      const fillLight = clamp(tone.light + (ready ? 8 : 2), 44, 86);
+      const fillAlpha = clamp(0.6 + ratio * 0.3 + (ready ? 0.08 : 0), 0.56, 0.98);
+      ctx.fillStyle = "rgba(27, 34, 50, 0.9)";
+      ctx.fillRect(x, burstBarY + 1, w, 4);
+      ctx.fillStyle = `hsla(${tone.hue}, ${tone.sat}%, ${fillLight}%, ${fillAlpha})`;
+      ctx.fillRect(x, burstBarY + 1, Math.floor(w * ratio), 4);
+      if (ratio > 0.02) {
+        const sheenW = Math.max(1, Math.floor(w * Math.min(1, ratio * 1.08)));
+        ctx.fillStyle = `hsla(${tone.hue}, ${Math.min(100, tone.sat + 10)}%, ${Math.min(90, fillLight + 14)}%, ${0.22 + ratio * 0.22})`;
+        ctx.fillRect(x, burstBarY + 1, sheenW, 1);
+      }
+      const markerX = x + Math.floor(w * (PROTEIN_BURST_MIN / PROTEIN_BURST_REQUIRE));
+      ctx.fillStyle = "rgba(255, 225, 140, 0.9)";
+      ctx.fillRect(markerX, burstBarY + 1, 1, 4);
+      if (active) {
+        ctx.fillStyle = "#fff0c2";
+        ctx.fillRect(x, burstBarY + 1, w, 1);
+      }
+    };
+
     ctx.fillStyle = "rgba(27, 34, 50, 0.96)";
     ctx.fillRect(burstBarX, burstBarY, burstBarW, 6);
-    ctx.fillStyle = `hsla(${burstTone.hue}, ${burstTone.sat}%, ${burstFillLight}%, ${burstFillAlpha})`;
-    ctx.fillRect(burstBarX + 1, burstBarY + 1, Math.floor((burstBarW - 2) * burstRatio), 4);
-    if (burstRatio > 0.02) {
-      const sheenW = Math.max(1, Math.floor((burstBarW - 2) * Math.min(1, burstRatio * 1.08)));
-      ctx.fillStyle = `hsla(${burstTone.hue}, ${Math.min(100, burstTone.sat + 10)}%, ${Math.min(90, burstFillLight + 14)}%, ${0.22 + burstRatio * 0.22})`;
-      ctx.fillRect(burstBarX + 1, burstBarY + 1, sheenW, 1);
-    }
-    const minMarkerX = burstBarX + 1 + Math.floor((burstBarW - 2) * (PROTEIN_BURST_MIN / PROTEIN_BURST_REQUIRE));
-    ctx.fillStyle = "rgba(255, 225, 140, 0.9)";
-    ctx.fillRect(minMarkerX, burstBarY + 1, 1, 4);
-    if (proteinBurstTimer > 0) {
-      ctx.fillStyle = "#fff0c2";
-      ctx.fillRect(burstBarX + 1, burstBarY + 1, burstBarW - 2, 1);
-    }
+    drawBurstSegment(burstSegX1, burstSegW1, burstRatio1, burstTone1, burstReady1, proteinBurstTimer > 0);
+    drawBurstSegment(burstSegX2, burstSegW2, burstRatio2, burstTone2, burstReady2, isTimeBurstActive());
 
     if (bossActive) {
       const barX = 176;
@@ -13122,24 +13153,26 @@
   function refreshBurstButtonUi() {
     if (!burstButton1 && !burstButton2) return;
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
-    const chargeRatio = clamp(proteinBurstGauge / PROTEIN_BURST_REQUIRE, 0, 1);
-    const tone1 = burstChargeTone(chargeRatio);
+    const chargeRatio1 = clamp(proteinBurstGauge1 / PROTEIN_BURST_REQUIRE, 0, 1);
+    const chargeRatio2 = clamp(proteinBurstGauge2 / PROTEIN_BURST_REQUIRE, 0, 1);
+    const tone1 = burstChargeTone(chargeRatio1);
+    const tone2Base = burstChargeTone(chargeRatio2);
     const tone2 = {
-      hue: (tone1.hue + 84) % 360,
-      sat: clamp(tone1.sat + 6, 28, 98),
-      light: clamp(tone1.light + 2, 38, 86),
+      hue: (tone2Base.hue + 84) % 360,
+      sat: clamp(tone2Base.sat + 6, 28, 98),
+      light: clamp(tone2Base.light + 2, 38, 86),
     };
     const busy = proteinBurstTimer > 0 || isTimeBurstActive();
-    const ready = playable && proteinBurstGauge >= PROTEIN_BURST_MIN && !busy;
-    const full = proteinBurstGauge >= PROTEIN_BURST_REQUIRE;
-    applyBurstButtonTone(burstButton1, chargeRatio, tone1, ready, full, playable);
-    applyBurstButtonTone(burstButton2, chargeRatio, tone2, ready, full, playable);
-    if (burstButton1) burstButton1.textContent = full ? "burst1!" : "burst1";
-    if (burstButton2) burstButton2.textContent = full ? "burst2!" : "burst2";
-    if (!ready) {
-      releaseHoldButtonByKey("special");
-      releaseHoldButtonByKey("special2");
-    }
+    const ready1 = playable && proteinBurstGauge1 >= PROTEIN_BURST_MIN && !busy;
+    const ready2 = playable && proteinBurstGauge2 >= PROTEIN_BURST_MIN && !busy;
+    const full1 = proteinBurstGauge1 >= PROTEIN_BURST_REQUIRE;
+    const full2 = proteinBurstGauge2 >= PROTEIN_BURST_REQUIRE;
+    applyBurstButtonTone(burstButton1, chargeRatio1, tone1, ready1, full1, playable);
+    applyBurstButtonTone(burstButton2, chargeRatio2, tone2, ready2, full2, playable);
+    if (burstButton1) burstButton1.textContent = full1 ? "burst1!" : "burst1";
+    if (burstButton2) burstButton2.textContent = full2 ? "burst2!" : "burst2";
+    if (!ready1) releaseHoldButtonByKey("special");
+    if (!ready2) releaseHoldButtonByKey("special2");
   }
 
   bindHoldButton("btn-left", "left");
