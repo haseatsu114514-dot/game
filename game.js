@@ -1873,7 +1873,8 @@
 
   function spawnEnemyBlood(x, y, power = 1) {
     const p = clamp(power, 0.9, 5.4);
-    const count = 20 + Math.floor(p * 8);
+    const powerRatio = clamp((p - 0.9) / (5.4 - 0.9), 0, 1);
+    const count = 18 + Math.floor(p * 10 + p * p * 0.9);
     const palette = [
       { color: "#ff5a6e", dark: "#6f0a16" },
       { color: "#d51a2d", dark: "#560710" },
@@ -1887,8 +1888,10 @@
       const side = Math.random() * 2 - 1;
       const vx = side * speedMul * (0.9 + Math.random() * (1.55 + p * 0.42));
       const vy = -(0.9 + Math.random() * (2.1 + p * 0.5)) * speedMul;
-      const size = spray < 0.16 ? 3 : spray < 0.56 ? 2 : 1;
-      const life = 22 + Math.random() * (14 + p * 3);
+      const bigChance = 0.16 + powerRatio * 0.26;
+      const midChance = 0.56 + powerRatio * 0.16;
+      const size = spray < bigChance ? 3 : spray < midChance ? 2 : 1;
+      const life = 22 + Math.random() * (14 + p * 4.8);
       hitSparks.push({
         kind: "blood",
         x: x + side * (1.2 + Math.random() * 2.8),
@@ -1909,11 +1912,11 @@
       });
     }
 
-    const mistCount = 8 + Math.floor(p * 2);
+    const mistCount = 6 + Math.floor(p * 3 + p * p * 0.4);
     for (let i = 0; i < mistCount; i += 1) {
       const side = Math.random() * 2 - 1;
       const tone = Math.random() < 0.5 ? "#ff6a74" : "#c71326";
-      const life = 8 + Math.random() * 8;
+      const life = 9 + Math.random() * (8 + p * 1.3);
       hitSparks.push({
         kind: "blood",
         x: x + side * (0.4 + Math.random() * 1.3),
