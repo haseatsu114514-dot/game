@@ -16,6 +16,7 @@
     TITLE: "title",
     CUTSCENE: "cutscene",
     PRE_BOSS: "pre_boss",
+    GOD_PHASE_CUTSCENE: "god_phase_cutscene",
     PLAY: "play",
     BOSS: "boss",
     DEAD: "dead",
@@ -52,6 +53,7 @@
   let titleTimer = 0;
   let cutsceneTime = 0;
   let preBossCutsceneTimer = 0;
+  let godPhaseCutsceneTimer = 0;
   let deadTimer = 0;
   let deadTimerMax = 0;
   let clearTimer = 0;
@@ -221,6 +223,8 @@
   const PRE_BOSS_CUTSCENE_DURATION = 460;
   const PRE_BOSS_ENTRY_DURATION = 78;
   const PRE_BOSS_MOVIE_START_AT = 230;
+  const GOD_PHASE_CUTSCENE_DURATION = 210;
+  const GOD_PHASE_CUTSCENE_SKIP_MIN = 24;
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
   const CANNON_EXTRA_COOLDOWN = 26;
@@ -3165,6 +3169,7 @@
     checkpointIndex = 0;
     deathContinueMode = "checkpoint";
     preBossCutsceneTimer = 0;
+    godPhaseCutsceneTimer = 0;
     stage = buildStage();
     const cp = stage.checkpoints[checkpointIndex];
     placePlayerAtCheckpoint(cp);
@@ -3244,6 +3249,7 @@
 
   function respawnFromCheckpoint() {
     preBossCutsceneTimer = 0;
+    godPhaseCutsceneTimer = 0;
     deathContinueMode = "checkpoint";
     stage = buildStage();
     BOSS_ARENA = stage.bossArena ? { ...stage.bossArena } : BOSS_ARENA;
@@ -5042,13 +5048,13 @@
     }
 
     b.phase = 2;
-    b.phaseTransitionTimer = 148;
+    b.phaseTransitionTimer = 0;
     b.mode = "phase_shift";
-    b.modeTimer = b.phaseTransitionTimer;
+    b.modeTimer = GOD_PHASE_CUTSCENE_DURATION;
     b.phase2MaxHp = b.phase2MaxHp || 13;
     b.maxHp = b.phase2MaxHp;
     b.hp = b.maxHp;
-    b.invuln = b.phaseTransitionTimer + 24;
+    b.invuln = GOD_PHASE_CUTSCENE_DURATION + 42;
     b.attackCycle = 0;
     b.shotCooldown = 30;
     b.stunTimer = 0;
@@ -5057,9 +5063,10 @@
     damageInvulnTimer = Math.max(damageInvulnTimer, 36);
     hurtFlashTimer = 0;
     b.vx = 0;
-    b.vy = -1.8;
+    b.vy = 0;
     stage.bossShots = [];
     stage.hammerShards = [];
+    stage.playerWaves = [];
     if (!stage.godGimmicks || stage.godGimmicks.length === 0) {
       setupGodPhaseGimmicks();
     }
@@ -5067,6 +5074,17 @@
       gimmick.charge = 0;
       gimmick.cooldown = 24 + gimmick.id * 6;
     }
+    const arenaSpan = BOSS_ARENA.maxX - BOSS_ARENA.minX;
+    const bossTargetX = BOSS_ARENA.minX + Math.floor(arenaSpan * 0.7);
+    b.x = clamp(bossTargetX, BOSS_ARENA.minX + 20, BOSS_ARENA.maxX - b.w - 20);
+    b.y = stage.groundY - b.h;
+    player.x = clamp(BOSS_ARENA.minX + 64, BOSS_ARENA.minX + 8, BOSS_ARENA.maxX - player.w - 20);
+    player.y = stage.groundY - player.h;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = true;
+    player.facing = 1;
+
     stopBossMusic(false);
     ensureInvincibleMusic();
     if (invincibleMusic) {
@@ -5084,8 +5102,94 @@
     triggerImpact(3.6, b.x + b.w * 0.5, b.y + b.h * 0.45, 6.4);
     playBossStartSfx();
     playKickSfx(2.18);
+    godPhaseCutsceneTimer = 0;
+    gameState = STATE.GOD_PHASE_CUTSCENE;
+    cameraX = clamp((BOSS_ARENA.minX + BOSS_ARENA.maxX) * 0.5 - W * 0.5, BOSS_ARENA.minX - 120, stage.width - W);
+    hudMessage = "";
+    hudTimer = 0;
+  }
+
+  function finishGodSecondFormCutscene() {
+    if (!stage || !stage.boss) {
+      gameState = STATE.BOSS;
+      godPhaseCutsceneTimer = 0;
+      return;
+    }
+    const b = stage.boss;
+    if (b.kind !== "god") {
+      gameState = STATE.BOSS;
+      godPhaseCutsceneTimer = 0;
+      return;
+    }
+
+    b.mode = "idle";
+    b.modeTimer = 32;
+    b.phaseTransitionTimer = 0;
+    b.shotCooldown = 18;
+    b.attackCycle = 0;
+    b.stunTimer = 0;
+    b.gimmickAdvantageTimer = 0;
+    b.vx = 0;
+    b.vy = 0;
+    b.y = stage.groundY - b.h;
+    b.invuln = Math.max(b.invuln || 0, 24);
+    stage.bossShots = [];
+
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = true;
+    player.y = stage.groundY - player.h;
+    player.facing = 1;
+
+    gameState = STATE.BOSS;
+    godPhaseCutsceneTimer = 0;
+    cameraX = clamp(player.x + player.w * 0.5 - W * 0.45, BOSS_ARENA.minX - 120, stage.width - W);
     hudMessage = "神 第2形態! 電磁パネルで隙を作れ!";
-    hudTimer = 150;
+    hudTimer = 130;
+  }
+
+  function updateGodSecondFormCutscene(dt, actions) {
+    if (!stage || !stage.boss || !stage.boss.active || stage.boss.kind !== "god") {
+      gameState = STATE.BOSS;
+      godPhaseCutsceneTimer = 0;
+      return;
+    }
+
+    godPhaseCutsceneTimer += dt;
+    const t = godPhaseCutsceneTimer;
+    const b = stage.boss;
+
+    const arenaMid = (BOSS_ARENA.minX + BOSS_ARENA.maxX) * 0.5;
+    const pan = Math.sin(t * 0.045) * 10;
+    cameraX = clamp(arenaMid - W * 0.5 + pan, BOSS_ARENA.minX - 120, stage.width - W);
+
+    const heroTargetX = clamp(BOSS_ARENA.minX + 64, BOSS_ARENA.minX + 8, BOSS_ARENA.maxX - player.w - 32);
+    player.x += (heroTargetX - player.x) * clamp(dt * 0.09, 0, 1);
+    player.y = stage.groundY - player.h;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = true;
+    player.facing = 1;
+    player.anim += dt * 0.55;
+
+    const rise = Math.sin(clamp(t / 112, 0, 1) * Math.PI) * 10;
+    b.vx = 0;
+    b.vy = 0;
+    b.x = clamp(b.x + Math.sin(t * 0.08) * 0.6, BOSS_ARENA.minX + 20, BOSS_ARENA.maxX - b.w - 20);
+    b.y = stage.groundY - b.h - rise;
+    b.mode = "phase_shift";
+    b.modeTimer = Math.max(0, GOD_PHASE_CUTSCENE_DURATION - t);
+    b.phaseTransitionTimer = Math.max(1, GOD_PHASE_CUTSCENE_DURATION - t);
+
+    const wantsSkip = actions.startPressed || actions.jumpPressed || actions.attackPressed || actions.attack2Pressed;
+    if (wantsSkip && t >= GOD_PHASE_CUTSCENE_SKIP_MIN) {
+      finishGodSecondFormCutscene();
+      return;
+    }
+
+    if (t >= GOD_PHASE_CUTSCENE_DURATION) {
+      finishGodSecondFormCutscene();
+    }
   }
 
   function startBossBattle() {
@@ -5223,6 +5327,7 @@
     resetBlackFlashState();
     stopInvincibleMusic();
 
+    godPhaseCutsceneTimer = 0;
     gameState = STATE.BOSS;
     startBossTheme();
     cameraX = clamp(BOSS_ARENA.minX - 96, 0, stage.width - W);
@@ -5292,6 +5397,7 @@
     startClearTheme();
     hudMessage = finalStage ? "白ヒゲの神を撃破!" : "孔雀ボス撃破! STAGE 2へ";
     hudTimer = finalStage ? 150 : 120;
+    godPhaseCutsceneTimer = 0;
     gameState = STATE.CLEAR;
     clearTimer = 0;
   }
@@ -6319,15 +6425,21 @@
     updateLifeUpItems(dt);
     updateBikes(dt);
     updateBoss(dt, solids);
+    if (gameState !== STATE.BOSS) return;
     updateGodGimmicks(dt);
+    if (gameState !== STATE.BOSS) return;
     updateBossShots(dt, solids);
+    if (gameState !== STATE.BOSS) return;
     updateEnemies(dt, solids);
     updateHazardBullets(dt, solids);
     if (proteinBurstTimer <= 0) {
       updatePlayerAttack(dt, actions);
     }
+    if (gameState !== STATE.BOSS) return;
     updatePlayerWaves(dt, solids);
+    if (gameState !== STATE.BOSS) return;
     updateHammerShards(dt, solids);
+    if (gameState !== STATE.BOSS) return;
     resolveEnemyContactDamage();
     resolveBossContactDamage();
     resolveBreakWalls(dt);
@@ -6341,6 +6453,7 @@
     titleTimer = 0;
     cutsceneTime = 0;
     preBossCutsceneTimer = 0;
+    godPhaseCutsceneTimer = 0;
     cameraX = 0;
     gameState = STATE.CUTSCENE;
     startOpeningTheme();
@@ -6421,6 +6534,7 @@
     deadTimerMax = 0;
     cutsceneTime = 0;
     preBossCutsceneTimer = 0;
+    godPhaseCutsceneTimer = 0;
     deathContinueMode = "checkpoint";
     cameraX = 0;
     attackCooldown = 0;
@@ -6468,6 +6582,7 @@
     currentStageNumber += 1;
     cutsceneTime = 0;
     preBossCutsceneTimer = 0;
+    godPhaseCutsceneTimer = 0;
     deadReason = "";
     proteinBurstGauge = 0;
     proteinBurstTimer = 0;
@@ -6561,6 +6676,11 @@
 
     if (gameState === STATE.PRE_BOSS) {
       updatePreBossCutscene(dt, actions);
+      return;
+    }
+
+    if (gameState === STATE.GOD_PHASE_CUTSCENE) {
+      updateGodSecondFormCutscene(dt, actions);
       return;
     }
 
@@ -9460,6 +9580,68 @@
     ctx.fillText("タップ / Enter でスキップ", 101, 11);
   }
 
+  function drawGodSecondFormCutscene() {
+    const t = godPhaseCutsceneTimer;
+    const boss = stage && stage.boss ? stage.boss : null;
+
+    drawMansionInteriorBackdrop();
+    ctx.fillStyle = "rgba(12, 14, 24, 0.2)";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#2a3146";
+    ctx.fillRect(0, 132, W, 48);
+    ctx.fillStyle = "#50607c";
+    for (let x = -8; x < W + 8; x += 20) {
+      ctx.fillRect(x + ((Math.floor(t * 0.35) % 20) - 10), 141, 9, 1);
+      ctx.fillRect(x + 6 + ((Math.floor(t * 0.35) % 20) - 10), 155, 7, 1);
+    }
+
+    drawCutsceneHero(player.x - cameraX, player.y, player.facing, player.anim + t * 0.08);
+    if (boss && boss.active) {
+      drawBoss();
+
+      const bx = Math.floor(boss.x - cameraX + boss.w * 0.5);
+      const by = Math.floor(boss.y + boss.h * 0.34);
+      const charge = clamp(t / (GOD_PHASE_CUTSCENE_DURATION * 0.74), 0, 1);
+      const pulse = 0.5 + Math.sin(t * 0.34) * 0.5;
+      const beamH = Math.floor(56 + charge * 44);
+      const beamW = Math.floor(8 + charge * 7 + pulse * 2);
+
+      ctx.fillStyle = `rgba(200, 236, 255, ${0.12 + charge * 0.22})`;
+      ctx.fillRect(bx - beamW, by - beamH, beamW * 2, beamH + 10);
+      ctx.fillStyle = `rgba(255, 228, 168, ${0.1 + charge * 0.22})`;
+      ctx.fillRect(bx - 3, by - beamH - 6, 6, beamH + 20);
+
+      for (let i = 0; i < 10; i += 1) {
+        const ang = (Math.PI * 2 * i) / 10 + t * 0.05;
+        const len = 14 + charge * 20 + (i % 2 === 0 ? 7 : 0);
+        const ex = Math.floor(bx + Math.cos(ang) * len);
+        const ey = Math.floor(by + Math.sin(ang) * len * 0.66);
+        ctx.strokeStyle = `rgba(152, 226, 255, ${0.24 + charge * 0.22})`;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+    }
+
+    drawCutscenePolish(t, 0.9);
+    if (t < 70) {
+      drawTextPanel(["白ヒゲの神が怒り、会場に光が満ちる。"]);
+    } else if (t < 148) {
+      drawTextPanel(["神が第2形態へ変貌! 攻撃パターンが変化する。"]);
+    } else {
+      drawTextPanel(["第2形態戦 開始。電磁パネルで隙を作れ!"]);
+    }
+
+    ctx.fillStyle = "rgba(0,0,0,0.44)";
+    ctx.fillRect(86, 8, 148, 14);
+    ctx.fillStyle = "#f4f3ff";
+    ctx.font = "9px monospace";
+    ctx.textBaseline = "top";
+    ctx.fillText("タップ / Enter でスキップ", 97, 11);
+  }
+
   function drawHUD() {
     const hudH = 22;
     ctx.fillStyle = "rgba(9, 8, 12, 0.78)";
@@ -10096,6 +10278,12 @@
       return;
     }
 
+    if (gameState === STATE.GOD_PHASE_CUTSCENE) {
+      drawGodSecondFormCutscene();
+      drawPs1Overlay();
+      return;
+    }
+
     const deadShake = gameState === STATE.DEAD ? deathShakeTimer * 0.2 : 0;
     const impactRatio = clamp(impactShakeTimer / 18, 0, 1);
     const playShake = (gameState === STATE.PLAY || gameState === STATE.BOSS) ? impactShakePower * impactRatio : 0;
@@ -10211,6 +10399,13 @@
 
     if (gameState === STATE.PRE_BOSS) {
       startOpeningTheme();
+      return;
+    }
+
+    if (gameState === STATE.GOD_PHASE_CUTSCENE) {
+      if (godPhaseCutsceneTimer >= GOD_PHASE_CUTSCENE_SKIP_MIN) {
+        finishGodSecondFormCutscene();
+      }
       return;
     }
 
