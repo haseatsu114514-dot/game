@@ -3908,8 +3908,8 @@
     const strongWave = !forcePunch && chargeFrames >= ATTACK_WAVE_CHARGE_MIN - 0.01;
     const morningStarStrike = !forcePunch && !comboPunch && !strongWave && chargeFrames >= ATTACK_MORNINGSTAR_CHARGE_MIN;
     const morningStarLong = morningStarStrike && chargeFrames >= ATTACK_MORNINGSTAR_LONG_MIN;
-    const comboYOffset = comboType === "kick" ? 5 : comboType === "upper" ? -2 : 2;
-    const comboBaseY = comboType === "kick" ? 11 : comboType === "upper" ? 4 : 6;
+    const comboYOffset = comboType === "kick" ? 5 : comboType === "upper" ? 1 : 2;
+    const comboBaseY = comboType === "kick" ? 11 : comboType === "upper" ? 7 : 6;
     const strikeYOffset = strongWave ? 0 : morningStarStrike ? 0 : comboPunch ? comboYOffset : 2;
     const strikeBaseY = morningStarStrike ? 8 : comboPunch ? comboBaseY : strongWave ? 4 : 6;
     const comboHitH = comboType === "kick" ? 10 + Math.floor(chargeRatio * 2) : comboType === "upper" ? 13 + Math.floor(chargeRatio * 2) : 10 + Math.floor(chargeRatio * 2);
@@ -8168,7 +8168,7 @@
     const baseY = isWave
       ? cy - 1
       : isCombo
-        ? (comboMove === "kick" ? cy + 4 : comboMove === "upper" ? cy - 2 : cy + 1)
+        ? (comboMove === "kick" ? cy + 4 : comboMove === "upper" ? cy + 1 : cy + 1)
         : cy + 1;
     const lineCount = isHyakuretsu ? 9 : isMorningStar ? 6 : isCombo ? (comboMove === "upper" ? 5 : 4) : 4;
 
@@ -8229,7 +8229,7 @@
 
     if (!(isCombo && comboMove === "kick")) {
       const fistX = dir > 0 ? frontX + 2 : frontX - 8;
-      const fistY = isCombo && comboMove === "upper" ? baseY - 4 : baseY - 1;
+      const fistY = isCombo && comboMove === "upper" ? baseY - 2 : baseY - 1;
       ctx.fillStyle = "#f5ddcf";
       ctx.fillRect(fistX, fistY, 6, 3);
       ctx.fillStyle = "#2a3348";
@@ -8325,7 +8325,7 @@
         }
       } else {
         const upX = dir > 0 ? frontX + 7 : frontX - 11;
-        const upY = baseY - 7;
+        const upY = baseY - 4;
         ctx.fillStyle = "#f5ddcf";
         ctx.fillRect(upX, upY, 5, 3);
         ctx.fillStyle = "#2a3348";
