@@ -9443,7 +9443,7 @@
       const previewTone = waveReady
         ? "255, 214, 135"
         : morningStarReady
-          ? (morningStarLongReady ? "196, 242, 255" : "176, 234, 255")
+          ? (morningStarLongReady ? "232, 228, 214" : "212, 206, 196")
           : morningStarSpinReady
             ? "255, 215, 170"
           : "162, 226, 255";
@@ -9459,6 +9459,33 @@
         ctx.beginPath();
         ctx.arc(cx, cy - 1, Math.max(3, spinR - 3), 0, Math.PI * 2);
         ctx.stroke();
+      } else if (morningStarReady && !waveReady) {
+        const anchorX = dir > 0 ? cx + 6 : cx - 6;
+        const anchorY = cy - 5;
+        const tipX = dir > 0 ? px + pw - 2 : px + 2;
+        const tipY = py + Math.floor(ph * 0.4);
+        const chainLinks = 9;
+        for (let i = 0; i <= chainLinks; i += 1) {
+          const t = i / chainLinks;
+          const lx = Math.round(anchorX + (tipX - anchorX) * t);
+          const sag = Math.sin(t * Math.PI) * (1.2 + chargeRatio * 1.4);
+          const ly = Math.round(anchorY + (tipY - anchorY) * t + sag);
+          ctx.fillStyle = i % 2 === 0
+            ? `rgba(218, 214, 204, ${0.44 + chargeRatio * 0.24})`
+            : `rgba(142, 136, 126, ${0.4 + chargeRatio * 0.2})`;
+          ctx.fillRect(lx, ly, 2, 1);
+        }
+        const ballX = tipX - 3;
+        const ballY = tipY - 3;
+        ctx.fillStyle = "rgba(108, 104, 100, 0.9)";
+        ctx.fillRect(ballX, ballY, 7, 7);
+        ctx.fillStyle = "rgba(170, 164, 154, 0.92)";
+        ctx.fillRect(ballX + 1, ballY + 1, 5, 5);
+        ctx.fillStyle = "rgba(234, 230, 218, 0.9)";
+        ctx.fillRect(ballX + 3, ballY - 2, 1, 2);
+        ctx.fillRect(ballX + 3, ballY + 7, 1, 2);
+        ctx.fillRect(ballX - 2, ballY + 3, 2, 1);
+        ctx.fillRect(ballX + 7, ballY + 3, 2, 1);
       } else {
         ctx.fillStyle = `rgba(${previewTone}, ${fillAlpha})`;
         ctx.fillRect(px, py, pw, ph);
@@ -9565,37 +9592,23 @@
       const tipX = Math.round(anchorX + Math.cos(spin) * radius);
       const tipY = Math.round(anchorY + Math.sin(spin) * radius * 0.72);
 
-      for (let i = 0; i < 3; i += 1) {
-        const ghostSpin = spin - 0.34 * (i + 1);
-        const ghostR = radius - i * 2;
-        if (ghostR <= 6) continue;
-        const gx = Math.round(anchorX + Math.cos(ghostSpin) * ghostR);
-        const gy = Math.round(anchorY + Math.sin(ghostSpin) * ghostR * 0.72);
-        const alpha = 0.24 - i * 0.07;
-        ctx.strokeStyle = `rgba(168, 226, 255, ${alpha})`;
-        ctx.beginPath();
-        ctx.moveTo(anchorX, anchorY);
-        ctx.lineTo(gx, gy);
-        ctx.stroke();
-      }
-
       const chainLinks = 7;
       for (let i = 0; i <= chainLinks; i += 1) {
         const t = i / chainLinks;
         const lx = Math.round(anchorX + (tipX - anchorX) * t);
-        const ly = Math.round(anchorY + (tipY - anchorY) * t);
-        ctx.fillStyle = i % 2 === 0 ? "#c8dcf0" : "#93acc8";
+        const ly = Math.round(anchorY + (tipY - anchorY) * t + Math.sin(t * Math.PI) * 0.7);
+        ctx.fillStyle = i % 2 === 0 ? "#ccc7bb" : "#948f84";
         ctx.fillRect(lx, ly, 2, 1);
       }
 
       const ballX = tipX - 3;
       const ballY = tipY - 3;
       const pulse = 0.5 + Math.sin((attackEffectPhase + visualPower * 3.2) * 1.05) * 0.5;
-      ctx.fillStyle = "#5f748f";
+      ctx.fillStyle = "#5f5a54";
       ctx.fillRect(ballX, ballY, 7, 7);
-      ctx.fillStyle = "#8199b8";
+      ctx.fillStyle = "#8f887f";
       ctx.fillRect(ballX + 1, ballY + 1, 5, 5);
-      ctx.fillStyle = "#d5e4f3";
+      ctx.fillStyle = "#e2ddd1";
       ctx.fillRect(ballX + 2, ballY + 1, 2, 1);
 
       const spikeColor = `rgba(240, 246, 255, ${0.72 + pulse * 0.2})`;
@@ -9609,13 +9622,9 @@
       ctx.fillRect(ballX + 1, ballY + 5, 1, 1);
       ctx.fillRect(ballX + 5, ballY + 5, 1, 1);
 
-      ctx.strokeStyle = `rgba(255, 226, 182, ${0.34 + pulse * 0.16})`;
+      ctx.strokeStyle = `rgba(255, 226, 182, ${0.3 + pulse * 0.12})`;
       ctx.beginPath();
       ctx.arc(anchorX, anchorY, radius + 1, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = `rgba(160, 226, 255, ${0.26 + pulse * 0.12})`;
-      ctx.beginPath();
-      ctx.arc(anchorX, anchorY, Math.max(3, radius - 4), 0, Math.PI * 2);
       ctx.stroke();
       return;
     }
@@ -9642,11 +9651,10 @@
         : Math.floor(flashyBoost * 4);
     const lineCount = (isHyakuretsu ? 9 : isMorningStar ? 6 : isCombo ? (comboMove === "upper" ? 5 : 4) : 4) + extraLines;
 
-    for (let i = 0; i < lineCount; i += 1) {
-      const spread = isHyakuretsu
-        ? Math.floor(i / 3) * 4 + ((hyakuretsuLaneTick + i) % 2)
-        : isMorningStar
-          ? i
+    if (!isMorningStar) {
+      for (let i = 0; i < lineCount; i += 1) {
+        const spread = isHyakuretsu
+          ? Math.floor(i / 3) * 4 + ((hyakuretsuLaneTick + i) % 2)
           : isCombo
             ? comboMove === "kick"
               ? i * 3 + Math.floor((1 - ratio) * 3)
@@ -9654,10 +9662,8 @@
                 ? i + Math.floor((1 - ratio) * 4)
                 : i * 2 + Math.floor((1 - ratio) * 4)
             : i * 2 + Math.floor((1 - ratio) * 5);
-      const lenBase = isHyakuretsu
-        ? reach - Math.floor(i / 3) * 2
-        : isMorningStar
-          ? reach - i * 2
+        const lenBase = isHyakuretsu
+          ? reach - Math.floor(i / 3) * 2
           : isCombo
             ? comboMove === "kick"
               ? reach - i * 3
@@ -9665,15 +9671,13 @@
                 ? reach - i * 2
                 : reach - i * 4
             : reach - i * 4;
-      const len = lenBase + Math.sin((attackEffectPhase + i) * (isHyakuretsu ? 1.4 : isMorningStar ? 1.0 : 0.8)) * 2;
-      const alphaBase = isHyakuretsu ? 0.68 - Math.floor(i / 3) * 0.08 : isMorningStar ? 0.62 - i * 0.07 : 0.55 - i * 0.1;
-      const alpha = clamp(alphaBase + flashyBoost * 0.12, 0.08, 0.9);
-      const sx = dir > 0 ? frontX + spread : frontX - len - spread;
-      const sy = baseY - 3 + (
-        isHyakuretsu
-          ? (i % 3) * 4 + ((hyakuretsuLaneTick + i) % 2)
-          : isMorningStar
-            ? i
+        const len = lenBase + Math.sin((attackEffectPhase + i) * (isHyakuretsu ? 1.4 : 0.8)) * 2;
+        const alphaBase = isHyakuretsu ? 0.68 - Math.floor(i / 3) * 0.08 : 0.55 - i * 0.1;
+        const alpha = clamp(alphaBase + flashyBoost * 0.12, 0.08, 0.9);
+        const sx = dir > 0 ? frontX + spread : frontX - len - spread;
+        const sy = baseY - 3 + (
+          isHyakuretsu
+            ? (i % 3) * 4 + ((hyakuretsuLaneTick + i) % 2)
             : isCombo
               ? comboMove === "kick"
                 ? i + 1
@@ -9681,28 +9685,27 @@
                   ? -i * 2
                   : i * 2
               : i * 2
-      );
-      if (isWave) {
-        ctx.fillStyle = `rgba(140, 215, 255, ${alpha})`;
-      } else if (isHyakuretsu) {
-        const laneTone = i % 3 === 0 ? "255, 199, 148" : i % 3 === 1 ? "255, 179, 136" : "255, 162, 130";
-        ctx.fillStyle = `rgba(${laneTone}, ${alpha})`;
-      } else if (isMorningStar) {
-        ctx.fillStyle = `rgba(182, 238, 255, ${alpha})`;
-      } else if (isCombo) {
-        const comboTone = comboStage >= 3 ? "255, 182, 144" : comboStage === 2 ? "255, 207, 152" : "255, 235, 176";
-        ctx.fillStyle = `rgba(${comboTone}, ${alpha})`;
-      } else {
-        ctx.fillStyle = `rgba(255, 235, 176, ${alpha})`;
-      }
-      const drawLen = Math.max(2, Math.floor(len));
-      const lineH = flashyBoost > 0.42 && (isWave || isHyakuretsu || i % 2 === 0) ? 2 : 1;
-      ctx.fillRect(Math.floor(sx), sy, drawLen, lineH);
-      if (flashyBoost > 0.2 && i % 2 === 0) {
-        const glowAlpha = Math.max(0.06, 0.2 + flashyBoost * 0.14 - i * 0.03);
-        const glowLen = Math.max(2, Math.floor(drawLen * (0.46 + flashyBoost * 0.28)));
-        ctx.fillStyle = `rgba(255, 255, 255, ${glowAlpha})`;
-        ctx.fillRect(Math.floor(sx), sy - 1, glowLen, 1);
+        );
+        if (isWave) {
+          ctx.fillStyle = `rgba(140, 215, 255, ${alpha})`;
+        } else if (isHyakuretsu) {
+          const laneTone = i % 3 === 0 ? "255, 199, 148" : i % 3 === 1 ? "255, 179, 136" : "255, 162, 130";
+          ctx.fillStyle = `rgba(${laneTone}, ${alpha})`;
+        } else if (isCombo) {
+          const comboTone = comboStage >= 3 ? "255, 182, 144" : comboStage === 2 ? "255, 207, 152" : "255, 235, 176";
+          ctx.fillStyle = `rgba(${comboTone}, ${alpha})`;
+        } else {
+          ctx.fillStyle = `rgba(255, 235, 176, ${alpha})`;
+        }
+        const drawLen = Math.max(2, Math.floor(len));
+        const lineH = flashyBoost > 0.42 && (isWave || isHyakuretsu || i % 2 === 0) ? 2 : 1;
+        ctx.fillRect(Math.floor(sx), sy, drawLen, lineH);
+        if (flashyBoost > 0.2 && i % 2 === 0) {
+          const glowAlpha = Math.max(0.06, 0.2 + flashyBoost * 0.14 - i * 0.03);
+          const glowLen = Math.max(2, Math.floor(drawLen * (0.46 + flashyBoost * 0.28)));
+          ctx.fillStyle = `rgba(255, 255, 255, ${glowAlpha})`;
+          ctx.fillRect(Math.floor(sx), sy - 1, glowLen, 1);
+        }
       }
     }
 
@@ -9734,36 +9737,22 @@
       const tipX = dir > 0 ? anchorX + travelX : anchorX - travelX;
       const tipY = anchorY + travelY;
 
-      for (let i = 0; i < 2; i += 1) {
-        const ghostT = clamp(swing - 0.14 * (i + 1), 0, 1);
-        if (ghostT <= 0.01) continue;
-        const ghostTravelX = Math.min(maxVisualReach, 4 + chainLen * ghostT);
-        const gx = dir > 0 ? anchorX + ghostTravelX : anchorX - ghostTravelX;
-        const gy = anchorY + (-10 + Math.floor(ghostT * 14));
-        const alpha = 0.22 - i * 0.08;
-        ctx.strokeStyle = `rgba(140, 212, 255, ${alpha})`;
-        ctx.beginPath();
-        ctx.moveTo(anchorX, anchorY);
-        ctx.lineTo(gx, gy);
-        ctx.stroke();
-      }
-
       const chainLinks = 6;
       for (let i = 0; i <= chainLinks; i += 1) {
         const t = i / chainLinks;
         const lx = Math.round(anchorX + (tipX - anchorX) * t);
-        const ly = Math.round(anchorY + (tipY - anchorY) * t);
-        ctx.fillStyle = i % 2 === 0 ? "#c4d7eb" : "#90a7c4";
+        const ly = Math.round(anchorY + (tipY - anchorY) * t + Math.sin(t * Math.PI) * 0.85);
+        ctx.fillStyle = i % 2 === 0 ? "#c7c2b6" : "#8e887d";
         ctx.fillRect(lx, ly, 2, 1);
       }
 
       const ballX = tipX - 3;
       const ballY = tipY - 3;
-      ctx.fillStyle = "#5f748f";
+      ctx.fillStyle = "#5c5752";
       ctx.fillRect(ballX, ballY, 7, 7);
-      ctx.fillStyle = "#8199b8";
+      ctx.fillStyle = "#8f897f";
       ctx.fillRect(ballX + 1, ballY + 1, 5, 5);
-      ctx.fillStyle = "#d5e4f3";
+      ctx.fillStyle = "#e0dbcf";
       ctx.fillRect(ballX + 2, ballY + 1, 2, 1);
 
       const spikeColor = `rgba(235, 245, 255, ${0.76 + pulse * 0.18})`;
