@@ -9900,10 +9900,6 @@
       }
     }
 
-    ctx.fillStyle = "rgba(235, 245, 255, 0.9)";
-    ctx.font = "8px monospace";
-    ctx.fillText(`STAGE ${currentStageNumber}`, W - 56, 6);
-
     if (blackFlashChanceHudTimer > 0) {
       const alpha = clamp(blackFlashChanceHudTimer / 150, 0, 1);
       const text = blackFlashChanceHudText || formatBlackFlashChanceText(blackFlashChanceWithRank());
