@@ -11505,160 +11505,54 @@
     const rankTier = clamp(battleRankIndex, 0, maxTier);
     const tierRatio = rankTier / maxTier;
     const progress = battleRankProgressRatio();
-    const stylePower = clamp(tierRatio * 0.86 + progress * 0.14, 0, 1);
-    if (stylePower <= 0.02) return;
-
+    const stylePower = clamp(0.06 + tierRatio * 0.68 + progress * 0.26, 0.06, 1);
     const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
-    const pulse = 0.5 + Math.sin(player.anim * 0.14) * 0.5;
-    const glamourRaw = clamp(Math.pow(stylePower, 1.2), 0, 1);
-    const calmMul = clamp(0.24 + stylePower * 0.26, 0.24, 0.5);
-    const glamour = glamourRaw * calmMul;
-    const neon = clamp((glamourRaw - 0.65) / 0.35, 0, 1) * 0.22;
-    const glitter = clamp((glamourRaw - 0.5) / 0.5, 0, 1) * 0.35;
-    const fireworks = 0;
-    const px = Math.floor(player.x - cameraX + player.w * 0.5);
-    const py = Math.floor(player.y + player.h * 0.45);
+    const phase = player.anim * (0.06 + stylePower * 0.03);
     const top = 24;
-    const phase = player.anim * (0.06 + glamour * 0.03);
+    const areaH = H - top;
+    const rainbowAlpha = 0.004 + stylePower * 0.016;
+    ctx.fillStyle = `rgba(108, 190, 255, ${rainbowAlpha})`;
+    ctx.fillRect(0, top, W, areaH);
+    ctx.fillStyle = `rgba(255, 132, 196, ${rainbowAlpha * 0.78})`;
+    ctx.fillRect(0, top, W, areaH);
 
-    ctx.fillStyle = `rgba(94, 166, 255, ${0.008 + glamour * 0.028})`;
-    ctx.fillRect(0, top, W, H - top);
-    ctx.fillStyle = `rgba(255, 120, 86, ${0.004 + glamour * 0.02 * (0.5 + pulse * 0.5)})`;
-    ctx.fillRect(0, top, W, H - top);
-    ctx.fillStyle = `rgba(255, 252, 210, ${0.004 + glamour * 0.012 + rankFlash * 0.02})`;
-    ctx.fillRect(0, top, W, H - top);
-
-    if (neon > 0.01) {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      const curtainCount = 1 + Math.floor(neon * 1.5);
-      for (let i = 0; i < curtainCount; i += 1) {
-        const sweep = ((phase * 0.8 + i * 0.26) % 1 + 1) % 1;
-        const x = Math.floor((sweep - 0.2) * W);
-        const width = Math.floor(58 + neon * 64 + i * 6);
-        const grad = ctx.createLinearGradient(x, top, x + width, H);
-        const hueA = (phase * 220 + i * 34 + tierRatio * 120) % 360;
-        grad.addColorStop(0, `hsla(${hueA}, 92%, 58%, 0)`);
-        grad.addColorStop(0.5, `hsla(${(hueA + 42) % 360}, 88%, 68%, ${0.02 + neon * 0.05})`);
-        grad.addColorStop(1, `hsla(${(hueA + 88) % 360}, 92%, 62%, 0)`);
-        ctx.fillStyle = grad;
-        ctx.fillRect(x, top, width, H - top);
-      }
-      ctx.restore();
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const curtainCount = 1 + Math.floor(stylePower * 2.2);
+    for (let i = 0; i < curtainCount; i += 1) {
+      const sweep = ((phase * 0.55 + i * 0.24) % 1 + 1) % 1;
+      const x = Math.floor((sweep - 0.18) * W);
+      const width = Math.floor(52 + stylePower * 46 + i * 7);
+      const grad = ctx.createLinearGradient(x, top, x + width, H);
+      const hue = (phase * 180 + i * 46 + tierRatio * 130) % 360;
+      grad.addColorStop(0, `hsla(${hue}, 92%, 64%, 0)`);
+      grad.addColorStop(0.5, `hsla(${(hue + 42) % 360}, 90%, 72%, ${0.018 + stylePower * 0.03})`);
+      grad.addColorStop(1, `hsla(${(hue + 86) % 360}, 94%, 64%, 0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, top, width, areaH);
     }
+    ctx.restore();
 
-    const ribbonCount = 1 + Math.floor(glamour * 3);
-    for (let i = 0; i < ribbonCount; i += 1) {
-      const hue = (phase * 160 + i * 52 + tierRatio * 110) % 360;
-      const wave = Math.sin(phase * 2.2 + i * 1.4) * 0.5 + 0.5;
-      const y = top + Math.floor(((i + wave) / (ribbonCount + 1)) * (H - top - 10));
-      const h = 2 + (i % 2);
-      const alpha = 0.006 + glamour * 0.018 + (i % 3) * 0.002;
-      ctx.fillStyle = `hsla(${hue}, 90%, 66%, ${alpha})`;
-      ctx.fillRect(0, y, W, h);
-      ctx.fillStyle = `hsla(${(hue + 38) % 360}, 92%, 74%, ${alpha * 0.8})`;
-      ctx.fillRect(0, y + 1, W, 1);
-    }
+    const edgeAlpha = 0.004 + stylePower * 0.016;
+    ctx.fillStyle = `rgba(182, 236, 255, ${edgeAlpha})`;
+    ctx.fillRect(0, top, 2, areaH);
+    ctx.fillRect(W - 2, top, 2, areaH);
 
-    const edgeAlpha = 0.015 + glamour * 0.06 + rankFlash * 0.03;
-    ctx.fillStyle = `rgba(120, 214, 255, ${edgeAlpha})`;
-    ctx.fillRect(0, top, 5, H - top);
-    ctx.fillRect(W - 5, top, 5, H - top);
-    ctx.fillStyle = `rgba(255, 134, 128, ${edgeAlpha * 0.84})`;
-    ctx.fillRect(5, top, 2, H - top);
-    ctx.fillRect(W - 7, top, 2, H - top);
-
-    const streakCount = 1 + Math.floor(glamour * 4);
-    const travel = Math.floor(player.anim * (1.3 + glamour * 1.5));
-    for (let i = 0; i < streakCount; i += 1) {
-      const y = top + ((i * 13 + travel * 2) % (H - top - 4));
-      const len = 12 + Math.floor(glamour * 30) + (i % 3) * 6;
-      const sx = (W + 24) - ((travel * 5 + i * 29) % (W + len + 24));
-      const alphaA = 0.015 + glamour * 0.045 + rankFlash * 0.03;
-      const alphaB = 0.012 + glamour * 0.038;
-      ctx.fillStyle = `rgba(132, 232, 255, ${alphaA})`;
-      ctx.fillRect(sx, y, len, 1);
-      ctx.fillStyle = `rgba(255, 146, 116, ${alphaB})`;
-      ctx.fillRect(Math.max(0, sx - 8), y + 1, Math.max(1, len - 10), 1);
-    }
-
-    const sparkleCount = 3 + Math.floor(glamour * 8) + Math.floor(rankFlash * 3);
-    const drift = Math.floor(player.anim * (1.5 + glamour * 1.8));
+    const sparkleCount = 1 + rankTier + Math.floor(progress * 3) + Math.floor(rankFlash * 2);
+    const drift = Math.floor(player.anim * (1.1 + stylePower * 1.2));
     for (let i = 0; i < sparkleCount; i += 1) {
       const sx = ((i * 37 + drift * 11) % (W + 18)) - 9;
-      const sy = top + ((i * 53 + drift * 7) % Math.max(1, H - top - 6));
+      const sy = top + ((i * 53 + drift * 7) % Math.max(1, areaH - 6));
       const twinkle = 0.5 + Math.sin((phase + i * 0.74) * 3.8) * 0.5;
       const hue = (i * 29 + drift * 5 + tierRatio * 130) % 360;
-      const alpha = 0.03 + glamour * 0.06 + twinkle * 0.05;
-      const size = twinkle > 0.93 ? 2 : 1;
+      const alpha = 0.02 + stylePower * 0.042 + twinkle * 0.032;
+      const size = twinkle > 0.95 && rankTier >= 2 ? 2 : 1;
       ctx.fillStyle = `hsla(${hue}, 95%, 74%, ${alpha})`;
       ctx.fillRect(sx, sy, size, size);
       if (size > 1 && twinkle > 0.96) {
         ctx.fillRect(sx - 1, sy, size + 2, 1);
         ctx.fillRect(sx, sy - 1, 1, size + 2);
       }
-    }
-
-    if (glitter > 0.01) {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      const confettiCount = 2 + Math.floor(glitter * 8) + Math.floor(rankFlash * 3);
-      const driftX = Math.floor(player.anim * (1.5 + glitter * 1.2));
-      const driftY = Math.floor(player.anim * (1.0 + glitter * 1.1));
-      for (let i = 0; i < confettiCount; i += 1) {
-        const cx = ((i * 41 + driftX * 9) % (W + 24)) - 12;
-        const cy = top + ((i * 67 + driftY * 7) % Math.max(1, H - top - 14));
-        const hue = (i * 57 + driftX * 8 + tierRatio * 140) % 360;
-        const twinkle = 0.5 + Math.sin(phase * 5.3 + i * 0.9) * 0.5;
-        const radius = 1 + ((i + driftY) % 2) + glitter * 0.5;
-        ctx.fillStyle = `hsla(${hue}, 90%, ${66 + twinkle * 10}%, ${0.035 + glitter * 0.08})`;
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    const auraBase = 8 + glamour * 10;
-    const auraCount = 1 + Math.floor(glamour * 2);
-    for (let i = 0; i < auraCount; i += 1) {
-      const radius = auraBase + i * (6 + glamour * 2) + Math.sin(player.anim * 0.16 + i * 1.3) * 1.2;
-      const auraHue = (190 + i * 28 + phase * 140) % 360;
-      ctx.strokeStyle = `hsla(${auraHue}, 86%, 74%, ${0.04 + glamour * 0.06 - i * 0.01 + rankFlash * 0.02})`;
-      ctx.beginPath();
-      ctx.arc(px, py, Math.max(4, radius), 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    if (fireworks > 0.01) {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      const burstCount = 2 + Math.floor(fireworks * 5);
-      for (let i = 0; i < burstCount; i += 1) {
-        const t = phase * 0.8 + i * 0.7;
-        const cx = Math.floor(W * (0.2 + (((t * 0.37) % 1 + 1) % 1) * 0.6));
-        const cy = Math.floor(top + (H - top) * (0.16 + (((t * 0.51) % 1 + 1) % 1) * 0.62));
-        const rayCount = 8 + Math.floor(fireworks * 9);
-        const rayLen = 10 + fireworks * 22;
-        const hue = (t * 180 + i * 72 + tierRatio * 150) % 360;
-        for (let r = 0; r < rayCount; r += 1) {
-          const ang = (Math.PI * 2 * r) / rayCount + phase * 0.3;
-          const ex = cx + Math.cos(ang) * (rayLen + (r % 2) * 4);
-          const ey = cy + Math.sin(ang) * (rayLen + (r % 2) * 4);
-          ctx.strokeStyle = `hsla(${(hue + r * 12) % 360}, 100%, 70%, ${0.14 + fireworks * 0.22})`;
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
-        }
-      }
-      const cornerAlpha = 0.05 + fireworks * 0.16 + rankFlash * 0.08;
-      ctx.fillStyle = `rgba(255, 208, 112, ${cornerAlpha})`;
-      ctx.fillRect(0, top, 20 + fireworks * 24, 3 + fireworks * 3);
-      ctx.fillRect(W - (20 + fireworks * 24), top, 20 + fireworks * 24, 3 + fireworks * 3);
-      ctx.fillRect(0, H - (4 + fireworks * 4), 24 + fireworks * 24, 4 + fireworks * 4);
-      ctx.fillRect(W - (24 + fireworks * 24), H - (4 + fireworks * 4), 24 + fireworks * 24, 4 + fireworks * 4);
-      ctx.restore();
     }
 
     if (rankFlash > 0.3) {
