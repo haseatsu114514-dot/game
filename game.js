@@ -10612,42 +10612,77 @@
 
     const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
     const pulse = 0.5 + Math.sin(player.anim * 0.14) * 0.5;
+    const glamour = clamp(Math.pow(stylePower, 1.22), 0, 1);
     const px = Math.floor(player.x - cameraX + player.w * 0.5);
     const py = Math.floor(player.y + player.h * 0.45);
     const top = 24;
+    const phase = player.anim * (0.08 + glamour * 0.08);
 
-    ctx.fillStyle = `rgba(94, 166, 255, ${0.03 + stylePower * 0.07})`;
+    ctx.fillStyle = `rgba(94, 166, 255, ${0.03 + glamour * 0.11})`;
     ctx.fillRect(0, top, W, H - top);
-    ctx.fillStyle = `rgba(255, 120, 86, ${0.01 + stylePower * 0.06 * (0.5 + pulse * 0.5)})`;
+    ctx.fillStyle = `rgba(255, 120, 86, ${0.015 + glamour * 0.08 * (0.5 + pulse * 0.5)})`;
+    ctx.fillRect(0, top, W, H - top);
+    ctx.fillStyle = `rgba(255, 252, 210, ${0.01 + glamour * 0.04 + rankFlash * 0.05})`;
     ctx.fillRect(0, top, W, H - top);
 
-    const edgeAlpha = 0.04 + stylePower * 0.16 + rankFlash * 0.06;
+    const ribbonCount = 2 + Math.floor(glamour * 8);
+    for (let i = 0; i < ribbonCount; i += 1) {
+      const hue = (phase * 160 + i * 52 + tierRatio * 110) % 360;
+      const wave = Math.sin(phase * 2.2 + i * 1.4) * 0.5 + 0.5;
+      const y = top + Math.floor(((i + wave) / (ribbonCount + 1)) * (H - top - 10));
+      const h = 2 + (i % 2);
+      const alpha = 0.018 + glamour * 0.05 + (i % 3) * 0.004;
+      ctx.fillStyle = `hsla(${hue}, 90%, 66%, ${alpha})`;
+      ctx.fillRect(0, y, W, h);
+      ctx.fillStyle = `hsla(${(hue + 38) % 360}, 92%, 74%, ${alpha * 0.8})`;
+      ctx.fillRect(0, y + 1, W, 1);
+    }
+
+    const edgeAlpha = 0.05 + glamour * 0.2 + rankFlash * 0.08;
     ctx.fillStyle = `rgba(120, 214, 255, ${edgeAlpha})`;
     ctx.fillRect(0, top, 5, H - top);
     ctx.fillRect(W - 5, top, 5, H - top);
-    ctx.fillStyle = `rgba(255, 134, 128, ${edgeAlpha * 0.8})`;
+    ctx.fillStyle = `rgba(255, 134, 128, ${edgeAlpha * 0.84})`;
     ctx.fillRect(5, top, 2, H - top);
     ctx.fillRect(W - 7, top, 2, H - top);
 
-    const streakCount = 3 + Math.floor(stylePower * 10);
-    const travel = Math.floor(player.anim * (1.6 + stylePower * 1.8));
+    const streakCount = 3 + Math.floor(glamour * 14);
+    const travel = Math.floor(player.anim * (1.8 + glamour * 2.4));
     for (let i = 0; i < streakCount; i += 1) {
       const y = top + ((i * 13 + travel * 2) % (H - top - 4));
-      const len = 16 + Math.floor(stylePower * 64) + (i % 4) * 7;
+      const len = 18 + Math.floor(glamour * 78) + (i % 4) * 8;
       const sx = (W + 24) - ((travel * 5 + i * 29) % (W + len + 24));
-      const alphaA = 0.05 + stylePower * 0.09 + rankFlash * 0.08;
-      const alphaB = 0.04 + stylePower * 0.08;
+      const alphaA = 0.05 + glamour * 0.12 + rankFlash * 0.1;
+      const alphaB = 0.04 + glamour * 0.1;
       ctx.fillStyle = `rgba(132, 232, 255, ${alphaA})`;
       ctx.fillRect(sx, y, len, 1);
       ctx.fillStyle = `rgba(255, 146, 116, ${alphaB})`;
       ctx.fillRect(Math.max(0, sx - 8), y + 1, Math.max(1, len - 10), 1);
     }
 
-    const auraBase = 10 + stylePower * 18;
-    const auraCount = 1 + Math.floor(stylePower * 3);
+    const sparkleCount = 4 + Math.floor(glamour * 22) + Math.floor(rankFlash * 8);
+    const drift = Math.floor(player.anim * (2.0 + glamour * 3.2));
+    for (let i = 0; i < sparkleCount; i += 1) {
+      const sx = ((i * 37 + drift * 11) % (W + 18)) - 9;
+      const sy = top + ((i * 53 + drift * 7) % Math.max(1, H - top - 6));
+      const twinkle = 0.5 + Math.sin((phase + i * 0.74) * 3.8) * 0.5;
+      const hue = (i * 29 + drift * 5 + tierRatio * 130) % 360;
+      const alpha = 0.06 + glamour * 0.18 + twinkle * 0.12;
+      const size = ((i + drift) % 5 === 0) ? 2 : 1;
+      ctx.fillStyle = `hsla(${hue}, 95%, 74%, ${alpha})`;
+      ctx.fillRect(sx, sy, size, size);
+      if (size > 1 || twinkle > 0.84) {
+        ctx.fillRect(sx - 1, sy, size + 2, 1);
+        ctx.fillRect(sx, sy - 1, 1, size + 2);
+      }
+    }
+
+    const auraBase = 10 + glamour * 24;
+    const auraCount = 1 + Math.floor(glamour * 5);
     for (let i = 0; i < auraCount; i += 1) {
-      const radius = auraBase + i * (7 + stylePower * 3) + Math.sin(player.anim * 0.16 + i * 1.3) * 1.4;
-      ctx.strokeStyle = `rgba(147, 241, 255, ${0.1 + stylePower * 0.12 - i * 0.02 + rankFlash * 0.05})`;
+      const radius = auraBase + i * (7 + glamour * 4) + Math.sin(player.anim * 0.16 + i * 1.3) * 1.8;
+      const auraHue = (190 + i * 28 + phase * 140) % 360;
+      ctx.strokeStyle = `hsla(${auraHue}, 95%, 74%, ${0.1 + glamour * 0.14 - i * 0.016 + rankFlash * 0.05})`;
       ctx.beginPath();
       ctx.arc(px, py, Math.max(4, radius), 0, Math.PI * 2);
       ctx.stroke();
@@ -10655,16 +10690,16 @@
 
     if (rankFlash > 0.3) {
       const flare = clamp((rankFlash - 0.3) / 0.7, 0, 1);
-      const text = currentBattleRank().short;
-      ctx.font = "10px monospace";
+      const text = currentBattleRank().long;
+      ctx.font = "8px monospace";
       const textW = Math.ceil(ctx.measureText(text).width);
       const cx = Math.floor(W * 0.5 - textW * 0.5);
       const cy = 54 + Math.floor(Math.sin(player.anim * 0.2) * 2);
-      ctx.fillStyle = `rgba(12, 18, 28, ${0.28 + flare * 0.28})`;
-      ctx.fillRect(cx - 10, cy - 2, textW + 20, 12);
-      ctx.fillStyle = `rgba(255, 234, 176, ${0.5 + flare * 0.45})`;
+      ctx.fillStyle = `rgba(12, 18, 28, ${0.28 + flare * 0.3})`;
+      ctx.fillRect(cx - 10, cy - 2, textW + 20, 11);
+      ctx.fillStyle = `rgba(255, 234, 176, ${0.52 + flare * 0.44})`;
       ctx.fillText(text, cx + 1, cy - 1);
-      ctx.fillStyle = `rgba(255, 122, 122, ${0.4 + flare * 0.4})`;
+      ctx.fillStyle = `rgba(255, 122, 122, ${0.42 + flare * 0.4})`;
       ctx.fillText(text, cx, cy);
     }
   }
