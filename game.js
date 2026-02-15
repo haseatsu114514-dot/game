@@ -539,8 +539,27 @@
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
     const lowLifeOnly = playable && playerHearts <= 1 && playerHearts > 0;
     const targetRate = lowLifeOnly ? PINCH_BGM_RATE_MAX : 1;
-    setMusicRate(stageMusic, targetRate, dt);
-    setMusicRate(bossMusic, targetRate, dt);
+    const stageActive = gameState === STATE.PLAY && invincibleTimer <= 0 && !openingThemeActive;
+    const bossActive = gameState === STATE.BOSS && invincibleTimer <= 0 && !openingThemeActive;
+
+    setMusicRate(stageMusic, stageActive ? targetRate : 1, dt);
+    setMusicRate(bossMusic, bossActive ? targetRate : 1, dt);
+
+    if (stageActive && stageMusic && stageMusic.paused) {
+      try {
+        stageMusic.play().catch(() => {});
+      } catch (_e) {
+        // Ignore media errors and keep gameplay responsive.
+      }
+    }
+
+    if (bossActive && bossMusic && bossMusic.paused) {
+      try {
+        bossMusic.play().catch(() => {});
+      } catch (_e) {
+        // Ignore media errors and keep gameplay responsive.
+      }
+    }
   }
 
   function setBgmVolume(target, fadeSec = 0.08) {
