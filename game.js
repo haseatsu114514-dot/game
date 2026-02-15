@@ -100,6 +100,8 @@
   let blackFlashX = 0;
   let blackFlashY = 0;
   let blackFlashSlowTimer = 0;
+  let blackFlashChanceHudTimer = 0;
+  let blackFlashChanceHudText = "";
   let battleRankDefeats = 0;
   let battleRankGauge = 0;
   let battleRankIndex = 0;
@@ -195,7 +197,6 @@
   const INVINCIBLE_BGM_VOL = 0.44;
   const CLEAR_BGM_VOL = 0.4;
   const SE_GAIN_BOOST = 1.62;
-  const PINCH_BGM_RATE_MAX = 1.18;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [1 / 16, 1 / 4, 1 / 2, 1 / 1.5];
   const BLACK_FLASH_SLOW_DURATION = 20;
@@ -259,7 +260,6 @@
   const HYAKURETSU_COMBO_AUTO_DURATION = 78;
   const HYAKURETSU_HIT_INTERVAL = 2;
   const HYAKURETSU_POST_COOLDOWN = 10;
-  const HYAKURETSU_HOLD_AFTER_MAX = 18;
   const STOMP_VERTICAL_GRACE = 16;
   const STOMP_SIDE_GRACE = 6;
   const STOMP_DESCEND_MIN = -0.25;
@@ -303,14 +303,38 @@
     return 1 + pinchRatioByHearts() * PINCH_ATTACK_BONUS_MAX;
   }
 
-  function resolveBlackFlashAttempt() {
+  function blackFlashChanceWithRank(stageIndex = blackFlashChain) {
+    const idx = clamp(stageIndex, 0, BLACK_FLASH_CHANCES.length - 1);
+    const baseChance = BLACK_FLASH_CHANCES[idx];
+    const rankBonus = battleRankIndex * 0.0025;
+    return clamp(baseChance + rankBonus, 0.01, 0.98);
+  }
+
+  function formatBlackFlashChanceText(chance) {
+    return `黒閃率 ${(chance * 100).toFixed(1)}%`;
+  }
+
+  function resolveBlackFlashAttempt(forcedChance = null) {
     const stageIndex = clamp(blackFlashChain, 0, BLACK_FLASH_CHANCES.length - 1);
-    const chance = BLACK_FLASH_CHANCES[stageIndex];
+    const chance = typeof forcedChance === "number"
+      ? clamp(forcedChance, 0.01, 0.98)
+      : blackFlashChanceWithRank(stageIndex);
     const triggered = Math.random() < chance;
     if (triggered) {
       blackFlashChain = Math.min(blackFlashChain + 1, BLACK_FLASH_CHANCES.length - 1);
     } else {
-      blackFlashChain = 0;
+      blackFlashChain = Math.max(0, blackFlashChain - 1);
+    }
+    return triggered;
+  }
+
+  function rollBlackFlashHit(x, y, power = 1) {
+    const chance = blackFlashChanceWithRank();
+    const triggered = resolveBlackFlashAttempt(chance);
+    if (triggered) {
+      triggerBlackFlashEffect(x, y, power);
+      blackFlashChanceHudText = formatBlackFlashChanceText(chance);
+      blackFlashChanceHudTimer = 150;
     }
     return triggered;
   }
@@ -320,6 +344,8 @@
     blackFlashTimer = 0;
     blackFlashPower = 0;
     blackFlashSlowTimer = 0;
+    blackFlashChanceHudTimer = 0;
+    blackFlashChanceHudText = "";
   }
 
   function updateBattleRankTier() {
@@ -536,14 +562,11 @@
   }
 
   function updatePinchBgmTension(dt) {
-    const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
-    const lowLifeOnly = playable && playerHearts <= 1 && playerHearts > 0;
-    const targetRate = lowLifeOnly ? PINCH_BGM_RATE_MAX : 1;
     const stageActive = gameState === STATE.PLAY && invincibleTimer <= 0 && !openingThemeActive;
     const bossActive = gameState === STATE.BOSS && invincibleTimer <= 0 && !openingThemeActive;
 
-    setMusicRate(stageMusic, stageActive ? targetRate : 1, dt);
-    setMusicRate(bossMusic, bossActive ? targetRate : 1, dt);
+    setMusicRate(stageMusic, 1, dt);
+    setMusicRate(bossMusic, 1, dt);
 
     if (stageActive && stageMusic && stageMusic.paused) {
       try {
@@ -1945,11 +1968,17 @@
     const bosses = getBossEntities();
     for (const boss of bosses) {
       if (boss.invuln > 0) continue;
-      const bossDamage = Math.max(1, Math.round((1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus()) * crisisMul));
+      const hx = boss.x + boss.w * 0.5;
+      const hy = boss.y + boss.h * 0.42;
+      const bf = rollBlackFlashHit(hx, hy, 1.35 + gaugeRatio * 1.4);
+      const bossDamage = Math.max(
+        1,
+        Math.round((1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus()) * crisisMul * (bf ? 2 : 1))
+      );
       boss.hp = Math.max(0, boss.hp - bossDamage);
       boss.invuln = bossDamageBonus() > 0 ? 12 : 20;
-      boss.vx += player.facing * (0.5 + gaugeRatio * 0.95);
-      boss.vy = Math.min(boss.vy, -(2.0 + gaugeRatio * 1.6));
+      boss.vx += player.facing * (0.5 + gaugeRatio * 0.95 + (bf ? 0.22 : 0));
+      boss.vy = Math.min(boss.vy, -(2.0 + gaugeRatio * 1.6 + (bf ? 0.22 : 0)));
       handleBossHpZero();
     }
 
@@ -2263,7 +2292,6 @@
 
       addBike(101, 2440, 108);
       addHeartItem(101, 1420, 96);
-      addHeartItem(102, 3320, 96);
       addHeartItem(103, 5010, 94);
       addLifeUpItem(101, 2870, 88);
 
@@ -2598,8 +2626,6 @@
 
     // Rare heart recovery pickups.
     addHeartItem(1, 1480, 110);
-    addHeartItem(2, 4480, 102);
-    addHeartItem(3, 8360, 102);
     addHeartItem(4, 10140, 100);
 
     // Rare 1UP item (single spawn in stage).
@@ -3060,25 +3086,31 @@
     const freshDefeat = enemy.alive && !enemy.kicked;
     const hitX = enemy.x + enemy.w * 0.5;
     const hitY = enemy.y + enemy.h * 0.45;
-    spawnEnemyBlood(hitX, hitY, power);
+    const hasBlackFlashOption = typeof options.blackFlash === "boolean";
+    const blackFlash = freshDefeat
+      ? (hasBlackFlashOption ? options.blackFlash : rollBlackFlashHit(hitX, hitY, 1.02 + power * 0.55))
+      : false;
+    const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
+    const effectivePower = blackFlash && !blackFlashPowerApplied ? power * 1.45 : power;
+    spawnEnemyBlood(hitX, hitY, effectivePower + (blackFlash ? 0.22 : 0));
     if (freshDefeat) {
-      triggerInvincibleKillBonus(hitX, hitY, power);
-      registerNoDamageDefeat(hitX, hitY, power, rankStyle);
+      triggerInvincibleKillBonus(hitX, hitY, effectivePower);
+      registerNoDamageDefeat(hitX, hitY, effectivePower, rankStyle);
       if (enemy.bossArenaTarget && !enemy.bossArenaCounted) {
         enemy.bossArenaCounted = true;
         registerBossArenaTargetDestroyed("enemy", hitX, hitY);
       }
     }
     enemy.kicked = true;
-    enemy.vx = dir * (4.3 + power * 1.55);
-    enemy.vy = -(3.6 + power * 1.05);
+    enemy.vx = dir * (4.3 + effectivePower * 1.55);
+    enemy.vy = -(3.6 + effectivePower * 1.05 + (blackFlash ? 0.16 : 0));
     enemy.onGround = false;
     enemy.kickDespawn = immediateRemove ? 0 : Math.max(1, flyLifetime);
     enemy.alive = true;
     if (immediateRemove) {
       enemy.alive = false;
     }
-    playEnemyDefeatSfx(power);
+    playEnemyDefeatSfx(effectivePower);
   }
 
   function triggerKickBurst(x, y, power = 1) {
@@ -4032,10 +4064,7 @@
     const tryBlackFlash = (x, y, power = 1) => {
       if (blackFlashRolled) return blackFlash;
       blackFlashRolled = true;
-      blackFlash = resolveBlackFlashAttempt();
-      if (blackFlash) {
-        triggerBlackFlashEffect(x, y, power);
-      }
+      blackFlash = rollBlackFlashHit(x, y, power);
       return blackFlash;
     };
     let gimmickBreaks = 0;
@@ -4058,6 +4087,8 @@
       kickEnemy(enemy, dir, (hitPower + 0.2) * criticalPowerMul, {
         immediateRemove: false,
         flyLifetime: 32 + Math.round(chargeRatio * 16),
+        blackFlash: bf,
+        blackFlashPowerApplied: true,
         rankStyle: strongWave
           ? "atk1_wave"
           : morningStarStrike
@@ -4271,12 +4302,13 @@
       if (!overlapsAny(boss) || boss.invuln > 0 || boss.hp <= 0) continue;
       hitX = boss.x + boss.w * 0.5;
       hitY = boss.y + boss.h * 0.42;
+      const bf = rollBlackFlashHit(hitX, hitY, 1.28 + chargeRatio * 1.36);
       const baseDamage = 2 + bossDamageBonus() + Math.floor(chargeRatio * 2.2);
-      const damage = Math.max(1, Math.round(baseDamage * crisisMul));
+      const damage = Math.max(1, Math.round(baseDamage * crisisMul * (bf ? 2 : 1)));
       boss.hp = Math.max(0, boss.hp - damage);
       boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
-      boss.vx += dir * (0.88 + chargeRatio * 0.46);
-      boss.vy = Math.min(boss.vy, -(2.2 + chargeRatio * 0.34));
+      boss.vx += dir * (0.88 + chargeRatio * 0.46 + (bf ? 0.28 : 0));
+      boss.vy = Math.min(boss.vy, -(2.2 + chargeRatio * 0.34 + (bf ? 0.24 : 0)));
       hits += 1;
       handleBossHpZero();
     }
@@ -4376,10 +4408,7 @@
     const tryBlackFlash = (x, y, power = 1) => {
       if (blackFlashRolled) return blackFlash;
       blackFlashRolled = true;
-      blackFlash = resolveBlackFlashAttempt();
-      if (blackFlash) {
-        triggerBlackFlashEffect(x, y, power);
-      }
+      blackFlash = rollBlackFlashHit(x, y, power);
       return blackFlash;
     };
     let gimmickBreaks = 0;
@@ -4404,6 +4433,8 @@
       kickEnemy(enemy, dir, (hitPower + 0.15) * criticalPowerMul, {
         immediateRemove: false,
         flyLifetime: 24,
+        blackFlash: bf,
+        blackFlashPowerApplied: true,
         rankStyle: "atk1_hyakuretsu",
       });
       enemy.vx = dir * (4.0 + hitPower * 0.72 * criticalPowerMul);
@@ -4573,15 +4604,7 @@
       const beforeCharge = attackChargeTimer;
       const chargeMul = battleRankChargeMultiplier();
       attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt * chargeMul);
-      if (attackChargeTimer >= ATTACK_CHARGE_MAX - 0.01) {
-        attackMaxHoldTimer += dt;
-        if (attackMaxHoldTimer >= HYAKURETSU_HOLD_AFTER_MAX) {
-          startHyakuretsuMode();
-          return;
-        }
-      } else {
-        attackMaxHoldTimer = 0;
-      }
+      attackMaxHoldTimer = 0;
       if (
         !attackChargeReadyPlayed &&
         attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN &&
@@ -4654,13 +4677,14 @@
         for (const boss of getBossEntities()) {
           if (boss.hp <= 0 || boss.invuln > 0 || !overlap(wave, boss)) continue;
           const dir = wave.vx >= 0 ? 1 : -1;
-          const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul));
-          boss.hp = Math.max(0, boss.hp - bossDamage);
-          boss.invuln = bossDamageBonus() > 0 ? 9 : 13;
-          boss.vx += dir * (0.62 + (wave.power || 0) * 0.28);
-          boss.vy = Math.min(boss.vy, -(1.85 + (wave.power || 0) * 0.24));
           const hx = boss.x + boss.w * 0.5;
           const hy = boss.y + boss.h * 0.4;
+          const bf = rollBlackFlashHit(hx, hy, 1.14 + (wave.power || 0) * 1.08);
+          const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul * (bf ? 2 : 1)));
+          boss.hp = Math.max(0, boss.hp - bossDamage);
+          boss.invuln = bossDamageBonus() > 0 ? 9 : 13;
+          boss.vx += dir * (0.62 + (wave.power || 0) * 0.28 + (bf ? 0.24 : 0));
+          boss.vy = Math.min(boss.vy, -(1.85 + (wave.power || 0) * 0.24 + (bf ? 0.2 : 0)));
           triggerImpact(2.0 + (wave.power || 0), hx, hy, 3.0);
           spawnWaveBurst(hx, hy, 1.0 + (wave.power || 0));
           playKickSfx(1.52 + (wave.power || 0) * 0.28);
@@ -4750,13 +4774,17 @@
       if (!shard.dead && stage.boss.active) {
         for (const boss of getBossEntities()) {
           if (boss.hp <= 0 || boss.invuln > 0 || !overlap(shard, boss)) continue;
-          const damage = Math.max(1, Math.round((1 + bossDamageBonus() + shard.power * 0.42) * pinchAttackMultiplier()));
-          boss.hp = Math.max(0, boss.hp - damage);
-          boss.invuln = bossDamageBonus() > 0 ? 8 : 11;
-          boss.vx += (shard.vx >= 0 ? 1 : -1) * (0.34 + shard.power * 0.2);
-          boss.vy = Math.min(boss.vy, -(1.55 + shard.power * 0.18));
           const hx = boss.x + boss.w * 0.5;
           const hy = boss.y + boss.h * 0.45;
+          const bf = rollBlackFlashHit(hx, hy, 1.18 + shard.power * 0.94);
+          const damage = Math.max(
+            1,
+            Math.round((1 + bossDamageBonus() + shard.power * 0.42) * pinchAttackMultiplier() * (bf ? 2 : 1))
+          );
+          boss.hp = Math.max(0, boss.hp - damage);
+          boss.invuln = bossDamageBonus() > 0 ? 8 : 11;
+          boss.vx += (shard.vx >= 0 ? 1 : -1) * (0.34 + shard.power * 0.2 + (bf ? 0.22 : 0));
+          boss.vy = Math.min(boss.vy, -(1.55 + shard.power * 0.18 + (bf ? 0.2 : 0)));
           triggerImpact(1.5 + shard.power * 0.34, hx, hy, 2.3 + shard.power * 0.4);
           handleBossHpZero();
           shard.dead = true;
@@ -4926,17 +4954,18 @@
       if (stompable) {
         const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
         if (b.invuln <= 0 && b.hp > 0) {
-          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier()));
+          const hitX = b.x + b.w * 0.5;
+          const hitY = b.y + b.h * 0.25;
+          const bf = rollBlackFlashHit(hitX, hitY, 1.28 + (kickCombo > 1 ? 0.24 : 0));
+          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier() * (bf ? 2 : 1)));
           b.hp = Math.max(0, b.hp - damage);
           b.invuln = bossDamageBonus() > 0 ? 13 : 20;
-          b.vx += dir * 0.72;
-          b.vy = Math.min(b.vy, -2.2);
+          b.vx += dir * (0.72 + (bf ? 0.28 : 0));
+          b.vy = Math.min(b.vy, -(2.2 + (bf ? 0.22 : 0)));
           player.vy = -6.4;
           player.onGround = false;
           stompChainGuardTimer = STOMP_CHAIN_GUARD_FRAMES;
           hitStopTimer = Math.max(hitStopTimer, 4.2);
-          const hitX = b.x + b.w * 0.5;
-          const hitY = b.y + b.h * 0.25;
           triggerKickBurst(hitX, hitY, 2.9);
           triggerImpact(3.0, hitX, hitY, 4.6);
           spawnHitSparks(hitX, hitY, "#fff2bc", "#ffb26a");
@@ -6142,6 +6171,7 @@
     kickFlashPower = Math.max(0, kickFlashPower - dt * 0.24);
     blackFlashTimer = Math.max(0, blackFlashTimer - dt);
     blackFlashPower = Math.max(0, blackFlashPower - dt * 0.18);
+    blackFlashChanceHudTimer = Math.max(0, blackFlashChanceHudTimer - dt);
     battleRankFlashTimer = Math.max(0, battleRankFlashTimer - dt);
     battleRankBreakFlashTimer = Math.max(0, battleRankBreakFlashTimer - dt);
     stompChainGuardTimer = Math.max(0, stompChainGuardTimer - dt);
@@ -9252,8 +9282,8 @@
     ctx.fillStyle = "#f5ebf1";
     ctx.font = "10px monospace";
     ctx.fillText("彼氏救出アクション / 都会ステージ", 52, 126);
-    ctx.fillText("ピンチでBGM加速 & 攻撃力アップ", 54, 138);
-    ctx.fillText("ごく稀に黒閃(クリティカル2倍) 1/16→1/4→1/2→1/1.5", 34, 150);
+    ctx.fillText("ピンチで攻撃力アップ", 92, 138);
+    ctx.fillText("黒閃(2倍): 1/16→1/4→1/2→1/1.5 + ランク微上昇", 26, 150);
 
     const blink = Math.floor(t / 24) % 2 === 0;
     if (blink) {
@@ -9873,6 +9903,22 @@
     ctx.fillStyle = "rgba(235, 245, 255, 0.9)";
     ctx.font = "8px monospace";
     ctx.fillText(`STAGE ${currentStageNumber}`, W - 56, 6);
+
+    if (blackFlashChanceHudTimer > 0) {
+      const alpha = clamp(blackFlashChanceHudTimer / 150, 0, 1);
+      const text = blackFlashChanceHudText || formatBlackFlashChanceText(blackFlashChanceWithRank());
+      const textW = Math.ceil(ctx.measureText(text).width);
+      const padX = 3;
+      const boxW = textW + padX * 2 + 1;
+      const boxX = W - boxW - 3;
+      const boxY = invincibleTimer > 0 ? 3 : 12;
+      ctx.fillStyle = `rgba(20, 12, 18, ${0.5 + alpha * 0.28})`;
+      ctx.fillRect(boxX, boxY, boxW, 8);
+      ctx.fillStyle = `rgba(255, 96, 126, ${0.76 + alpha * 0.22})`;
+      ctx.fillRect(boxX, boxY + 7, Math.max(1, Math.floor((boxW - 1) * alpha)), 1);
+      ctx.fillStyle = `rgba(255, 236, 242, ${0.72 + alpha * 0.28})`;
+      ctx.fillText(text, boxX + padX, boxY + 1);
+    }
 
     const rank = currentBattleRank();
     const rankProgress = battleRankProgressRatio();
