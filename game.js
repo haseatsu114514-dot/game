@@ -221,6 +221,8 @@
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BLACK_FLASH_ENEMY_SLOW_SCALE = 0.84;
   const BLACK_FLASH_HIGHMODE_ENEMY_SLOW_SCALE = 0.92;
+  const MORNINGSTAR_TIP_BLACKFLASH_DOUBLE_HP_RATIO = 0.49;
+  const MORNINGSTAR_TIP_BLACKFLASH_CHANCE_MUL = 2;
   const BOSS_HIT_INVULN_FRAMES = 60;
   const BLACK_FLASH_RESULT_DURATION = 120;
   const POLE_BREAK_MIN_RANK_INDEX = 3;
@@ -475,8 +477,12 @@
     return triggered;
   }
 
-  function rollBlackFlashHit(x, y, power = 1) {
-    const chance = blackFlashChanceWithRank();
+  function rollBlackFlashHit(x, y, power = 1, chanceMul = 1) {
+    const chance = clamp(
+      blackFlashChanceWithRank() * clamp(chanceMul, 0.25, 3),
+      0.01,
+      0.98
+    );
     const triggered = resolveBlackFlashAttempt(chance);
     const highMode = isBlackFlashHighMode();
     blackFlashChanceHudText = formatBlackFlashChanceText(blackFlashChanceWithRank());
@@ -4867,7 +4873,7 @@
     const comboYOffset = comboType === "kick" ? 5 : comboType === "upper" ? 1 : 2;
     const comboBaseY = comboType === "kick" ? 11 : comboType === "upper" ? 7 : 6;
     const strikeYOffset = strongWave ? 0 : morningStarStrike ? 0 : comboPunch ? comboYOffset : 2;
-    const strikeBaseY = morningStarStrike ? 10 : comboPunch ? comboBaseY : strongWave ? 4 : 6;
+    const strikeBaseY = morningStarStrike ? 12 : comboPunch ? comboBaseY : strongWave ? 4 : 6;
     const comboHitH = comboType === "kick" ? 10 + Math.floor(chargeRatio * 2) : comboType === "upper" ? 13 + Math.floor(chargeRatio * 2) : 10 + Math.floor(chargeRatio * 2);
     const comboReachBonus = comboType === "kick" ? 3 : comboType === "upper" ? 1 : 0;
     const comboPowerBonus = comboType === "kick" ? 0.16 : comboType === "upper" ? 0.22 : comboType === "punch" ? 0.08 : 0;
@@ -4943,7 +4949,7 @@
       };
       hitBox = {
         x: dir > 0 ? player.x + player.w - 1 : player.x - reach + 1,
-        y: player.y + 10,
+        y: player.y + 12,
         w: reach,
         h: 12 + Math.floor(chargeRatio * 3) + rankHitHBonus,
       };
@@ -5032,10 +5038,10 @@
     ) * crisisMul * rankPowerMul;
     let blackFlash = false;
     let blackFlashRolled = false;
-    const tryBlackFlash = (x, y, power = 1) => {
+    const tryBlackFlash = (x, y, power = 1, chanceMul = 1) => {
       if (blackFlashRolled) return blackFlash;
       blackFlashRolled = true;
-      blackFlash = rollBlackFlashHit(x, y, power);
+      blackFlash = rollBlackFlashHit(x, y, power, chanceMul);
       return blackFlash;
     };
     let gimmickBreaks = 0;
@@ -5054,12 +5060,17 @@
       const enemyCenterX = enemy.x + enemy.w * 0.5;
       const enemyCenterY = enemy.y + enemy.h * 0.5;
       const tipHit = isMorningStarTipHit(enemy);
+      const enemyHpRatio = clamp((enemy.hp || 0) / Math.max(1, enemy.maxHp || 1), 0, 1);
+      const tipChanceMul = morningStarStrike && tipHit && enemyHpRatio <= MORNINGSTAR_TIP_BLACKFLASH_DOUBLE_HP_RATIO
+        ? MORNINGSTAR_TIP_BLACKFLASH_CHANCE_MUL
+        : 1;
       hitX = enemy.x + enemy.w * 0.5;
       hitY = enemy.y + enemy.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.42 : 0.42);
       const bf = tryBlackFlash(
         hitX,
         hitY,
-        1.15 + chargeRatio * 1.4 + comboStage * 0.28 + (morningStarSpin ? 0.24 : 0) + (tipHit ? 0.12 : 0)
+        1.15 + chargeRatio * 1.4 + comboStage * 0.28 + (morningStarSpin ? 0.24 : 0) + (tipHit ? 0.12 : 0),
+        tipChanceMul
       );
       const criticalPowerMul = bf ? BLACK_FLASH_DAMAGE_MUL : 1;
       const tipDamageMul = tipHit ? 1.24 : 1;
@@ -5130,9 +5141,18 @@
       if (!overlapsAny(boss) || boss.invuln > 0 || boss.hp <= 0) continue;
       const bossCenterX = boss.x + boss.w * 0.5;
       const tipHit = isMorningStarTipHit(boss);
+      const bossHpRatio = clamp((boss.hp || 0) / Math.max(1, boss.maxHp || 1), 0, 1);
+      const tipChanceMul = morningStarStrike && tipHit && bossHpRatio <= MORNINGSTAR_TIP_BLACKFLASH_DOUBLE_HP_RATIO
+        ? MORNINGSTAR_TIP_BLACKFLASH_CHANCE_MUL
+        : 1;
       hitX = bossCenterX;
       hitY = boss.y + boss.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.42 : 0.45);
-      const bf = tryBlackFlash(hitX, hitY, 1.3 + chargeRatio * 1.6 + comboStage * 0.35 + (tipHit ? 0.14 : 0));
+      const bf = tryBlackFlash(
+        hitX,
+        hitY,
+        1.3 + chargeRatio * 1.6 + comboStage * 0.35 + (tipHit ? 0.14 : 0),
+        tipChanceMul
+      );
       const bossDamageBase = 1 + bossDamageBonus();
       const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * rankPowerMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1) * (tipHit ? 1.24 : 1)));
       boss.hp = Math.max(0, boss.hp - bossDamage);
@@ -9621,7 +9641,7 @@
         : morningStarReady
           ? 20 + Math.floor(chargeRatio * 18) + (morningStarLongReady ? 10 : 0)
           : 12 + Math.floor(chargeRatio * 50);
-      const previewY = player.y + (morningStarReady ? 1 : waveReady ? 4 : 6);
+      const previewY = player.y + (morningStarReady ? 3 : waveReady ? 4 : 6);
       const previewH = morningStarReady
         ? 22 + Math.floor(chargeRatio * 2)
         : 13 + Math.floor(chargeRatio * 8);
@@ -9757,7 +9777,7 @@
       const spin = attackEffectPhase * 1.85 + swing * 1.9;
       const radius = 14 + visualPower * 15 + swing * 3;
       const anchorX = cx;
-      const anchorY = cy + 1;
+      const anchorY = cy + 3;
       const tipX = Math.round(anchorX + Math.cos(spin) * radius);
       const tipY = Math.round(anchorY + Math.sin(spin) * radius * 0.72);
 
@@ -9811,7 +9831,7 @@
     const baseY = isWave
       ? cy - 1
       : isMorningStar
-        ? cy + 3
+        ? cy + 5
       : isCombo
         ? (comboMove === "kick" ? cy + 4 : comboMove === "upper" ? cy + 1 : cy + 1)
         : cy + 1;
@@ -9901,7 +9921,7 @@
       const pulse = 0.5 + Math.sin((attackEffectPhase + visualPower * 3.2) * 0.9) * 0.5;
       const chainLen = Math.floor(10 + visualPower * 16 + swing * 3);
       const anchorX = dir > 0 ? frontX + 4 : frontX - 4;
-      const anchorY = baseY - 4;
+      const anchorY = baseY - 2;
       const maxVisualReach = Math.max(12, Math.floor(reach * 0.86));
       const travelX = Math.min(maxVisualReach, 4 + chainLen);
       const travelY = -10 + Math.floor(swing * 14);
