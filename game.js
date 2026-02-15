@@ -223,6 +223,7 @@
   const BLACK_FLASH_HIGHMODE_ENEMY_SLOW_SCALE = 0.92;
   const BOSS_HIT_INVULN_FRAMES = 60;
   const BLACK_FLASH_RESULT_DURATION = 120;
+  const POLE_BREAK_MIN_RANK_INDEX = 3;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
     { short: "Danger", long: "Danger", threshold: 0, chargeMul: 0.7, color: "#8db2d9" },
@@ -4477,6 +4478,8 @@
 
   function hitBreakableGimmicks(hitBox, power = 1) {
     let broken = 0;
+    let poleLockedTouched = false;
+    const canBreakPole = battleRankIndex >= POLE_BREAK_MIN_RANK_INDEX;
 
     for (const cannon of stage.cannons) {
       if (cannon.destroyed) continue;
@@ -4500,6 +4503,10 @@
       const trapTop = trap.y + trap.h - Math.max(2, Math.round(trap.h * Math.max(0.15, trap.raise || 0)));
       const trapHit = { x: trap.x, y: trapTop, w: trap.w, h: Math.max(2, trap.h) };
       if (!overlap(hitBox, trapHit)) continue;
+      if (!canBreakPole) {
+        poleLockedTouched = true;
+        continue;
+      }
       if (destroyPopSpike(trap, power)) {
         broken += 1;
       }
@@ -4516,6 +4523,9 @@
     if (broken > 0) {
       hudMessage = broken > 1 ? `ギミック破壊 x${broken}!` : "ギミック破壊!";
       hudTimer = Math.max(hudTimer, 34);
+    } else if (poleLockedTouched) {
+      hudMessage = "電撃ポールはSランク以上で破壊";
+      hudTimer = Math.max(hudTimer, 24);
     }
 
     return broken;
