@@ -10122,7 +10122,17 @@
     el.addEventListener("pointerleave", up);
   }
 
-  const burstButton = document.getElementById("btn-special");
+  let burstButton = document.getElementById("btn-special");
+  if (!burstButton) {
+    const clusterRight = document.querySelector(".cluster-right");
+    if (clusterRight) {
+      burstButton = document.createElement("button");
+      burstButton.id = "btn-special";
+      burstButton.className = "ctrl action special";
+      burstButton.textContent = "BURST";
+      clusterRight.appendChild(burstButton);
+    }
+  }
   function refreshBurstButtonUi() {
     if (!burstButton) return;
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;

@@ -264,3 +264,48 @@ body {
     font-size: 0.74rem;
   }
 }
+
+@media (max-height: 520px) {
+  body {
+    padding: 4px 6px 8px;
+  }
+
+  .game-shell {
+    gap: 6px;
+  }
+
+  .title-bar,
+  .help {
+    display: none;
+  }
+
+  .controls {
+    gap: 8px;
+    align-items: center;
+  }
+
+  .cluster {
+    gap: 8px;
+  }
+
+  .cluster-right {
+    width: min(100%, 420px);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .ctrl {
+    min-height: 52px;
+    border-radius: 12px;
+    font-size: 0.98rem;
+    min-width: 72px;
+  }
+
+  .ctrl.action {
+    min-width: 96px;
+  }
+
+  .ctrl.special {
+    grid-column: auto;
+  }
+}
