@@ -99,6 +99,7 @@
   let blackFlashPower = 0;
   let blackFlashX = 0;
   let blackFlashY = 0;
+  let blackFlashSlowTimer = 0;
   let battleRankDefeats = 0;
   let battleRankGauge = 0;
   let battleRankIndex = 0;
@@ -197,6 +198,8 @@
   const PINCH_BGM_RATE_MAX = 1.18;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [1 / 16, 1 / 4, 1 / 2, 1 / 1.5];
+  const BLACK_FLASH_SLOW_DURATION = 20;
+  const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
     { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
@@ -316,6 +319,7 @@
     blackFlashChain = 0;
     blackFlashTimer = 0;
     blackFlashPower = 0;
+    blackFlashSlowTimer = 0;
   }
 
   function updateBattleRankTier() {
@@ -1223,6 +1227,7 @@
     blackFlashPower = Math.max(blackFlashPower, 1.8 + p * 0.64);
     blackFlashX = x;
     blackFlashY = y;
+    blackFlashSlowTimer = Math.max(blackFlashSlowTimer, BLACK_FLASH_SLOW_DURATION + p * 2.4);
     triggerImpact(2.9 + p * 0.62, x, y, 4.4 + p * 0.72);
     spawnWaveBurst(x, y, 1.2 + p * 0.26);
     spawnWaveBurst(x, y, 0.9 + p * 0.2);
@@ -10711,8 +10716,19 @@
 
   let last = performance.now();
   function loop(now) {
-    const dt = Math.min(2.4, (now - last) / 16.6667);
+    const rawDt = Math.min(2.4, (now - last) / 16.6667);
     last = now;
+
+    let dt = rawDt;
+    const inCombat = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    if (inCombat && blackFlashSlowTimer > 0) {
+      const slowRatio = clamp(blackFlashSlowTimer / BLACK_FLASH_SLOW_DURATION, 0, 1);
+      const dtScale = 1 - slowRatio * (1 - BLACK_FLASH_SLOW_SCALE);
+      dt *= dtScale;
+      blackFlashSlowTimer = Math.max(0, blackFlashSlowTimer - rawDt);
+    } else if (blackFlashSlowTimer > 0) {
+      blackFlashSlowTimer = Math.max(0, blackFlashSlowTimer - rawDt);
+    }
 
     scheduleBGM();
     const actions = sampleActions();
