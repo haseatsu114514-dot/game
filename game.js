@@ -196,7 +196,7 @@
   const SE_GAIN_BOOST = 1.62;
   const PINCH_BGM_RATE_MAX = 1.18;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
-  const BLACK_FLASH_CHANCES = [1 / 32, 1 / 4, 1 / 2, 1 / 1.5];
+  const BLACK_FLASH_CHANCES = [1 / 16, 1 / 4, 1 / 2, 1 / 1.5];
   const BATTLE_RANK_DATA = [
     { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
     { short: "Badass", long: "Badass", threshold: 120, chargeMul: 1.1, color: "#79d9ff" },
@@ -1159,7 +1159,7 @@
     core.frequency.setValueAtTime(180 + p * 54, now);
     core.frequency.exponentialRampToValueAtTime(86 + p * 18, now + 0.12);
     coreGain.gain.setValueAtTime(0.0001, now);
-    coreGain.gain.exponentialRampToValueAtTime(seLevel(0.16 + p * 0.01), now + 0.004);
+    coreGain.gain.exponentialRampToValueAtTime(seLevel(0.18 + p * 0.014), now + 0.004);
     coreGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
     core.connect(coreGain);
     coreGain.connect(audioCtx.destination);
@@ -1172,12 +1172,25 @@
     crack.frequency.setValueAtTime(1380 + p * 110, now + 0.008);
     crack.frequency.exponentialRampToValueAtTime(420 + p * 40, now + 0.09);
     crackGain.gain.setValueAtTime(0.0001, now + 0.004);
-    crackGain.gain.exponentialRampToValueAtTime(seLevel(0.11), now + 0.014);
+    crackGain.gain.exponentialRampToValueAtTime(seLevel(0.13 + p * 0.006), now + 0.014);
     crackGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
     crack.connect(crackGain);
     crackGain.connect(audioCtx.destination);
     crack.start(now + 0.004);
     crack.stop(now + 0.12);
+
+    const slam = audioCtx.createOscillator();
+    const slamGain = audioCtx.createGain();
+    slam.type = "triangle";
+    slam.frequency.setValueAtTime(96 + p * 18, now);
+    slam.frequency.exponentialRampToValueAtTime(46 + p * 8, now + 0.13);
+    slamGain.gain.setValueAtTime(0.0001, now);
+    slamGain.gain.exponentialRampToValueAtTime(seLevel(0.12 + p * 0.01), now + 0.006);
+    slamGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    slam.connect(slamGain);
+    slamGain.connect(audioCtx.destination);
+    slam.start(now);
+    slam.stop(now + 0.18);
 
     if (bgmNoiseBuffer) {
       const src = audioCtx.createBufferSource();
@@ -1185,27 +1198,30 @@
       const ng = audioCtx.createGain();
       src.buffer = bgmNoiseBuffer;
       hp.type = "highpass";
-      hp.frequency.setValueAtTime(1200 + p * 120, now);
+      hp.frequency.setValueAtTime(1050 + p * 140, now);
       ng.gain.setValueAtTime(0.0001, now);
-      ng.gain.exponentialRampToValueAtTime(seLevel(0.1), now + 0.002);
-      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+      ng.gain.exponentialRampToValueAtTime(seLevel(0.12 + p * 0.008), now + 0.002);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
       src.connect(hp);
       hp.connect(ng);
       ng.connect(audioCtx.destination);
       src.start(now);
-      src.stop(now + 0.08);
+      src.stop(now + 0.1);
     }
   }
 
   function triggerBlackFlashEffect(x, y, power = 1) {
     const p = clamp(power, 0.8, 4.8);
-    blackFlashTimer = Math.max(blackFlashTimer, 20 + p * 2.2);
-    blackFlashPower = Math.max(blackFlashPower, 1.2 + p * 0.46);
+    blackFlashTimer = Math.max(blackFlashTimer, 28 + p * 3.4);
+    blackFlashPower = Math.max(blackFlashPower, 1.8 + p * 0.64);
     blackFlashX = x;
     blackFlashY = y;
-    triggerImpact(2.2 + p * 0.48, x, y, 3.4 + p * 0.55);
+    triggerImpact(2.9 + p * 0.62, x, y, 4.4 + p * 0.72);
+    spawnWaveBurst(x, y, 1.2 + p * 0.26);
+    spawnWaveBurst(x, y, 0.9 + p * 0.2);
     spawnHitSparks(x, y, "#ffc0c0", "#ff4747");
     spawnHitSparks(x, y, "#2a0b12", "#77111e");
+    spawnHitSparks(x, y, "#ffffff", "#ff6a75");
     playBlackFlashSfx(p);
     hudMessage = "黒閃! CRITICAL x2";
     hudTimer = Math.max(hudTimer, 34);
@@ -9191,7 +9207,7 @@
     ctx.font = "10px monospace";
     ctx.fillText("彼氏救出アクション / 都会ステージ", 52, 126);
     ctx.fillText("ピンチでBGM加速 & 攻撃力アップ", 54, 138);
-    ctx.fillText("ごく稀に黒閃(クリティカル2倍) 1/32→1/4→1/2→1/1.5", 34, 150);
+    ctx.fillText("ごく稀に黒閃(クリティカル2倍) 1/16→1/4→1/2→1/1.5", 34, 150);
 
     const blink = Math.floor(t / 24) % 2 === 0;
     if (blink) {
@@ -10209,42 +10225,61 @@
   function drawBlackFlashOverlay() {
     if (blackFlashTimer <= 0 || blackFlashPower <= 0.01) return;
 
-    const ratio = clamp(blackFlashTimer / 24, 0, 1);
+    const ratio = clamp(blackFlashTimer / 38, 0, 1);
     const power = clamp(blackFlashPower, 0, 6);
     const sx = Math.floor(blackFlashX - cameraX);
     const sy = Math.floor(blackFlashY);
     const pulse = 0.5 + Math.sin((player.anim + blackFlashTimer) * 0.32) * 0.5;
 
-    ctx.fillStyle = `rgba(0, 0, 0, ${0.22 * ratio * (0.8 + power * 0.2)})`;
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.3 * ratio * (0.9 + power * 0.24)})`;
     ctx.fillRect(0, 24, W, H - 24);
-    ctx.fillStyle = `rgba(190, 12, 30, ${0.12 * ratio * (0.8 + pulse * 0.7)})`;
+    ctx.fillStyle = `rgba(190, 12, 30, ${0.18 * ratio * (0.9 + pulse * 0.8)})`;
+    ctx.fillRect(0, 24, W, H - 24);
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.06 * ratio * (0.7 + pulse * 0.7)})`;
     ctx.fillRect(0, 24, W, H - 24);
 
-    for (let i = 0; i < 12; i += 1) {
-      const ang = (Math.PI * 2 * i) / 12 + player.anim * 0.05;
-      const len = 14 + power * 9 + (i % 2 === 0 ? 6 : 0);
+    for (let i = 0; i < 18; i += 1) {
+      const ang = (Math.PI * 2 * i) / 18 + player.anim * 0.06;
+      const len = 18 + power * 11 + (i % 2 === 0 ? 8 : 0);
       const ex = Math.floor(sx + Math.cos(ang) * len);
       const ey = Math.floor(sy + Math.sin(ang) * len * 0.72);
-      ctx.strokeStyle = `rgba(255, 44, 66, ${0.46 * ratio})`;
+      ctx.strokeStyle = `rgba(255, 44, 66, ${0.58 * ratio})`;
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
       ctx.stroke();
-      ctx.strokeStyle = `rgba(16, 8, 10, ${0.4 * ratio})`;
+      ctx.strokeStyle = `rgba(16, 8, 10, ${0.48 * ratio})`;
       ctx.beginPath();
       ctx.moveTo(sx + 1, sy + 1);
       ctx.lineTo(ex + 1, ey + 1);
       ctx.stroke();
     }
 
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.24 * ratio})`;
-    ctx.fillRect(sx - 2, sy - 2, 4, 4);
-    ctx.fillStyle = `rgba(255, 30, 50, ${0.68 * ratio})`;
-    ctx.fillRect(sx - 8, sy - 1, 16, 2);
-    ctx.fillRect(sx - 1, sy - 8, 2, 16);
-    ctx.fillStyle = `rgba(10, 6, 8, ${0.56 * ratio})`;
-    ctx.fillRect(sx - 6, sy, 12, 1);
-    ctx.fillRect(sx, sy - 6, 1, 12);
+    const ringR = Math.floor(9 + power * 7 + pulse * 3);
+    ctx.strokeStyle = `rgba(255, 164, 184, ${0.44 * ratio})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(255, 54, 74, ${0.62 * ratio})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, Math.max(4, ringR - 6), 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.34 * ratio})`;
+    ctx.fillRect(sx - 3, sy - 3, 6, 6);
+    ctx.fillStyle = `rgba(255, 30, 50, ${0.78 * ratio})`;
+    ctx.fillRect(sx - 14, sy - 2, 28, 4);
+    ctx.fillRect(sx - 2, sy - 14, 4, 28);
+    ctx.fillStyle = `rgba(10, 6, 8, ${0.6 * ratio})`;
+    ctx.fillRect(sx - 11, sy - 1, 22, 2);
+    ctx.fillRect(sx - 1, sy - 11, 2, 22);
+
+    const slashW = Math.floor(22 + power * 8);
+    const slashY = sy + Math.floor(Math.sin((player.anim + blackFlashTimer) * 0.35) * 2);
+    ctx.fillStyle = `rgba(255, 90, 120, ${0.28 * ratio})`;
+    ctx.fillRect(sx - slashW, slashY - 1, slashW * 2, 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.22 * ratio})`;
+    ctx.fillRect(sx - slashW + 2, slashY, slashW * 2 - 4, 1);
   }
 
   function drawKickBurstOverlay() {
