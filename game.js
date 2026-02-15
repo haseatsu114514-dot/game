@@ -263,9 +263,10 @@
   const PRE_BOSS_MOVIE_START_AT = 230;
   const GOD_PHASE_CUTSCENE_DURATION = 210;
   const GOD_PHASE_CUTSCENE_SKIP_MIN = 24;
-  const GOD_BOSS_PHASE1_HP = 15;
-  const GOD_BOSS_PHASE2_HP = 19;
-  const GOD_BOSS_SHOT_DENSITY_MUL = 1.18;
+  const PEACOCK_BOSS_HP = 11;
+  const GOD_BOSS_PHASE1_HP = 18;
+  const GOD_BOSS_PHASE2_HP = 24;
+  const GOD_BOSS_SHOT_DENSITY_MUL = 1.28;
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
   const CANNON_EXTRA_COOLDOWN = 26;
@@ -467,13 +468,17 @@
     return triggered;
   }
 
-  function resetBlackFlashState() {
-    blackFlashChain = 0;
+  function resetBlackFlashState(keepChain = false) {
+    if (!keepChain) {
+      blackFlashChain = 0;
+    }
     blackFlashTimer = 0;
     blackFlashPower = 0;
     blackFlashSlowTimer = 0;
     blackFlashChanceHudTimer = 0;
-    blackFlashChanceHudText = "";
+    blackFlashChanceHudText = keepChain && blackFlashChain > 0
+      ? formatBlackFlashChanceText(blackFlashChanceWithRank())
+      : "";
   }
 
   function updateBattleRankTier() {
@@ -3976,6 +3981,7 @@
   function startGameplay(resetDeaths, options = {}) {
     const keepLives = options.keepLives === true;
     const keepDeaths = options.keepDeaths === true;
+    const keepBlackFlash = options.keepBlackFlash === true;
     const previousLives = playerLives;
     const previousDeaths = deaths;
     if (resetDeaths && !keepDeaths) {
@@ -4035,7 +4041,7 @@
     attackEffectPhase = 0;
     attackEffectMode = "none";
     attackEffectPower = 0;
-    resetBlackFlashState();
+    resetBlackFlashState(keepBlackFlash);
     stage.playerWaves = [];
     stage.hammerShards = [];
     stage.burstMeteors = [];
@@ -6269,7 +6275,7 @@
 
     stage.boss.started = true;
     stage.boss.active = true;
-    stage.boss.maxHp = bossKind === "peacock" ? 9 : GOD_BOSS_PHASE1_HP;
+    stage.boss.maxHp = bossKind === "peacock" ? PEACOCK_BOSS_HP : GOD_BOSS_PHASE1_HP;
     stage.boss.hp = stage.boss.maxHp;
     stage.boss.x = bossKind === "peacock"
       ? BOSS_ARENA.minX + Math.floor((BOSS_ARENA.maxX - BOSS_ARENA.minX) * 0.48)
@@ -6280,7 +6286,7 @@
     stage.boss.dir = -1;
     stage.boss.mode = "intro";
     stage.boss.modeTimer = bossKind === "peacock" ? 34 : 42;
-    stage.boss.shotCooldown = bossKind === "peacock" ? 31 : 28;
+    stage.boss.shotCooldown = bossKind === "peacock" ? 26 : 24;
     stage.boss.attackCycle = 0;
     stage.boss.spiralAngle = 0;
     stage.boss.invuln = bossKind === "peacock" ? 20 : 24;
@@ -6318,7 +6324,7 @@
       stage.boss.attackCycle = 0;
       stage.boss.mode = "intro";
       stage.boss.modeTimer = 40;
-      stage.boss.shotCooldown = 26;
+      stage.boss.shotCooldown = 21;
       const twin = {
         kind: "peacock",
         active: true,
@@ -6334,7 +6340,7 @@
         maxHp: stage.boss.maxHp,
         mode: "intro",
         modeTimer: 52,
-        shotCooldown: 22,
+        shotCooldown: 18,
         attackCycle: 1,
         spiralAngle: 0,
         invuln: 22,
@@ -6371,7 +6377,7 @@
     attackEffectMode = "none";
     attackEffectPhase = 0;
     attackEffectPower = 0;
-    resetBlackFlashState();
+    resetBlackFlashState(true);
     stopInvincibleMusic();
 
     godPhaseCutsceneTimer = 0;
@@ -6486,8 +6492,8 @@
   function updatePeacockBossEntity(boss, dt, solids) {
     const rage = boss.hp <= Math.ceil(boss.maxHp * 0.5);
     const arenaControl = bossArenaControlRatio();
-    const shotDrain = 1 - arenaControl * 0.42;
-    const moveSlow = 1 - arenaControl * 0.18;
+    const shotDrain = 1.1 - arenaControl * 0.38;
+    const moveSlow = 1 - arenaControl * 0.12;
     boss.invuln = Math.max(0, boss.invuln - dt);
     boss.modeTimer -= dt;
     boss.shotCooldown -= dt * shotDrain;
@@ -6499,8 +6505,8 @@
         boss.modeTimer = rage ? 34 : 44;
       }
     } else if (boss.mode === "idle") {
-      boss.vx += boss.dir * (rage ? 0.23 : 0.18) * moveSlow * dt;
-      boss.vx = clamp(boss.vx, -(rage ? 1.22 : 1.02) * moveSlow, (rage ? 1.22 : 1.02) * moveSlow);
+      boss.vx += boss.dir * (rage ? 0.25 : 0.2) * moveSlow * dt;
+      boss.vx = clamp(boss.vx, -(rage ? 1.34 : 1.1) * moveSlow, (rage ? 1.34 : 1.1) * moveSlow);
 
       if (boss.x < BOSS_ARENA.minX + 16) {
         boss.x = BOSS_ARENA.minX + 16;
@@ -6518,8 +6524,8 @@
           boss.vx *= 0.46;
         } else if (pattern === 1) {
           boss.mode = "shoot";
-          boss.modeTimer = rage ? 66 : 56;
-          boss.shotCooldown = rage ? 11 : 14;
+          boss.modeTimer = rage ? 74 : 62;
+          boss.shotCooldown = rage ? 9 : 12;
           boss.vx *= 0.52;
         } else {
           boss.mode = "leap_prep";
@@ -6533,7 +6539,7 @@
       if (boss.modeTimer <= 0) {
         boss.mode = "dash";
         boss.modeTimer = rage ? 28 : 22;
-        boss.vx = boss.dir * (2.15 + (rage ? 0.36 : 0)) * (1 - arenaControl * 0.22);
+        boss.vx = boss.dir * (2.32 + (rage ? 0.42 : 0)) * (1 - arenaControl * 0.2);
       }
     } else if (boss.mode === "dash") {
       if (boss.x <= BOSS_ARENA.minX + 3) {
@@ -6554,7 +6560,7 @@
       boss.vx *= Math.pow(rage ? 0.78 : 0.84, dt);
       if (boss.shotCooldown <= 0) {
         emitPeacockBossShots(boss, rage);
-        boss.shotCooldown = (rage ? 14 : 18) * (1 + arenaControl * 0.35);
+        boss.shotCooldown = (rage ? 12 : 16) * (1 + arenaControl * 0.3);
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -7666,7 +7672,7 @@
     stopInvincibleMusic();
     stopBossMusic(true);
     stopStageMusic(true);
-    startGameplay(false, { keepLives: true, keepDeaths: true });
+    startGameplay(false, { keepLives: true, keepDeaths: true, keepBlackFlash: true });
   }
 
   function updateDead(dt, actions) {
