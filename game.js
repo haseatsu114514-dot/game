@@ -8302,53 +8302,81 @@
   }
 
   function drawSkyGradient() {
+    const stageId = stage && Number.isFinite(stage.id) ? stage.id : 1;
     const deluxeCity = stage && stage.theme === "city_deluxe";
+    const stage2City = deluxeCity && stageId === 2;
+    const stage3City = deluxeCity && stageId >= 3;
     if (deluxeCity) {
+      const skyTop = stage3City ? "#03040d" : stage2City ? "#020813" : "#02040a";
+      const skyMidA = stage3City ? "#1b1336" : stage2City ? "#10243f" : "#0d1630";
+      const skyMidB = stage3City ? "#352661" : stage2City ? "#155678" : "#1c3560";
+      const skyMidC = stage3City ? "#58457d" : stage2City ? "#2f6f96" : "#2f5a87";
+      const skyBottom = stage3City ? "#8164a1" : stage2City ? "#5c9fbc" : "#4f7aa3";
       const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, "#02040a");
-      g.addColorStop(0.25, "#0d1630");
-      g.addColorStop(0.52, "#1c3560");
-      g.addColorStop(0.78, "#2f5a87");
-      g.addColorStop(1, "#4f7aa3");
+      g.addColorStop(0, skyTop);
+      g.addColorStop(0.25, skyMidA);
+      g.addColorStop(0.52, skyMidB);
+      g.addColorStop(0.78, skyMidC);
+      g.addColorStop(1, skyBottom);
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
 
-      const moonGlow = ctx.createRadialGradient(250, 24, 2, 250, 24, 34);
-      moonGlow.addColorStop(0, "rgba(255,240,206,0.98)");
-      moonGlow.addColorStop(0.2, "rgba(255,223,166,0.62)");
-      moonGlow.addColorStop(0.5, "rgba(255,168,133,0.24)");
-      moonGlow.addColorStop(1, "rgba(255,210,150,0)");
+      const moonX = stage3City ? 238 : stage2City ? 266 : 250;
+      const moonGlow = ctx.createRadialGradient(moonX, 24, 2, moonX, 24, 34);
+      moonGlow.addColorStop(0, stage3City ? "rgba(255,228,244,0.98)" : stage2City ? "rgba(222,255,248,0.98)" : "rgba(255,240,206,0.98)");
+      moonGlow.addColorStop(0.2, stage3City ? "rgba(232,188,255,0.58)" : stage2City ? "rgba(172,241,255,0.58)" : "rgba(255,223,166,0.62)");
+      moonGlow.addColorStop(0.5, stage3City ? "rgba(173,126,228,0.24)" : stage2City ? "rgba(102,196,228,0.22)" : "rgba(255,168,133,0.24)");
+      moonGlow.addColorStop(1, stage3City ? "rgba(176,140,255,0)" : stage2City ? "rgba(120,218,244,0)" : "rgba(255,210,150,0)");
       ctx.fillStyle = moonGlow;
       ctx.fillRect(210, 0, 86, 76);
 
       const skylineGlow = ctx.createLinearGradient(0, 58, 0, 146);
       skylineGlow.addColorStop(0, "rgba(255, 142, 176, 0)");
-      skylineGlow.addColorStop(0.42, "rgba(255, 142, 176, 0.12)");
-      skylineGlow.addColorStop(1, "rgba(126, 219, 255, 0.2)");
+      skylineGlow.addColorStop(
+        0.42,
+        stage3City ? "rgba(205, 146, 255, 0.13)" : stage2City ? "rgba(124, 255, 232, 0.11)" : "rgba(255, 142, 176, 0.12)"
+      );
+      skylineGlow.addColorStop(
+        1,
+        stage3City ? "rgba(169, 162, 255, 0.2)" : stage2City ? "rgba(116, 237, 255, 0.22)" : "rgba(126, 219, 255, 0.2)"
+      );
       ctx.fillStyle = skylineGlow;
       ctx.fillRect(0, 58, W, 92);
 
-      ctx.fillStyle = "rgba(255, 126, 177, 0.08)";
+      ctx.fillStyle = stage3City ? "rgba(224, 136, 255, 0.08)" : stage2City ? "rgba(112, 255, 224, 0.08)" : "rgba(255, 126, 177, 0.08)";
       ctx.fillRect(0, 70, W, 20);
-      ctx.fillStyle = "rgba(120, 214, 255, 0.12)";
+      ctx.fillStyle = stage3City ? "rgba(154, 194, 255, 0.12)" : stage2City ? "rgba(102, 232, 255, 0.12)" : "rgba(120, 214, 255, 0.12)";
       ctx.fillRect(0, 88, W, 26);
 
       const cloudShift = -Math.floor(cameraX * 0.05 + player.anim * 0.45) % (W + 72);
       for (let i = -1; i < 6; i += 1) {
         const cx = i * 72 + cloudShift;
         const cy = 42 + ((i * 11) % 16);
-        ctx.fillStyle = "rgba(188, 218, 255, 0.07)";
+        ctx.fillStyle = stage3City ? "rgba(202, 196, 255, 0.07)" : stage2City ? "rgba(156, 228, 255, 0.08)" : "rgba(188, 218, 255, 0.07)";
         ctx.fillRect(cx, cy, 38, 3);
-        ctx.fillStyle = "rgba(255, 196, 214, 0.05)";
+        ctx.fillStyle = stage3City ? "rgba(255, 188, 235, 0.05)" : stage2City ? "rgba(186, 255, 231, 0.045)" : "rgba(255, 196, 214, 0.05)";
         ctx.fillRect(cx + 8, cy + 3, 24, 2);
       }
 
+      if (stage3City) {
+        const aurora = ctx.createLinearGradient(0, 30, 0, 92);
+        aurora.addColorStop(0, "rgba(208, 148, 255, 0)");
+        aurora.addColorStop(0.44, "rgba(208, 148, 255, 0.08)");
+        aurora.addColorStop(1, "rgba(122, 188, 255, 0)");
+        ctx.fillStyle = aurora;
+        ctx.fillRect(0, 30, W, 62);
+      }
+
       const twinkleSeed = Math.floor(player.anim * 0.7);
-      for (let i = 0; i < 46; i += 1) {
-        const sx = ((i * 23 + Math.floor(cameraX * 0.09)) % (W + 16)) - 8;
+      const twinkleCount = stage3City ? 54 : stage2City ? 42 : 46;
+      const twinkleParallax = stage3City ? 0.11 : stage2City ? 0.08 : 0.09;
+      const twinkleColor = stage3City ? "#ffe8ff" : stage2City ? "#e6feff" : "#f8fbff";
+      const twinkleDim = stage3City ? "rgba(218,200,255,0.74)" : stage2City ? "rgba(180,236,255,0.74)" : "rgba(188,213,255,0.76)";
+      for (let i = 0; i < twinkleCount; i += 1) {
+        const sx = ((i * 23 + Math.floor(cameraX * twinkleParallax)) % (W + 16)) - 8;
         const sy = 4 + ((i * 19) % 58);
         const blink = (twinkleSeed + i * 2) % 16 < 4;
-        ctx.fillStyle = blink ? "#f8fbff" : "rgba(188,213,255,0.76)";
+        ctx.fillStyle = blink ? twinkleColor : twinkleDim;
         ctx.fillRect(Math.floor(sx), sy, 1, 1);
         if (blink && i % 6 === 0) {
           ctx.fillRect(Math.floor(sx) - 1, sy, 1, 1);
@@ -8412,8 +8440,44 @@
   }
 
   function drawParallax() {
+    const stageId = stage && Number.isFinite(stage.id) ? stage.id : 1;
     const deluxeCity = stage && stage.theme === "city_deluxe";
+    const stage2City = deluxeCity && stageId === 2;
+    const stage3City = deluxeCity && stageId >= 3;
     if (deluxeCity) {
+      const farBody = stage3City ? "#1f183a" : stage2City ? "#123347" : "#14213a";
+      const farBodyHi = stage3City ? "#31275a" : stage2City ? "#1c4d67" : "#203459";
+      const farEdge = stage3City ? "#0f0d22" : stage2City ? "#0b2230" : "#0a1224";
+      const farWinLit = stage3City ? "#eaa9ff" : stage2City ? "#93f2ff" : "#8ce8ff";
+      const farWinDim = stage3City ? "#3a4b7b" : stage2City ? "#33607a" : "#2b456a";
+      const farWinWarm = stage3City ? "#ffd4c2" : stage2City ? "#ffe0a6" : "#ffd8a2";
+      const farWinCool = stage3City ? "#2d375f" : stage2City ? "#274c66" : "#253e5f";
+      const farRoof = stage3City ? "#65509b" : stage2City ? "#3e7ca2" : "#35608f";
+      const farRoofNeon = stage3City ? "#ff73d8" : stage2City ? "#4ff6db" : "#ff62ab";
+
+      const midBody = stage3City ? "#2a2250" : stage2City ? "#1d425e" : "#1f3254";
+      const midTop = stage3City ? "#4a3a7e" : stage2City ? "#32779a" : "#33567f";
+      const midEdge = stage3City ? "#1a1735" : stage2City ? "#13374d" : "#142844";
+      const midWinA = stage3City ? "#f3b9ff" : stage2City ? "#87f6ff" : "#7ceeff";
+      const midWinB = stage3City ? "#425f97" : stage2City ? "#366b8d" : "#31557f";
+      const midWinWarm = stage3City ? "#ffc9d4" : stage2City ? "#ffd396" : "#ffcb83";
+      const midWinCool = stage3City ? "#364c77" : stage2City ? "#315975" : "#2d4b72";
+      const midBand = stage3City ? "rgba(205, 154, 255, 0.16)" : stage2City ? "rgba(120, 245, 230, 0.16)" : "rgba(121, 237, 255, 0.16)";
+
+      const cityGlowA = stage3City ? "rgba(192, 160, 246, 0.16)" : stage2City ? "rgba(122, 206, 238, 0.18)" : "rgba(145, 188, 235, 0.16)";
+      const cityGlowB = stage3City ? "rgba(246, 134, 225, 0.1)" : stage2City ? "rgba(116, 255, 220, 0.1)" : "rgba(255, 132, 186, 0.1)";
+      const railBase = stage3City ? "#231e34" : stage2City ? "#182b34" : "#1d2431";
+      const railPost = stage3City ? "#433f60" : stage2City ? "#37515d" : "#2f394b";
+      const railHi = stage3City ? "#756f96" : stage2City ? "#77a7b6" : "#566076";
+      const signBody = stage3City ? "#241f3b" : stage2City ? "#163240" : "#1a2538";
+      const signBodyHi = stage3City ? "#3d325d" : stage2City ? "#265667" : "#2b3b59";
+      const signNeonA = stage3City ? "rgba(202, 156, 255, 0.54)" : stage2City ? "rgba(128, 255, 235, 0.52)" : "rgba(132, 240, 255, 0.52)";
+      const signNeonB = stage3City ? "rgba(255, 130, 205, 0.52)" : stage2City ? "rgba(255, 214, 142, 0.46)" : "rgba(255, 152, 198, 0.5)";
+      const signTextOn = stage3City ? "#ffe0ff" : stage2City ? "#eafff5" : "#fff0b8";
+      const signTextOff = stage3City ? "#b8a8d8" : stage2City ? "#9cc8c7" : "#9db0cf";
+      const trafficA = stage3City ? "rgba(255, 150, 228, 0.24)" : stage2City ? "rgba(255, 176, 118, 0.23)" : "rgba(255, 134, 94, 0.24)";
+      const trafficB = stage3City ? "rgba(152, 198, 255, 0.21)" : stage2City ? "rgba(114, 242, 255, 0.21)" : "rgba(124, 228, 255, 0.2)";
+
       const farShift = -Math.floor(cameraX * 0.1) % 168;
       for (let block = -2; block < 6; block += 1) {
         const base = block * 168 + farShift;
@@ -8423,24 +8487,24 @@
           const bx = Math.floor(base + i * 14);
           const by = 124 - h;
 
-          ctx.fillStyle = "#14213a";
+          ctx.fillStyle = farBody;
           ctx.fillRect(bx, by, bw, h);
-          ctx.fillStyle = "#203459";
+          ctx.fillStyle = farBodyHi;
           ctx.fillRect(bx + 1, by + 1, bw - 2, h - 2);
-          ctx.fillStyle = "#0a1224";
+          ctx.fillStyle = farEdge;
           ctx.fillRect(bx + bw - 2, by + 1, 1, h - 2);
 
           for (let wy = by + 6; wy < 122; wy += 6) {
             const lit = (wy + i + block) % 3 !== 0;
-            ctx.fillStyle = lit ? "#8ce8ff" : "#2b456a";
+            ctx.fillStyle = lit ? farWinLit : farWinDim;
             ctx.fillRect(bx + 2, wy, 2, 1);
-            ctx.fillStyle = lit && i % 2 === 0 ? "#ffd8a2" : "#253e5f";
+            ctx.fillStyle = lit && i % 2 === 0 ? farWinWarm : farWinCool;
             ctx.fillRect(bx + bw - 4, wy + 1, 2, 1);
           }
           if ((i + block) % 5 === 0) {
-            ctx.fillStyle = "#35608f";
+            ctx.fillStyle = farRoof;
             ctx.fillRect(bx + 2, by - 3, bw - 4, 2);
-            ctx.fillStyle = "#ff62ab";
+            ctx.fillStyle = farRoofNeon;
             ctx.fillRect(bx + 4, by - 2, Math.max(1, bw - 8), 1);
           }
         }
@@ -8455,41 +8519,41 @@
           const bx = Math.floor(base + i * 17);
           const by = 144 - h;
 
-          ctx.fillStyle = "#1f3254";
+          ctx.fillStyle = midBody;
           ctx.fillRect(bx, by, bw, h);
-          ctx.fillStyle = "#33567f";
+          ctx.fillStyle = midTop;
           ctx.fillRect(bx, by, bw, 3);
-          ctx.fillStyle = "#142844";
+          ctx.fillStyle = midEdge;
           ctx.fillRect(bx + bw - 2, by + 2, 1, h - 2);
 
           for (let wy = by + 8; wy < 140; wy += 7) {
-            ctx.fillStyle = (wy + i) % 2 === 0 ? "#7ceeff" : "#31557f";
+            ctx.fillStyle = (wy + i) % 2 === 0 ? midWinA : midWinB;
             ctx.fillRect(bx + 3, wy, 2, 2);
-            ctx.fillStyle = (wy + i) % 3 === 0 ? "#ffcb83" : "#2d4b72";
+            ctx.fillStyle = (wy + i) % 3 === 0 ? midWinWarm : midWinCool;
             ctx.fillRect(bx + bw - 5, wy + 1, 2, 2);
           }
 
           if ((i + block) % 4 === 0) {
-            ctx.fillStyle = "rgba(121, 237, 255, 0.16)";
+            ctx.fillStyle = midBand;
             ctx.fillRect(bx + 1, by + 5, bw - 2, 2);
           }
         }
       }
 
-      ctx.fillStyle = "rgba(145, 188, 235, 0.16)";
+      ctx.fillStyle = cityGlowA;
       ctx.fillRect(0, 118, W, 26);
-      ctx.fillStyle = "rgba(255, 132, 186, 0.1)";
+      ctx.fillStyle = cityGlowB;
       ctx.fillRect(0, 128, W, 8);
 
-      ctx.fillStyle = "#1d2431";
+      ctx.fillStyle = railBase;
       ctx.fillRect(0, 136, W, 8);
-      ctx.fillStyle = "#2f394b";
+      ctx.fillStyle = railPost;
       const railShift = -Math.floor(cameraX * 0.58) % 22;
       for (let x = railShift - 22; x < W + 22; x += 22) {
         ctx.fillRect(x, 144, 4, 8);
-        ctx.fillStyle = "#566076";
+        ctx.fillStyle = railHi;
         ctx.fillRect(x + 1, 144, 1, 8);
-        ctx.fillStyle = "#2f394b";
+        ctx.fillStyle = railPost;
       }
 
       const signShift = -Math.floor(cameraX * 0.34) % 96;
@@ -8497,22 +8561,22 @@
       for (let i = -1; i < 5; i += 1) {
         const sx = i * 96 + 20 + signShift;
         const sy = 86 + (i % 2) * 8;
-        ctx.fillStyle = "#1a2538";
+        ctx.fillStyle = signBody;
         ctx.fillRect(sx, sy, 32, 10);
-        ctx.fillStyle = "#2b3b59";
+        ctx.fillStyle = signBodyHi;
         ctx.fillRect(sx + 1, sy + 1, 30, 8);
-        ctx.fillStyle = i % 2 === 0 ? "rgba(132, 240, 255, 0.52)" : "rgba(255, 152, 198, 0.5)";
+        ctx.fillStyle = i % 2 === 0 ? signNeonA : signNeonB;
         ctx.fillRect(sx + 2, sy + 2, 28, 2);
-        ctx.fillStyle = signBlink === (i + 6) % 3 ? "#fff0b8" : "#9db0cf";
+        ctx.fillStyle = signBlink === (i + 6) % 3 ? signTextOn : signTextOff;
         ctx.fillRect(sx + 4, sy + 5, 24, 2);
       }
 
       const trafficShift = -Math.floor(cameraX * 1.15 + player.anim * 1.4) % 54;
       for (let i = -1; i < 8; i += 1) {
         const tx = i * 54 + trafficShift;
-        ctx.fillStyle = "rgba(255, 134, 94, 0.24)";
+        ctx.fillStyle = trafficA;
         ctx.fillRect(tx, 152, 18, 1);
-        ctx.fillStyle = "rgba(124, 228, 255, 0.2)";
+        ctx.fillStyle = trafficB;
         ctx.fillRect(tx + 9, 154, 16, 1);
       }
       return;
