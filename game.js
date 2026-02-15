@@ -260,6 +260,28 @@
     return 1;
   }
 
+  function getBossEntities(includeDown = false) {
+    if (!stage || !stage.boss || !stage.boss.active) return [];
+    const bosses = [stage.boss];
+    if (stage.bossTwins && stage.bossTwins.length > 0) {
+      bosses.push(...stage.bossTwins);
+    }
+    if (includeDown) return bosses;
+    return bosses.filter((b) => b && b.active && b.hp > 0);
+  }
+
+  function bossTotalHealth() {
+    const bosses = getBossEntities(true);
+    let hp = 0;
+    let maxHp = 0;
+    for (const b of bosses) {
+      if (!b) continue;
+      hp += Math.max(0, b.hp || 0);
+      maxHp += Math.max(1, b.maxHp || 1);
+    }
+    return { hp, maxHp: Math.max(1, maxHp) };
+  }
+
   function pinchRatioByHearts() {
     return clamp((MAX_HEARTS - playerHearts) / Math.max(1, MAX_HEARTS - 1), 0, 1);
   }
@@ -1856,12 +1878,14 @@
     stage.hazardBullets = stage.hazardBullets.filter((b) => !b.dead);
     stage.bossShots = stage.bossShots.filter((s) => !s.dead);
 
-    if (stage.boss.active && stage.boss.hp > 0 && stage.boss.invuln <= 0) {
+    const bosses = getBossEntities();
+    for (const boss of bosses) {
+      if (boss.invuln > 0) continue;
       const bossDamage = Math.max(1, Math.round((1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus()) * crisisMul));
-      stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
-      stage.boss.invuln = bossDamageBonus() > 0 ? 12 : 20;
-      stage.boss.vx += player.facing * (0.5 + gaugeRatio * 0.95);
-      stage.boss.vy = Math.min(stage.boss.vy, -(2.0 + gaugeRatio * 1.6));
+      boss.hp = Math.max(0, boss.hp - bossDamage);
+      boss.invuln = bossDamageBonus() > 0 ? 12 : 20;
+      boss.vx += player.facing * (0.5 + gaugeRatio * 0.95);
+      boss.vy = Math.min(boss.vy, -(2.0 + gaugeRatio * 1.6));
       handleBossHpZero();
     }
 
@@ -2220,6 +2244,7 @@
         breakWalls,
         hazardBullets: [],
         bossShots: [],
+        bossTwins: [],
         godGimmicks: [],
         bossArenaControl: null,
         playerWaves: [],
@@ -2565,6 +2590,7 @@
       breakWalls,
       hazardBullets: [],
       bossShots: [],
+      bossTwins: [],
       godGimmicks: [],
       bossArenaControl: null,
       playerWaves: [],
@@ -3994,18 +4020,19 @@
       parryHits += 1;
     }
 
-    if (stage.boss.active && stage.boss.hp > 0 && overlapsAny(stage.boss) && stage.boss.invuln <= 0) {
-      hitX = stage.boss.x + stage.boss.w * 0.5;
-      hitY = stage.boss.y + stage.boss.h * (morningStarStrike ? 0.34 : 0.45);
+    for (const boss of getBossEntities()) {
+      if (!overlapsAny(boss) || boss.invuln > 0 || boss.hp <= 0) continue;
+      hitX = boss.x + boss.w * 0.5;
+      hitY = boss.y + boss.h * (morningStarStrike ? 0.34 : 0.45);
       const bf = tryBlackFlash(hitX, hitY, 1.3 + chargeRatio * 1.6 + comboStage * 0.35);
       const bossDamageBase = 1 + bossDamageBonus();
       const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * (bf ? 2 : 1)));
-      stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
-      stage.boss.invuln = morningStarStrike
+      boss.hp = Math.max(0, boss.hp - bossDamage);
+      boss.invuln = morningStarStrike
         ? (bossDamageBonus() > 0 ? 9 : 13)
         : (bossDamageBonus() > 0 ? 11 : 15);
-      stage.boss.vx += dir * (0.62 + chargeRatio * 0.38 + comboVxBonus * 0.45 + (morningStarStrike ? (morningStarLong ? 0.52 : 0.34) : 0) + (bf ? 0.34 : 0));
-      stage.boss.vy = Math.min(stage.boss.vy, -(morningStarStrike ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0) : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5) - (bf ? 0.24 : 0));
+      boss.vx += dir * (0.62 + chargeRatio * 0.38 + comboVxBonus * 0.45 + (morningStarStrike ? (morningStarLong ? 0.52 : 0.34) : 0) + (bf ? 0.34 : 0));
+      boss.vy = Math.min(boss.vy, -(morningStarStrike ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0) : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5) - (bf ? 0.24 : 0));
       hits += 1;
       handleBossHpZero();
     }
@@ -4167,15 +4194,16 @@
       parryHits += 1;
     }
 
-    if (stage.boss.active && stage.boss.hp > 0 && overlapsAny(stage.boss) && stage.boss.invuln <= 0) {
-      hitX = stage.boss.x + stage.boss.w * 0.5;
-      hitY = stage.boss.y + stage.boss.h * 0.42;
+    for (const boss of getBossEntities()) {
+      if (!overlapsAny(boss) || boss.invuln > 0 || boss.hp <= 0) continue;
+      hitX = boss.x + boss.w * 0.5;
+      hitY = boss.y + boss.h * 0.42;
       const baseDamage = 2 + bossDamageBonus() + Math.floor(chargeRatio * 2.2);
       const damage = Math.max(1, Math.round(baseDamage * crisisMul));
-      stage.boss.hp = Math.max(0, stage.boss.hp - damage);
-      stage.boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
-      stage.boss.vx += dir * (0.88 + chargeRatio * 0.46);
-      stage.boss.vy = Math.min(stage.boss.vy, -(2.2 + chargeRatio * 0.34));
+      boss.hp = Math.max(0, boss.hp - damage);
+      boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
+      boss.vx += dir * (0.88 + chargeRatio * 0.46);
+      boss.vy = Math.min(boss.vy, -(2.2 + chargeRatio * 0.34));
       hits += 1;
       handleBossHpZero();
     }
@@ -4321,16 +4349,17 @@
       parryHits += 1;
     }
 
-    if (stage.boss.active && stage.boss.hp > 0 && overlapsAnyLane(stage.boss) && stage.boss.invuln <= 0) {
-      hitX = stage.boss.x + stage.boss.w * 0.5;
-      hitY = stage.boss.y + stage.boss.h * 0.44;
+    for (const boss of getBossEntities()) {
+      if (!overlapsAnyLane(boss) || boss.invuln > 0 || boss.hp <= 0) continue;
+      hitX = boss.x + boss.w * 0.5;
+      hitY = boss.y + boss.h * 0.44;
       const bf = tryBlackFlash(hitX, hitY, 1.2 + pLv * 0.02);
       const baseDamage = 1 + bossDamageBonus();
       const damage = Math.max(1, Math.round(baseDamage * crisisMul * (bf ? 2 : 1)));
-      stage.boss.hp = Math.max(0, stage.boss.hp - damage);
-      stage.boss.invuln = bossDamageBonus() > 0 ? 10 : 16;
-      stage.boss.vx += dir * (0.48 + (bf ? 0.2 : 0));
-      stage.boss.vy = Math.min(stage.boss.vy, -1.85 - (bf ? 0.2 : 0));
+      boss.hp = Math.max(0, boss.hp - damage);
+      boss.invuln = bossDamageBonus() > 0 ? 10 : 16;
+      boss.vx += dir * (0.48 + (bf ? 0.2 : 0));
+      boss.vy = Math.min(boss.vy, -1.85 - (bf ? 0.2 : 0));
       hits += 1;
       handleBossHpZero();
     }
@@ -4527,19 +4556,23 @@
         playKickSfx(1.32 + (wave.power || 0) * 0.34);
       }
 
-      if (!wave.dead && stage.boss.active && stage.boss.hp > 0 && overlap(wave, stage.boss) && stage.boss.invuln <= 0) {
-        const dir = wave.vx >= 0 ? 1 : -1;
-        const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul));
-        stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
-        stage.boss.invuln = bossDamageBonus() > 0 ? 9 : 13;
-        stage.boss.vx += dir * (0.62 + (wave.power || 0) * 0.28);
-        stage.boss.vy = Math.min(stage.boss.vy, -(1.85 + (wave.power || 0) * 0.24));
-        const hx = stage.boss.x + stage.boss.w * 0.5;
-        const hy = stage.boss.y + stage.boss.h * 0.4;
-        triggerImpact(2.0 + (wave.power || 0), hx, hy, 3.0);
-        spawnWaveBurst(hx, hy, 1.0 + (wave.power || 0));
-        playKickSfx(1.52 + (wave.power || 0) * 0.28);
-        handleBossHpZero();
+      if (!wave.dead && stage.boss.active) {
+        for (const boss of getBossEntities()) {
+          if (boss.hp <= 0 || boss.invuln > 0 || !overlap(wave, boss)) continue;
+          const dir = wave.vx >= 0 ? 1 : -1;
+          const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul));
+          boss.hp = Math.max(0, boss.hp - bossDamage);
+          boss.invuln = bossDamageBonus() > 0 ? 9 : 13;
+          boss.vx += dir * (0.62 + (wave.power || 0) * 0.28);
+          boss.vy = Math.min(boss.vy, -(1.85 + (wave.power || 0) * 0.24));
+          const hx = boss.x + boss.w * 0.5;
+          const hy = boss.y + boss.h * 0.4;
+          triggerImpact(2.0 + (wave.power || 0), hx, hy, 3.0);
+          spawnWaveBurst(hx, hy, 1.0 + (wave.power || 0));
+          playKickSfx(1.52 + (wave.power || 0) * 0.28);
+          handleBossHpZero();
+          break;
+        }
       }
 
       for (const bullet of stage.hazardBullets) {
@@ -4620,17 +4653,21 @@
         shard.dead = true;
       }
 
-      if (!shard.dead && stage.boss.active && stage.boss.hp > 0 && overlap(shard, stage.boss) && stage.boss.invuln <= 0) {
-        const damage = Math.max(1, Math.round((1 + bossDamageBonus() + shard.power * 0.42) * pinchAttackMultiplier()));
-        stage.boss.hp = Math.max(0, stage.boss.hp - damage);
-        stage.boss.invuln = bossDamageBonus() > 0 ? 8 : 11;
-        stage.boss.vx += (shard.vx >= 0 ? 1 : -1) * (0.34 + shard.power * 0.2);
-        stage.boss.vy = Math.min(stage.boss.vy, -(1.55 + shard.power * 0.18));
-        const hx = stage.boss.x + stage.boss.w * 0.5;
-        const hy = stage.boss.y + stage.boss.h * 0.45;
-        triggerImpact(1.5 + shard.power * 0.34, hx, hy, 2.3 + shard.power * 0.4);
-        handleBossHpZero();
-        shard.dead = true;
+      if (!shard.dead && stage.boss.active) {
+        for (const boss of getBossEntities()) {
+          if (boss.hp <= 0 || boss.invuln > 0 || !overlap(shard, boss)) continue;
+          const damage = Math.max(1, Math.round((1 + bossDamageBonus() + shard.power * 0.42) * pinchAttackMultiplier()));
+          boss.hp = Math.max(0, boss.hp - damage);
+          boss.invuln = bossDamageBonus() > 0 ? 8 : 11;
+          boss.vx += (shard.vx >= 0 ? 1 : -1) * (0.34 + shard.power * 0.2);
+          boss.vy = Math.min(boss.vy, -(1.55 + shard.power * 0.18));
+          const hx = boss.x + boss.w * 0.5;
+          const hy = boss.y + boss.h * 0.45;
+          triggerImpact(1.5 + shard.power * 0.34, hx, hy, 2.3 + shard.power * 0.4);
+          handleBossHpZero();
+          shard.dead = true;
+          break;
+        }
       }
 
       for (const bullet of stage.hazardBullets) {
@@ -4758,96 +4795,99 @@
 
   function resolveBossContactDamage() {
     if (!stage.boss.active) return;
-    if (!overlap(player, stage.boss)) return;
-    const b = stage.boss;
-    const bossName = b.kind === "peacock" ? "孔雀ボス" : "神";
-    if (b.kind === "god" && (b.phaseTransitionTimer || 0) > 0) {
-      const pushDir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? -1 : 1;
-      player.vx += pushDir * 0.34;
-      player.vy = Math.min(player.vy, -5.1);
-      player.onGround = false;
-      stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.52);
-      return;
-    }
-    const playerBottom = player.y + player.h;
-    const bossTop = b.y;
-    const bossMidY = b.y + b.h * 0.5;
-    const sideGrace = 8;
-    const stompHit = {
-      x: player.x - sideGrace,
-      y: player.y + Math.floor(player.h * 0.26),
-      w: player.w + sideGrace * 2,
-      h: player.h - Math.floor(player.h * 0.26),
-    };
-    const stompTouch = overlap(stompHit, b);
-    const descending = player.vy > -0.26;
-    const verticalWindow = playerBottom >= bossTop - 10 && playerBottom <= bossTop + 16;
-    const centerAbove = player.y + player.h * 0.66 <= bossMidY + 5;
-    const stompable = stompTouch && descending && verticalWindow && centerAbove;
-    const nearStompSafe =
-      stompTouch &&
-      playerBottom >= bossTop - 14 &&
-      playerBottom <= bossTop + 22 &&
-      player.y + player.h * 0.72 <= bossMidY + 7 &&
-      player.vy > -0.42;
-
-    if (stompable) {
-      const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
-      if (b.invuln <= 0 && b.hp > 0) {
-        const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier()));
-        b.hp = Math.max(0, b.hp - damage);
-        b.invuln = bossDamageBonus() > 0 ? 13 : 20;
-        b.vx += dir * 0.72;
-        b.vy = Math.min(b.vy, -2.2);
-        player.vy = -6.4;
+    const bosses = getBossEntities();
+    for (const b of bosses) {
+      if (!overlap(player, b)) continue;
+      const bossName = b.kind === "peacock" ? "孔雀ボス" : "神";
+      if (b.kind === "god" && (b.phaseTransitionTimer || 0) > 0) {
+        const pushDir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? -1 : 1;
+        player.vx += pushDir * 0.34;
+        player.vy = Math.min(player.vy, -5.1);
         player.onGround = false;
-        stompChainGuardTimer = STOMP_CHAIN_GUARD_FRAMES;
-        hitStopTimer = Math.max(hitStopTimer, 4.2);
-        const hitX = b.x + b.w * 0.5;
-        const hitY = b.y + b.h * 0.25;
-        triggerKickBurst(hitX, hitY, 2.9);
-        triggerImpact(3.0, hitX, hitY, 4.6);
-        spawnHitSparks(hitX, hitY, "#fff2bc", "#ffb26a");
-        playKickSfx(1.74);
-        hudMessage = `${bossName}を踏みつけ!`;
-        hudTimer = 28;
-        handleBossHpZero();
-      } else {
-        player.vy = -5.2;
-        player.onGround = false;
-        stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.55);
-      }
-      return;
-    }
-
-    if (nearStompSafe) {
-      player.vy = -5.0;
-      player.onGround = false;
-      stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.55);
-      return;
-    }
-
-    if (stompChainGuardTimer > 0) {
-      player.vy = Math.min(player.vy, -4.8);
-      player.onGround = false;
-      return;
-    }
-
-    const rage = stage.boss.hp <= Math.ceil(stage.boss.maxHp * 0.55);
-    if (stage.boss.mode === "dash") {
-      killPlayer(`${bossName}の突進に被弾`);
-    } else {
-      if (b.kind === "god" && (b.gimmickAdvantageTimer || 0) > 0) {
-        player.vy = -5.6;
-        player.onGround = false;
-        player.vx += (player.x + player.w * 0.5 < b.x + b.w * 0.5 ? -1 : 1) * 0.48;
-        stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.66);
-        triggerImpact(1.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.8);
-        hudMessage = "電磁拘束中! 押し切れ!";
-        hudTimer = 18;
+        stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.52);
         return;
       }
-      killPlayer(rage ? `${bossName}の猛攻に被弾` : `${bossName}に接触して被弾`);
+      const playerBottom = player.y + player.h;
+      const bossTop = b.y;
+      const bossMidY = b.y + b.h * 0.5;
+      const sideGrace = 8;
+      const stompHit = {
+        x: player.x - sideGrace,
+        y: player.y + Math.floor(player.h * 0.26),
+        w: player.w + sideGrace * 2,
+        h: player.h - Math.floor(player.h * 0.26),
+      };
+      const stompTouch = overlap(stompHit, b);
+      const descending = player.vy > -0.26;
+      const verticalWindow = playerBottom >= bossTop - 10 && playerBottom <= bossTop + 16;
+      const centerAbove = player.y + player.h * 0.66 <= bossMidY + 5;
+      const stompable = stompTouch && descending && verticalWindow && centerAbove;
+      const nearStompSafe =
+        stompTouch &&
+        playerBottom >= bossTop - 14 &&
+        playerBottom <= bossTop + 22 &&
+        player.y + player.h * 0.72 <= bossMidY + 7 &&
+        player.vy > -0.42;
+
+      if (stompable) {
+        const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
+        if (b.invuln <= 0 && b.hp > 0) {
+          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier()));
+          b.hp = Math.max(0, b.hp - damage);
+          b.invuln = bossDamageBonus() > 0 ? 13 : 20;
+          b.vx += dir * 0.72;
+          b.vy = Math.min(b.vy, -2.2);
+          player.vy = -6.4;
+          player.onGround = false;
+          stompChainGuardTimer = STOMP_CHAIN_GUARD_FRAMES;
+          hitStopTimer = Math.max(hitStopTimer, 4.2);
+          const hitX = b.x + b.w * 0.5;
+          const hitY = b.y + b.h * 0.25;
+          triggerKickBurst(hitX, hitY, 2.9);
+          triggerImpact(3.0, hitX, hitY, 4.6);
+          spawnHitSparks(hitX, hitY, "#fff2bc", "#ffb26a");
+          playKickSfx(1.74);
+          hudMessage = `${bossName}を踏みつけ!`;
+          hudTimer = 28;
+          handleBossHpZero();
+        } else {
+          player.vy = -5.2;
+          player.onGround = false;
+          stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.55);
+        }
+        return;
+      }
+
+      if (nearStompSafe) {
+        player.vy = -5.0;
+        player.onGround = false;
+        stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.55);
+        return;
+      }
+
+      if (stompChainGuardTimer > 0) {
+        player.vy = Math.min(player.vy, -4.8);
+        player.onGround = false;
+        return;
+      }
+
+      const rage = b.hp <= Math.ceil(b.maxHp * 0.55);
+      if (b.mode === "dash") {
+        killPlayer(`${bossName}の突進に被弾`);
+      } else {
+        if (b.kind === "god" && (b.gimmickAdvantageTimer || 0) > 0) {
+          player.vy = -5.6;
+          player.onGround = false;
+          player.vx += (player.x + player.w * 0.5 < b.x + b.w * 0.5 ? -1 : 1) * 0.48;
+          stompChainGuardTimer = Math.max(stompChainGuardTimer, STOMP_CHAIN_GUARD_FRAMES * 0.66);
+          triggerImpact(1.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.8);
+          hudMessage = "電磁拘束中! 押し切れ!";
+          hudTimer = 18;
+          return;
+        }
+        killPlayer(rage ? `${bossName}の猛攻に被弾` : `${bossName}に接触して被弾`);
+      }
+      return;
     }
   }
 
@@ -4876,6 +4916,24 @@
   function handleBossHpZero() {
     if (!stage || !stage.boss) return;
     const b = stage.boss;
+    if (b.kind === "peacock") {
+      const peacocks = getBossEntities(true).filter((boss) => boss.kind === "peacock");
+      let anyAlive = false;
+      for (const pb of peacocks) {
+        if (pb.hp > 0) {
+          anyAlive = true;
+        } else {
+          pb.hp = 0;
+          pb.down = true;
+          pb.mode = "down";
+          pb.vx = 0;
+          pb.vy = 0;
+        }
+      }
+      if (anyAlive) return;
+      defeatBoss();
+      return;
+    }
     if (b.hp > 0) return;
     if (b.kind === "god" && (b.phase || 1) < 2) {
       startGodSecondForm();
@@ -5057,6 +5115,7 @@
     stage.boss.gimmickAdvantageTimer = 0;
     stage.boss.phase2MaxHp = bossKind === "god" ? 13 : stage.boss.maxHp;
     stage.bossShots = [];
+    stage.bossTwins = [];
     stage.godGimmicks = [];
     stage.bossArenaControl = null;
     stage.playerWaves = [];
@@ -5076,6 +5135,39 @@
       setupGodPhaseGimmicks();
     } else {
       stage.enemies = [];
+      const leftX = BOSS_ARENA.minX + Math.floor((BOSS_ARENA.maxX - BOSS_ARENA.minX) * 0.3);
+      const rightX = BOSS_ARENA.minX + Math.floor((BOSS_ARENA.maxX - BOSS_ARENA.minX) * 0.66);
+      stage.boss.x = leftX;
+      stage.boss.dir = 1;
+      stage.boss.attackCycle = 0;
+      stage.boss.mode = "intro";
+      stage.boss.modeTimer = 40;
+      stage.boss.shotCooldown = 28;
+      const twin = {
+        kind: "peacock",
+        active: true,
+        x: rightX,
+        y: stage.groundY - stage.boss.h,
+        w: stage.boss.w,
+        h: stage.boss.h,
+        vx: 0,
+        vy: 0,
+        dir: -1,
+        onGround: false,
+        hp: stage.boss.maxHp,
+        maxHp: stage.boss.maxHp,
+        mode: "intro",
+        modeTimer: 52,
+        shotCooldown: 24,
+        attackCycle: 1,
+        spiralAngle: 0,
+        invuln: 22,
+        phase: 1,
+        phaseTransitionTimer: 0,
+        stunTimer: 0,
+        gimmickAdvantageTimer: 0,
+      };
+      stage.bossTwins.push(twin);
     }
     setupBossArenaThreats(bossKind);
     openingThemeActive = false;
@@ -5113,7 +5205,7 @@
     triggerImpact(2.4, stage.boss.x + stage.boss.w * 0.5, stage.boss.y + stage.boss.h * 0.55, 3.4);
     playKickSfx(1.8);
     hudMessage = bossKind === "peacock"
-      ? "STAGE 1 BOSS: 妨害を壊して孔雀ボスを弱体化"
+      ? "STAGE 1 BOSS: 孔雀ボス2体を同時撃破せよ"
       : "ホームパーティー会場突入! 妨害破壊で神を弱体化";
     hudTimer = bossKind === "peacock" ? 112 : 120;
   }
@@ -5125,6 +5217,14 @@
     stage.boss.mode = "down";
     stage.boss.vx = 0;
     stage.boss.vy = 0;
+    if (stage.bossTwins && stage.bossTwins.length > 0) {
+      for (const twin of stage.bossTwins) {
+        twin.active = false;
+        twin.mode = "down";
+        twin.vx = 0;
+        twin.vy = 0;
+      }
+    }
     if (stage.bossArenaControl) {
       stage.bossArenaControl.active = false;
     }
@@ -5198,8 +5298,7 @@
     playProjectileSfx("enemy");
   }
 
-  function updatePeacockBoss(dt, solids) {
-    const boss = stage.boss;
+  function updatePeacockBossEntity(boss, dt, solids) {
     const rage = boss.hp <= Math.ceil(boss.maxHp * 0.5);
     const arenaControl = bossArenaControlRatio();
     const shotDrain = 1 - arenaControl * 0.42;
@@ -5529,7 +5628,26 @@
 
     const boss = stage.boss;
     if (boss.kind === "peacock") {
-      updatePeacockBoss(dt, solids);
+      const peacocks = getBossEntities(true).filter((b) => b.kind === "peacock");
+      for (const pb of peacocks) {
+        if (!pb.active || pb.hp <= 0) continue;
+        updatePeacockBossEntity(pb, dt, solids);
+      }
+      const alive = peacocks.filter((pb) => pb.active && pb.hp > 0);
+      if (alive.length >= 2) {
+        const a = alive[0];
+        const c = alive[1];
+        if (overlap(a, c)) {
+          const dx = (a.x + a.w * 0.5) - (c.x + c.w * 0.5);
+          const push = dx >= 0 ? 0.55 : -0.55;
+          a.x += push;
+          c.x -= push;
+          a.vx += push * 0.06;
+          c.vx -= push * 0.06;
+          a.x = clamp(a.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - a.w - 2);
+          c.x = clamp(c.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - c.w - 2);
+        }
+      }
       return;
     }
     const arenaControl = bossArenaControlRatio();
@@ -7054,11 +7172,11 @@
       const windup = enemy.mode === "windup";
       const dir = enemy.dir;
 
-      const bodyMain = enemy.kicked ? "#3d5f73" : charge ? "#1f7dc4" : "#2a8eb0";
-      const bodyShade = enemy.kicked ? "#2b4352" : "#206f89";
-      const tailMain = charge ? "#1c6fa8" : "#267fa4";
-      const tailEye = charge ? "#89f3ff" : "#57d5e4";
-      const tailGlow = windup ? "#ffd994" : "#9cc9e8";
+      const bodyMain = enemy.kicked ? "#36596a" : charge ? "#2a7fcb" : "#2f9ac9";
+      const bodyShade = enemy.kicked ? "#24434f" : charge ? "#245f9a" : "#2c7a9f";
+      const tailMain = charge ? "#2f8f76" : "#2ca171";
+      const tailEye = charge ? "#8ff6dc" : "#72efc8";
+      const tailGlow = windup ? "#d6ff9a" : "#95eecf";
 
       ctx.fillStyle = "#10161f";
       ctx.fillRect(x + 4, y + 5, 8, 9);
@@ -7077,7 +7195,7 @@
       ctx.fillRect(x + 4, y + 8, 8, 6);
       ctx.fillStyle = bodyShade;
       ctx.fillRect(x + 5, y + 10, 6, 3);
-      ctx.fillStyle = "#2cc08f";
+      ctx.fillStyle = charge ? "#64d9c5" : "#57d4b8";
       ctx.fillRect(x + 7, y + 6, 3, 4);
 
       ctx.fillStyle = "#0f1520";
@@ -7155,63 +7273,72 @@
     }
   }
 
+  function drawPeacockBossEntity(b) {
+    const x = Math.floor(b.x - cameraX);
+    const y = Math.floor(b.y);
+    const warn = b.mode === "windup" || b.mode === "dash";
+    const cast = b.mode === "shoot";
+    const rage = b.hp <= Math.ceil(b.maxHp * 0.4);
+
+    ctx.fillStyle = "#0e1723";
+    ctx.fillRect(x + 3, y + 8, 18, 18);
+    ctx.fillStyle = rage ? "#2f85cf" : "#2f96d2";
+    ctx.fillRect(x + 4, y + 10, 16, 14);
+    ctx.fillStyle = rage ? "#76d7ff" : "#66d1ff";
+    ctx.fillRect(x + 7, y + 11, 10, 5);
+    ctx.fillStyle = rage ? "#2e78a8" : "#337ea8";
+    ctx.fillRect(x + 6, y + 16, 12, 6);
+
+    ctx.fillStyle = "#f5d57e";
+    if (b.dir > 0) {
+      ctx.fillRect(x + 20, y + 12, 5, 3);
+    } else {
+      ctx.fillRect(x + 1, y + 12, 5, 3);
+    }
+
+    ctx.fillStyle = "#173447";
+    ctx.fillRect(x + 8, y + 6, 8, 4);
+    ctx.fillStyle = "#d8f0ff";
+    ctx.fillRect(x + 10, y + 7, 1, 1);
+    ctx.fillStyle = "#f7fbff";
+    ctx.fillRect(x + 13, y + 7, 1, 1);
+
+    ctx.fillStyle = rage ? "#2a9a7b" : "#30a87d";
+    ctx.fillRect(x - 6, y + 4, 8, 22);
+    ctx.fillRect(x + 22, y + 4, 8, 22);
+    ctx.fillStyle = rage ? "#8ef0d3" : "#7be9cf";
+    ctx.fillRect(x - 4, y + 8, 3, 13);
+    ctx.fillRect(x + 24, y + 8, 3, 13);
+    ctx.fillStyle = "#f6e0a3";
+    ctx.fillRect(x - 3, y + 15, 1, 2);
+    ctx.fillRect(x + 25, y + 15, 1, 2);
+
+    ctx.fillStyle = "#2b3b55";
+    ctx.fillRect(x + 7, y + 26, 4, 8);
+    ctx.fillRect(x + 14, y + 26, 4, 8);
+    ctx.fillStyle = "#1a2333";
+    ctx.fillRect(x + 7, y + 34, 4, 2);
+    ctx.fillRect(x + 14, y + 34, 4, 2);
+
+    if (cast || warn) {
+      ctx.fillStyle = "rgba(120, 224, 255, 0.38)";
+      ctx.fillRect(x - 3, y + 9, 30, 10);
+    }
+    if (warn) {
+      ctx.strokeStyle = "rgba(210, 255, 188, 0.9)";
+      ctx.strokeRect(x - 2, y - 1, b.w + 4, b.h + 3);
+    }
+  }
+
   function drawBoss() {
     if (!stage.boss.active) return;
     const b = stage.boss;
     const x = Math.floor(b.x - cameraX);
     const y = Math.floor(b.y);
     if (b.kind === "peacock") {
-      const warn = b.mode === "windup" || b.mode === "dash";
-      const cast = b.mode === "shoot";
-      const rage = b.hp <= Math.ceil(b.maxHp * 0.4);
-
-      ctx.fillStyle = "#0f1724";
-      ctx.fillRect(x + 3, y + 8, 18, 18);
-      ctx.fillStyle = rage ? "#1c89c4" : "#2794b8";
-      ctx.fillRect(x + 4, y + 10, 16, 14);
-      ctx.fillStyle = "#52d4e8";
-      ctx.fillRect(x + 7, y + 11, 10, 5);
-      ctx.fillStyle = "#2d6e93";
-      ctx.fillRect(x + 6, y + 16, 12, 6);
-
-      ctx.fillStyle = "#f5d57e";
-      if (b.dir > 0) {
-        ctx.fillRect(x + 20, y + 12, 5, 3);
-      } else {
-        ctx.fillRect(x + 1, y + 12, 5, 3);
-      }
-
-      ctx.fillStyle = "#1d2f4f";
-      ctx.fillRect(x + 8, y + 6, 8, 4);
-      ctx.fillStyle = "#d8f0ff";
-      ctx.fillRect(x + 10, y + 7, 1, 1);
-      ctx.fillStyle = "#f7fbff";
-      ctx.fillRect(x + 13, y + 7, 1, 1);
-
-      ctx.fillStyle = rage ? "#217cab" : "#2b85ad";
-      ctx.fillRect(x - 6, y + 4, 8, 22);
-      ctx.fillRect(x + 22, y + 4, 8, 22);
-      ctx.fillStyle = "#72e4f0";
-      ctx.fillRect(x - 4, y + 8, 3, 13);
-      ctx.fillRect(x + 24, y + 8, 3, 13);
-      ctx.fillStyle = "#f6e0a3";
-      ctx.fillRect(x - 3, y + 15, 1, 2);
-      ctx.fillRect(x + 25, y + 15, 1, 2);
-
-      ctx.fillStyle = "#2b3b55";
-      ctx.fillRect(x + 7, y + 26, 4, 8);
-      ctx.fillRect(x + 14, y + 26, 4, 8);
-      ctx.fillStyle = "#1a2333";
-      ctx.fillRect(x + 7, y + 34, 4, 2);
-      ctx.fillRect(x + 14, y + 34, 4, 2);
-
-      if (cast || warn) {
-        ctx.fillStyle = "rgba(132, 224, 255, 0.42)";
-        ctx.fillRect(x - 3, y + 9, 30, 10);
-      }
-      if (warn) {
-        ctx.strokeStyle = "rgba(255, 228, 165, 0.9)";
-        ctx.strokeRect(x - 2, y - 1, b.w + 4, b.h + 3);
+      for (const pb of getBossEntities(true).filter((boss) => boss.kind === "peacock")) {
+        if (pb.hp <= 0) continue;
+        drawPeacockBossEntity(pb);
       }
       return;
     }
@@ -9336,13 +9463,18 @@
       const barX = 176;
       const barY = 7;
       const barW = 138;
-      const ratio = clamp(stage.boss.hp / stage.boss.maxHp, 0, 1);
+      const totalBoss = bossTotalHealth();
+      const ratio = clamp(totalBoss.hp / totalBoss.maxHp, 0, 1);
       ctx.fillStyle = "#2a1314";
       ctx.fillRect(barX, barY, barW, 6);
       ctx.fillStyle = "#e25555";
       ctx.fillRect(barX + 1, barY + 1, Math.floor((barW - 2) * ratio), 4);
 
-      if (stage.boss.kind === "god") {
+      if (stage.boss.kind === "peacock" && stage.bossTwins && stage.bossTwins.length > 0) {
+        ctx.fillStyle = "rgba(235, 245, 255, 0.92)";
+        ctx.font = "7px monospace";
+        ctx.fillText("x2", barX + barW - 12, barY + 7);
+      } else if (stage.boss.kind === "god") {
         const phase = stage.boss.phase || 1;
         ctx.fillStyle = "rgba(235, 245, 255, 0.92)";
         ctx.font = "7px monospace";
