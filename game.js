@@ -283,6 +283,9 @@
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
   const CANNON_EXTRA_COOLDOWN = 26;
+  const ROUTE_ENEMY_DT_MUL = 1.08;
+  const ROUTE_PROJECTILE_SPEED_MUL = 1.07;
+  const ROUTE_CANNON_RATE_MUL = 1.12;
   const DASH_JUMP_MIN_SPEED = 1.2;
   const DASH_JUMP_VX_BONUS = 0.88;
   const DASH_JUMP_VY_BONUS = 0.46;
@@ -4644,6 +4647,10 @@
   }
 
   function updateCannons(dt) {
+    const routeBoost = gameState === STATE.PLAY;
+    const cannonRateMul = routeBoost ? ROUTE_CANNON_RATE_MUL : 1;
+    const projectileSpeedMul = routeBoost ? ROUTE_PROJECTILE_SPEED_MUL : 1;
+
     for (const cannon of stage.cannons) {
       if (cannon.destroyed) {
         cannon.debrisTimer = Math.max(0, (cannon.debrisTimer || 0) - dt);
@@ -4657,7 +4664,7 @@
 
       if (!cannon.active) continue;
 
-      cannon.cool -= dt;
+      cannon.cool -= dt * cannonRateMul;
       cannon.warning = cannon.cool > 0 && cannon.cool <= CANNON_WARN_WINDOW;
       if (cannon.cool <= 0) {
         const bx = cannon.dir < 0 ? cannon.x - 9 : cannon.x + 7;
@@ -4666,7 +4673,7 @@
           y: cannon.y + 1,
           w: 9,
           h: 7,
-          vx: cannon.dir * CANNON_BULLET_SPEED,
+          vx: cannon.dir * CANNON_BULLET_SPEED * projectileSpeedMul,
           kind: "cannon",
           reason: "砲台の弾に被弾",
         });
@@ -4847,6 +4854,9 @@
   }
 
   function updateEnemies(dt, solids) {
+    const routeBoost = gameState === STATE.PLAY;
+    const routeEnemyDtMul = routeBoost ? ROUTE_ENEMY_DT_MUL : 1;
+    const routeProjectileMul = routeBoost ? ROUTE_PROJECTILE_SPEED_MUL : 1;
     const blackSlowRatio = clamp(
       Math.max(
         blackFlashTimer > 0 ? blackFlashTimer / 52 : 0,
@@ -4856,7 +4866,11 @@
       1
     );
     const highModeSlowScale = isBlackFlashHighMode() ? BLACK_FLASH_HIGHMODE_ENEMY_SLOW_SCALE : 1;
-    const enemyDt = dt * (1 - blackSlowRatio * (1 - BLACK_FLASH_ENEMY_SLOW_SCALE)) * highModeSlowScale;
+    const enemyDt =
+      dt *
+      (1 - blackSlowRatio * (1 - BLACK_FLASH_ENEMY_SLOW_SCALE)) *
+      highModeSlowScale *
+      routeEnemyDtMul;
 
     for (const enemy of stage.enemies) {
       if (!enemy.alive) continue;
@@ -5018,7 +5032,7 @@
             y: enemy.y + 7,
             w: 6,
             h: 4,
-            vx: enemy.dir * 1.55,
+            vx: enemy.dir * 1.55 * routeProjectileMul,
             kind: "enemy",
             reason: "敵の飛び道具に被弾",
           });
