@@ -4335,11 +4335,12 @@
 
     if (strongWave) {
       const waveW = 18 + Math.floor(chargeRatio * 8);
-      const waveH = 8 + Math.floor(chargeRatio * 4);
+      const waveH = 12 + Math.floor(chargeRatio * 8);
       const waveSpeed = (2.8 + chargeRatio * 1.5) * dir;
+      const waveY = player.y + 7 - Math.floor((waveH - 8) * 0.5);
       stage.playerWaves.push({
         x: dir > 0 ? player.x + player.w + 2 : player.x - waveW - 2,
-        y: player.y + 7,
+        y: waveY,
         w: waveW,
         h: waveH,
         vx: waveSpeed,
@@ -4839,6 +4840,10 @@
   function updatePlayerWaves(dt, solids) {
     if (!stage.playerWaves || stage.playerWaves.length === 0) return;
     const crisisMul = pinchAttackMultiplier();
+    const screenLeft = cameraX;
+    const screenRight = cameraX + W;
+    const screenTop = 0;
+    const screenBottom = H;
 
     for (const wave of stage.playerWaves) {
       if (wave.dead) continue;
@@ -4850,12 +4855,22 @@
       wave.x += wave.vx * dt;
       wave.y += Math.sin(wave.phase * 0.2) * 0.22;
       wave.ttl -= dt;
-      hitBreakableGimmicks(wave, 1 + (wave.power || 0) * 0.7);
+      const hitLeft = Math.max(wave.x, screenLeft);
+      const hitRight = Math.min(wave.x + wave.w, screenRight);
+      const hitTop = Math.max(wave.y, screenTop);
+      const hitBottom = Math.min(wave.y + wave.h, screenBottom);
+      const waveHitbox = hitRight > hitLeft && hitBottom > hitTop
+        ? { x: hitLeft, y: hitTop, w: hitRight - hitLeft, h: hitBottom - hitTop }
+        : null;
+
+      if (waveHitbox) {
+        hitBreakableGimmicks(waveHitbox, 1 + (wave.power || 0) * 0.7);
+      }
 
       for (const enemy of stage.enemies) {
         if (wave.dead) break;
         if (!enemy.alive || enemy.kicked) continue;
-        if (!overlap(wave, enemy)) continue;
+        if (!waveHitbox || !overlap(waveHitbox, enemy)) continue;
         const dir = wave.vx >= 0 ? 1 : -1;
         kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul, {
           immediateRemove: false,
@@ -4874,7 +4889,7 @@
 
       if (!wave.dead && stage.boss.active) {
         for (const boss of getBossEntities()) {
-          if (boss.hp <= 0 || boss.invuln > 0 || !overlap(wave, boss)) continue;
+          if (boss.hp <= 0 || boss.invuln > 0 || !waveHitbox || !overlap(waveHitbox, boss)) continue;
           const dir = wave.vx >= 0 ? 1 : -1;
           const hx = boss.x + boss.w * 0.5;
           const hy = boss.y + boss.h * 0.4;
@@ -4895,7 +4910,7 @@
       for (const bullet of stage.hazardBullets) {
         if (wave.dead) break;
         if (bullet.dead) continue;
-        if (!overlap(wave, bullet)) continue;
+        if (!waveHitbox || !overlap(waveHitbox, bullet)) continue;
         bullet.dead = true;
         parryX = bullet.x + bullet.w * 0.5;
         parryY = bullet.y + bullet.h * 0.5;
@@ -4905,7 +4920,7 @@
       for (const shot of stage.bossShots) {
         if (wave.dead) break;
         if (shot.dead) continue;
-        if (!overlap(wave, shot)) continue;
+        if (!waveHitbox || !overlap(waveHitbox, shot)) continue;
         shot.dead = true;
         parryX = shot.x + shot.w * 0.5;
         parryY = shot.y + shot.h * 0.5;
