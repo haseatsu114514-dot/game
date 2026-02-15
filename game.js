@@ -4275,7 +4275,7 @@
     if (parryHits > 0) playParrySfx();
     playRilaRobotVoice("attack");
     if (chargedBreak) {
-      hudMessage = "ATK2: ハンマーブレイク!";
+      hudMessage = "ハンマーブレイク!";
       hudTimer = Math.max(hudTimer, 30);
     }
 
@@ -6287,19 +6287,21 @@
   }
 
   function sampleActions() {
+    // Secondary attack is retired from gameplay.
+    input.attack2 = false;
     const actions = {
       jumpPressed: input.jump && !prevInput.jump,
       attackPressed: input.attack && !prevInput.attack,
       attackReleased: !input.attack && prevInput.attack,
-      attack2Pressed: input.attack2 && !prevInput.attack2,
-      attack2Released: !input.attack2 && prevInput.attack2,
+      attack2Pressed: false,
+      attack2Released: false,
       specialPressed: input.special && !prevInput.special,
       startPressed: input.start && !prevInput.start,
     };
 
     prevInput.jump = input.jump;
     prevInput.attack = input.attack;
-    prevInput.attack2 = input.attack2;
+    prevInput.attack2 = false;
     prevInput.special = input.special;
     prevInput.start = input.start;
 
@@ -10602,7 +10604,6 @@
   bindHoldButton("btn-right", "right");
   bindHoldButton("btn-jump", "jump");
   bindHoldButton("btn-attack", "attack");
-  bindHoldButton("btn-attack2", "attack2");
   bindHoldButton("btn-special", "special");
   refreshBurstButtonUi();
 
@@ -10654,8 +10655,6 @@
     Space: "jump",
     KeyJ: "attack",
     KeyF: "attack",
-    KeyL: "attack2",
-    KeyG: "attack2",
     KeyK: "special",
     Enter: "start",
   };

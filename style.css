@@ -138,11 +138,6 @@ body {
   border-color: #be6c6c;
 }
 
-.ctrl.attack2 {
-  background: linear-gradient(180deg, #5f4c38, #3f3021);
-  border-color: #b89a76;
-}
-
 .ctrl.special {
   --burst-fill: 0%;
   --burst-alpha: 0.12;
@@ -185,11 +180,6 @@ body {
 .ctrl.attack:active,
 .ctrl.attack.is-down {
   background: linear-gradient(180deg, #aa3f3f, #6f1717);
-}
-
-.ctrl.attack2:active,
-.ctrl.attack2.is-down {
-  background: linear-gradient(180deg, #866949, #56402a);
 }
 
 .ctrl.special:active,
