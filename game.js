@@ -221,6 +221,7 @@
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BLACK_FLASH_ENEMY_SLOW_SCALE = 0.84;
   const BLACK_FLASH_HIGHMODE_ENEMY_SLOW_SCALE = 0.92;
+  const BOSS_HIT_INVULN_FRAMES = 60;
   const BLACK_FLASH_RESULT_DURATION = 120;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
@@ -2439,7 +2440,7 @@
         Math.round((1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus()) * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1))
       );
       boss.hp = Math.max(0, boss.hp - bossDamage);
-      boss.invuln = bossDamageBonus() > 0 ? 12 : 20;
+      boss.invuln = BOSS_HIT_INVULN_FRAMES;
       boss.vx += player.facing * (0.5 + gaugeRatio * 0.95 + (bf ? 0.22 : 0));
       boss.vy = Math.min(boss.vy, -(2.0 + gaugeRatio * 1.6 + (bf ? 0.22 : 0)));
       handleBossHpZero();
@@ -2578,7 +2579,7 @@
       const damageBase = 0.86 + gaugeRatio * 0.76 + bossDamageBonus() * 0.3;
       const damage = Math.max(1, Math.round(damageBase * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
       boss.hp = Math.max(0, boss.hp - damage);
-      boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
+      boss.invuln = BOSS_HIT_INVULN_FRAMES;
       const dir = hx < mx ? -1 : 1;
       boss.vx += dir * (0.34 + meteor.power * 0.24 + (bf ? 0.12 : 0));
       boss.vy = Math.min(boss.vy, -(1.2 + meteor.power * 0.34 + (bf ? 0.16 : 0)));
@@ -5104,11 +5105,7 @@
       const bossDamageBase = 1 + bossDamageBonus();
       const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * rankPowerMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1) * (tipHit ? 1.24 : 1)));
       boss.hp = Math.max(0, boss.hp - bossDamage);
-      boss.invuln = morningStarSpin
-        ? (bossDamageBonus() > 0 ? 10 : 14)
-        : morningStarStrike
-        ? (bossDamageBonus() > 0 ? 9 : 13)
-        : (bossDamageBonus() > 0 ? 11 : 15);
+      boss.invuln = BOSS_HIT_INVULN_FRAMES;
       const bossDir = morningStarSpin ? (bossCenterX < px ? -1 : 1) : dir;
       boss.vx += bossDir * (
         0.62
@@ -5315,7 +5312,7 @@
       const baseDamage = 2 + bossDamageBonus() + Math.floor(chargeRatio * 2.2);
       const damage = Math.max(1, Math.round(baseDamage * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
       boss.hp = Math.max(0, boss.hp - damage);
-      boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
+      boss.invuln = BOSS_HIT_INVULN_FRAMES;
       boss.vx += dir * (0.88 + chargeRatio * 0.46 + (bf ? 0.28 : 0));
       boss.vy = Math.min(boss.vy, -(2.2 + chargeRatio * 0.34 + (bf ? 0.24 : 0)));
       hits += 1;
@@ -5478,7 +5475,7 @@
       const baseDamage = 1 + bossDamageBonus();
       const damage = Math.max(1, Math.round(baseDamage * crisisMul * rankPowerMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
       boss.hp = Math.max(0, boss.hp - damage);
-      boss.invuln = bossDamageBonus() > 0 ? 10 : 16;
+      boss.invuln = BOSS_HIT_INVULN_FRAMES;
       boss.vx += dir * (0.48 + (bf ? 0.2 : 0)) * rankKnockMul;
       boss.vy = Math.min(boss.vy, -(1.85 + (bf ? 0.2 : 0)) * (1 + (rankKnockMul - 1) * 0.66));
       hits += 1;
@@ -5711,7 +5708,7 @@
           const bf = rollBlackFlashHit(hx, hy, 1.14 + (wave.power || 0) * 1.08);
           const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
           boss.hp = Math.max(0, boss.hp - bossDamage);
-          boss.invuln = bossDamageBonus() > 0 ? 9 : 13;
+          boss.invuln = BOSS_HIT_INVULN_FRAMES;
           boss.vx += dir * (0.62 + (wave.power || 0) * 0.28 + (bf ? 0.24 : 0));
           boss.vy = Math.min(boss.vy, -(1.85 + (wave.power || 0) * 0.24 + (bf ? 0.2 : 0)));
           triggerImpact(2.0 + (wave.power || 0), hx, hy, 3.0);
@@ -5811,7 +5808,7 @@
             Math.round((1 + bossDamageBonus() + shard.power * 0.42) * pinchAttackMultiplier() * (bf ? BLACK_FLASH_DAMAGE_MUL : 1))
           );
           boss.hp = Math.max(0, boss.hp - damage);
-          boss.invuln = bossDamageBonus() > 0 ? 8 : 11;
+          boss.invuln = BOSS_HIT_INVULN_FRAMES;
           boss.vx += (shard.vx >= 0 ? 1 : -1) * (0.34 + shard.power * 0.2 + (bf ? 0.22 : 0));
           boss.vy = Math.min(boss.vy, -(1.55 + shard.power * 0.18 + (bf ? 0.2 : 0)));
           triggerImpact(1.5 + shard.power * 0.34, hx, hy, 2.3 + shard.power * 0.4);
@@ -5988,7 +5985,7 @@
           const bf = rollBlackFlashHit(hitX, hitY, 1.28 + (kickCombo > 1 ? 0.24 : 0));
           const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier() * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
           b.hp = Math.max(0, b.hp - damage);
-          b.invuln = bossDamageBonus() > 0 ? 13 : 20;
+          b.invuln = BOSS_HIT_INVULN_FRAMES;
           b.vx += dir * (0.72 + (bf ? 0.28 : 0));
           b.vy = Math.min(b.vy, -(2.2 + (bf ? 0.22 : 0)));
           player.vy = -6.4;
@@ -6103,7 +6100,7 @@
     gimmick.cooldown = 380;
     b.stunTimer = Math.max(b.stunTimer || 0, 88);
     b.gimmickAdvantageTimer = Math.max(b.gimmickAdvantageTimer || 0, 220);
-    b.invuln = Math.min(b.invuln || 0, 4);
+    b.invuln = BOSS_HIT_INVULN_FRAMES;
     b.vx *= 0.24;
     b.vy = Math.min(b.vy, -1.4);
     b.hp = Math.max(0, b.hp - 2);
