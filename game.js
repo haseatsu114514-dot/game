@@ -213,6 +213,7 @@
   const BLACK_FLASH_SLOW_DURATION = 20;
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BLACK_FLASH_ENEMY_SLOW_SCALE = 0.84;
+  const BLACK_FLASH_HIGHMODE_ENEMY_SLOW_SCALE = 0.92;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
     { short: "Danger", long: "Danger", threshold: 0, chargeMul: 0.7, color: "#8db2d9" },
@@ -386,13 +387,17 @@
     return clamp(baseChance, 0.01, 0.98);
   }
 
+  function isBlackFlashHighMode() {
+    return blackFlashChain > 0;
+  }
+
   function blackFlashRankGainMultiplier() {
-    const flashMul = blackFlashTimer > 0 ? BLACK_FLASH_RANK_GAIN_MUL : 1;
+    const flashMul = isBlackFlashHighMode() ? BLACK_FLASH_RANK_GAIN_MUL : 1;
     return flashMul * timeBurstRankGainMultiplier();
   }
 
   function formatBlackFlashChanceText(chance) {
-    return `黒閃発生率 ${(chance * 100).toFixed(1)}%`;
+    return `黒閃継続率 ${(chance * 100).toFixed(1)}%`;
   }
 
   function blackFlashChanceHudColor(chance) {
@@ -416,6 +421,7 @@
   }
 
   function resolveBlackFlashAttempt(forcedChance = null) {
+    const hadHighMode = isBlackFlashHighMode();
     const stageIndex = clamp(blackFlashChain, 0, BLACK_FLASH_CHANCES.length - 1);
     const chance = typeof forcedChance === "number"
       ? clamp(forcedChance, 0.01, 0.98)
@@ -430,6 +436,10 @@
       blackFlashTimer = 0;
       blackFlashPower = 0;
       blackFlashSlowTimer = 0;
+      if (hadHighMode && (gameState === STATE.PLAY || gameState === STATE.BOSS)) {
+        hudMessage = "黒閃高確終了";
+        hudTimer = Math.max(hudTimer, 28);
+      }
     }
     return triggered;
   }
@@ -437,8 +447,9 @@
   function rollBlackFlashHit(x, y, power = 1) {
     const chance = blackFlashChanceWithRank();
     const triggered = resolveBlackFlashAttempt(chance);
+    const highMode = isBlackFlashHighMode();
     blackFlashChanceHudText = formatBlackFlashChanceText(blackFlashChanceWithRank());
-    blackFlashChanceHudTimer = blackFlashChain > 0 ? 180 : 0;
+    blackFlashChanceHudTimer = highMode ? 180 : 0;
     if (triggered) {
       triggerBlackFlashEffect(x, y, power);
       blackFlashChanceHudTimer = 180;
@@ -1459,7 +1470,13 @@
     spawnHitSparks(x, y, "#d7f2ff", "#67a8ff");
     spawnHitSparks(x, y, "#ffe8ff", "#b671ff");
     playBlackFlashSfx(p);
-    hudMessage = "黒閃! CRITICAL x1.3";
+    if (isBlackFlashHighMode() && blackFlashChain <= 1) {
+      hudMessage = "黒閃! 高確モード突入";
+    } else if (isBlackFlashHighMode()) {
+      hudMessage = "黒閃継続! CRITICAL x1.3";
+    } else {
+      hudMessage = "黒閃! CRITICAL x1.3";
+    }
     hudTimer = Math.max(hudTimer, 44);
   }
 
@@ -4427,7 +4444,8 @@
       0,
       1
     );
-    const enemyDt = dt * (1 - blackSlowRatio * (1 - BLACK_FLASH_ENEMY_SLOW_SCALE));
+    const highModeSlowScale = isBlackFlashHighMode() ? BLACK_FLASH_HIGHMODE_ENEMY_SLOW_SCALE : 1;
+    const enemyDt = dt * (1 - blackSlowRatio * (1 - BLACK_FLASH_ENEMY_SLOW_SCALE)) * highModeSlowScale;
 
     for (const enemy of stage.enemies) {
       if (!enemy.alive) continue;
@@ -10448,7 +10466,7 @@
     ctx.font = "10px monospace";
     ctx.fillText("彼氏救出アクション / 都会ステージ", 52, 126);
     ctx.fillText("ピンチで攻撃力アップ", 92, 138);
-    ctx.fillText("黒閃(2倍): 1/16→1/4→1/2→1/1.5 + ランク微上昇", 26, 150);
+    ctx.fillText("黒閃: 発生で高確化 / 継続失敗で通常へ戻る", 26, 150);
 
     const blink = Math.floor(t / 24) % 2 === 0;
     if (blink) {
