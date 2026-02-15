@@ -3128,6 +3128,9 @@
         { x: 5670, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.6, minX: 5550, maxX: 5810, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 104, hopInterval: 104 },
         { x: 5780, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.61, minX: 5680, maxX: 5930, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
         { kind: "peacock", x: 5870, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.44, minX: 5740, maxX: 5960, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.2, chargeCooldown: 72, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+        { x: 2510, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.47, minX: 2410, maxX: 2620, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 4180, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.54, minX: 4080, maxX: 4280, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 114, hopInterval: 114 },
+        { kind: "peacock", x: 5590, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.43, minX: 5470, maxX: 5710, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.18, chargeCooldown: 76, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       );
       for (let i = 0; i < enemies.length; i += 1) {
         const enemy = enemies[i];
@@ -3348,6 +3351,10 @@
         { kind: "peacock", x: 6810, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.52, minX: 6680, maxX: 6940, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.58, chargeCooldown: 60, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
         { x: 7160, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.72, minX: 7040, maxX: 7300, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true },
         { kind: "bruiser", x: 7480, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.38, minX: 7340, maxX: 7600, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 4, maxHp: 4 },
+        { x: 1470, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.56, minX: 1370, maxX: 1580, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { kind: "peacock", x: 2700, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.45, minX: 2600, maxX: 2820, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.26, chargeCooldown: 68, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+        { kind: "bruiser", x: 5750, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.35, minX: 5640, maxX: 5880, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 3, maxHp: 3 },
+        { x: 6840, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.71, minX: 6760, maxX: 6930, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true },
       );
       for (let i = 0; i < enemies.length; i += 1) {
         const enemy = enemies[i];
@@ -3612,7 +3619,13 @@
       { kind: "peacock", x: 10140, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.56, minX: 10020, maxX: 10280, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.72, chargeCooldown: 70, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       { x: 10360, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.84, minX: 10240, maxX: 10480, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 10620, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.84, minX: 10520, maxX: 10750, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 78, hopInterval: 78 },
-      { kind: "peacock", x: 10930, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.58, minX: 10820, maxX: 11020, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.75, chargeCooldown: 68, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 }
+      { kind: "peacock", x: 10930, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.58, minX: 10820, maxX: 11020, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.75, chargeCooldown: 68, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 1520, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.56, minX: 1490, maxX: 1680, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+      { kind: "bruiser", x: 2470, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.34, minX: 2400, maxX: 2620, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 3, maxHp: 3 },
+      { kind: "peacock", x: 4760, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.5, minX: 4710, maxX: 4910, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.56, chargeCooldown: 70, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 7070, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.76, minX: 6990, maxX: 7210, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 86, hopInterval: 86 },
+      { kind: "bruiser", x: 8750, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.38, minX: 8640, maxX: 8850, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 4, maxHp: 4 },
+      { x: 10340, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.83, minX: 10320, maxX: 10420, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 }
     );
 
     for (let i = 0; i < enemies.length; i += 1) {
