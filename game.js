@@ -4797,9 +4797,15 @@
         w: Math.floor(spinRadiusX * 1.64),
         h: 12,
       };
+      const spinRoot = {
+        x: px - 8,
+        y: player.y + 6,
+        w: 16,
+        h: 14,
+      };
       hitBox = spinBox;
       hitBoxes.length = 0;
-      hitBoxes.push(spinBox, spinTop, spinBottom);
+      hitBoxes.push(spinBox, spinTop, spinBottom, spinRoot);
     }
     if (morningStarStrike) {
       const overheadBox = {
@@ -4850,6 +4856,32 @@
     }
     const overlapsAny = (target) => hitBoxes.some((box) => overlap(box, target));
     const isMorningStarTipHit = (target) => tipBoxes.length > 0 && tipBoxes.some((box) => overlap(box, target));
+    const reflectProjectileAsWave = (proj) => {
+      if (!proj || !stage.playerWaves) return;
+      const projCx = proj.x + (proj.w || 0) * 0.5;
+      const projCy = proj.y + (proj.h || 0) * 0.5;
+      const projVx = Number.isFinite(proj.vx) ? proj.vx : 0;
+      const projVy = Number.isFinite(proj.vy) ? proj.vy : 0;
+      const incomingDir = projVx > 0.05 ? 1 : projVx < -0.05 ? -1 : (projCx >= px ? 1 : -1);
+      const reflectDir = -incomingDir;
+      const waveW = Math.max(10, Math.floor((proj.w || 4) * 1.8));
+      const waveH = Math.max(8, Math.floor((proj.h || 4) * 1.5));
+      const waveSpeed = (2.3 + Math.abs(projVx) * 0.9 + Math.abs(projVy) * 0.28) * rankKnockMul * reflectDir;
+      const waveX = projCx - waveW * 0.5;
+      const waveY = projCy - waveH * 0.5;
+      stage.playerWaves.push({
+        x: waveX,
+        y: waveY,
+        w: waveW,
+        h: waveH,
+        vx: waveSpeed,
+        ttl: 78 + Math.floor(chargeRatio * 24),
+        phase: 0,
+        spin: Math.random() * Math.PI * 2,
+        power: clamp(0.62 + chargeRatio * 0.7 + rankBoost.blend * 0.22, 0.5, 1.8),
+      });
+      spawnWaveBurst(projCx, projCy, 0.78 + chargeRatio * 0.45);
+    };
 
     let hits = 0;
     let parryHits = 0;
@@ -4940,6 +4972,9 @@
 
     for (const b of stage.hazardBullets) {
       if (!overlapsAny(b)) continue;
+      if (morningStarSpin) {
+        reflectProjectileAsWave(b);
+      }
       b.dead = true;
       hits += 1;
       parryHits += 1;
@@ -4947,6 +4982,9 @@
 
     for (const bs of stage.bossShots) {
       if (!overlapsAny(bs)) continue;
+      if (morningStarSpin && bs.kind !== "rain_warn") {
+        reflectProjectileAsWave(bs);
+      }
       bs.dead = true;
       hits += 1;
       parryHits += 1;
