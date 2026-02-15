@@ -4990,12 +4990,15 @@
 
     let hits = 0;
     let parryHits = 0;
+    let parryRewardHits = 0;
     let hitX = morningStarSpin
       ? px
       : morningStarStrike
       ? (dir > 0 ? hitBox.x + hitBox.w - 2 : hitBox.x + 2)
       : px + dir * (12 + reach * 0.48);
     let hitY = morningStarSpin ? player.y + player.h * 0.5 : hitBox.y + hitBox.h * 0.5;
+    let parryX = hitX;
+    let parryY = hitY;
     const hitPower = (
       0.94
       + chargeRatio * 0.68
@@ -5078,7 +5081,10 @@
     for (const b of stage.hazardBullets) {
       if (!overlapsAny(b)) continue;
       if (morningStarSpin) {
+        parryX = b.x + b.w * 0.5;
+        parryY = b.y + b.h * 0.5;
         reflectProjectileAsWave(b);
+        parryRewardHits += 1;
       }
       b.dead = true;
       hits += 1;
@@ -5088,7 +5094,10 @@
     for (const bs of stage.bossShots) {
       if (!overlapsAny(bs)) continue;
       if (morningStarSpin && bs.kind !== "rain_warn") {
+        parryX = bs.x + bs.w * 0.5;
+        parryY = bs.y + bs.h * 0.5;
         reflectProjectileAsWave(bs);
+        parryRewardHits += 1;
       }
       bs.dead = true;
       hits += 1;
@@ -5129,6 +5138,12 @@
       );
       hits += 1;
       handleBossHpZero();
+    }
+
+    if (morningStarSpin && parryRewardHits > 0) {
+      const rewardHits = Math.min(6, parryRewardHits);
+      addProteinBurstGauge(0.6 + rewardHits * 0.34);
+      registerNearMissRank(parryX, parryY, 0.9 + rewardHits * 0.18);
     }
 
     if (strongWave) {
