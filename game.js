@@ -200,7 +200,8 @@
   const SE_GAIN_BOOST = 1.86;
   const PROTEIN_LIFE_UP_STEP = 45;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
-  const BLACK_FLASH_CHANCES = [1 / 16, 1 / 4, 1 / 2, 1 / 1.5];
+  const BLACK_FLASH_CHANCES = [0.08, 0.5, 0.6, 0.7, 0.8, 0.9];
+  const BLACK_FLASH_DAMAGE_MUL = 1.3;
   const BLACK_FLASH_SLOW_DURATION = 20;
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BLACK_FLASH_ENEMY_SLOW_SCALE = 0.84;
@@ -345,13 +346,31 @@
   function blackFlashChanceWithRank(stageIndex = blackFlashChain) {
     const idx = clamp(stageIndex, 0, BLACK_FLASH_CHANCES.length - 1);
     const baseChance = BLACK_FLASH_CHANCES[idx];
-    const rankBonus = battleRankIndex * 0.0025;
-    const slightBonus = 0.0075;
-    return clamp(baseChance + rankBonus + slightBonus, 0.01, 0.98);
+    return clamp(baseChance, 0.01, 0.98);
   }
 
   function formatBlackFlashChanceText(chance) {
     return `黒閃発生率 ${(chance * 100).toFixed(1)}%`;
+  }
+
+  function blackFlashChanceHudColor(chance) {
+    const c = clamp(chance, 0.01, 0.98);
+    if (c >= 0.9) {
+      return { text: "rgba(246, 218, 255, 0.98)", barRgb: "195, 125, 255" };
+    }
+    if (c >= 0.8) {
+      return { text: "rgba(255, 207, 224, 0.98)", barRgb: "255, 110, 156" };
+    }
+    if (c >= 0.7) {
+      return { text: "rgba(255, 220, 174, 0.98)", barRgb: "255, 154, 94" };
+    }
+    if (c >= 0.6) {
+      return { text: "rgba(255, 242, 176, 0.98)", barRgb: "255, 198, 108" };
+    }
+    if (c >= 0.5) {
+      return { text: "rgba(205, 255, 219, 0.98)", barRgb: "104, 230, 144" };
+    }
+    return { text: "rgba(198, 239, 255, 0.98)", barRgb: "106, 198, 255" };
   }
 
   function resolveBlackFlashAttempt(forcedChance = null) {
@@ -1397,7 +1416,7 @@
     spawnHitSparks(x, y, "#d7f2ff", "#67a8ff");
     spawnHitSparks(x, y, "#ffe8ff", "#b671ff");
     playBlackFlashSfx(p);
-    hudMessage = "黒閃! CRITICAL x2";
+    hudMessage = "黒閃! CRITICAL x1.3";
     hudTimer = Math.max(hudTimer, 44);
   }
 
@@ -1509,6 +1528,25 @@
       spawnHitSparks(x, y, "#e8f6ff", "#8ccfff");
       hudMessage = `RANK UP! ${rank.long}`;
       hudTimer = Math.max(hudTimer, 28);
+    }
+  }
+
+  function registerBurstActivationRankGain(x, y, gaugeRatio = 0) {
+    const previousRank = battleRankIndex;
+    const g = clamp(gaugeRatio, 0, 1);
+    const gaugeCap = BATTLE_RANK_DATA[BATTLE_RANK_DATA.length - 1].threshold + 360;
+    const rankDamp = Math.max(0.76, 1 - battleRankIndex * 0.045);
+    const gain = (8 + g * 4) * rankDamp;
+    battleRankGauge = Math.min(gaugeCap, battleRankGauge + gain);
+    updateBattleRankTier();
+    battleRankFlashTimer = Math.max(battleRankFlashTimer, 10);
+
+    if (battleRankIndex > previousRank) {
+      battleRankFlashTimer = Math.max(battleRankFlashTimer, 32);
+      battleRankBreakFlashTimer = 0;
+      playBattleRankUpSfx(battleRankIndex);
+      triggerImpact(1.0 + g * 0.26, x, y, 1.5 + g * 0.36);
+      spawnHitSparks(x, y, "#f4f6ff", "#a8d4ff");
     }
   }
 
@@ -2136,6 +2174,7 @@
     proteinBurstPower = fullBurst
       ? (0.9 + gaugeRatio * 1.1)
       : (0.72 + gaugeRatio * 0.76);
+    registerBurstActivationRankGain(player.x + player.w * 0.5, player.y + player.h * 0.52, gaugeRatio);
 
     proteinBurstGauge = 0;
     proteinBurstTimer = fullBurst ? PROTEIN_BURST_DURATION : PROTEIN_BURST_METEOR_DURATION;
@@ -2164,7 +2203,6 @@
     attackEffectMode = "none";
     attackEffectPower = 0;
     resetBlackFlashState();
-    resetBattleRank();
     stage.playerWaves = [];
     stage.hammerShards = [];
     stage.burstMeteors = [];
@@ -2244,7 +2282,7 @@
       const bf = rollBlackFlashHit(hx, hy, 1.35 + gaugeRatio * 1.4);
       const bossDamage = Math.max(
         1,
-        Math.round((1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus()) * crisisMul * (bf ? 2 : 1))
+        Math.round((1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus()) * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1))
       );
       boss.hp = Math.max(0, boss.hp - bossDamage);
       boss.invuln = bossDamageBonus() > 0 ? 12 : 20;
@@ -2384,7 +2422,7 @@
       if (Math.abs(hx - mx) > radius * 1.34 || Math.abs(hy - my) > radius * 1.05) continue;
       const bf = rollBlackFlashHit(hx, hy, 0.92 + meteor.power * 0.58);
       const damageBase = 0.86 + gaugeRatio * 0.76 + bossDamageBonus() * 0.3;
-      const damage = Math.max(1, Math.round(damageBase * (bf ? 2 : 1)));
+      const damage = Math.max(1, Math.round(damageBase * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
       boss.hp = Math.max(0, boss.hp - damage);
       boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
       const dir = hx < mx ? -1 : 1;
@@ -3575,7 +3613,7 @@
       ? (hasBlackFlashOption ? options.blackFlash : rollBlackFlashHit(hitX, hitY, 1.02 + power * 0.55))
       : false;
     const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
-    const effectivePower = blackFlash && !blackFlashPowerApplied ? power * 1.45 : power;
+    const effectivePower = blackFlash && !blackFlashPowerApplied ? power * BLACK_FLASH_DAMAGE_MUL : power;
     enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 3 : 1)));
     if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) {
       enemy.hp = enemy.maxHp;
@@ -4709,7 +4747,7 @@
         hitY,
         1.15 + chargeRatio * 1.4 + comboStage * 0.28 + (morningStarSpin ? 0.24 : 0) + (tipHit ? 0.12 : 0)
       );
-      const criticalPowerMul = bf ? 1.45 : 1;
+      const criticalPowerMul = bf ? BLACK_FLASH_DAMAGE_MUL : 1;
       const tipDamageMul = tipHit ? 1.24 : 1;
       const knockDir = morningStarSpin
         ? (enemyCenterX < px ? -1 : 1)
@@ -4770,7 +4808,7 @@
       hitY = boss.y + boss.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.34 : 0.45);
       const bf = tryBlackFlash(hitX, hitY, 1.3 + chargeRatio * 1.6 + comboStage * 0.35 + (tipHit ? 0.14 : 0));
       const bossDamageBase = 1 + bossDamageBonus();
-      const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * rankPowerMul * (bf ? 2 : 1) * (tipHit ? 1.24 : 1)));
+      const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * rankPowerMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1) * (tipHit ? 1.24 : 1)));
       boss.hp = Math.max(0, boss.hp - bossDamage);
       boss.invuln = morningStarSpin
         ? (bossDamageBonus() > 0 ? 10 : 14)
@@ -4981,7 +5019,7 @@
       hitY = boss.y + boss.h * 0.42;
       const bf = rollBlackFlashHit(hitX, hitY, 1.28 + chargeRatio * 1.36);
       const baseDamage = 2 + bossDamageBonus() + Math.floor(chargeRatio * 2.2);
-      const damage = Math.max(1, Math.round(baseDamage * crisisMul * (bf ? 2 : 1)));
+      const damage = Math.max(1, Math.round(baseDamage * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
       boss.hp = Math.max(0, boss.hp - damage);
       boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
       boss.vx += dir * (0.88 + chargeRatio * 0.46 + (bf ? 0.28 : 0));
@@ -5111,7 +5149,7 @@
       hitX = enemy.x + enemy.w * 0.5;
       hitY = laneBoxes[Math.max(0, laneIndex)].y + 2;
       const bf = tryBlackFlash(hitX, hitY, 1.08 + pLv * 0.02);
-      const criticalPowerMul = bf ? 1.45 : 1;
+      const criticalPowerMul = bf ? BLACK_FLASH_DAMAGE_MUL : 1;
       kickEnemy(enemy, dir, (hitPower + 0.15) * criticalPowerMul, {
         immediateRemove: false,
         flyLifetime: 24,
@@ -5144,7 +5182,7 @@
       hitY = boss.y + boss.h * 0.44;
       const bf = tryBlackFlash(hitX, hitY, 1.2 + pLv * 0.02);
       const baseDamage = 1 + bossDamageBonus();
-      const damage = Math.max(1, Math.round(baseDamage * crisisMul * rankPowerMul * (bf ? 2 : 1)));
+      const damage = Math.max(1, Math.round(baseDamage * crisisMul * rankPowerMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
       boss.hp = Math.max(0, boss.hp - damage);
       boss.invuln = bossDamageBonus() > 0 ? 10 : 16;
       boss.vx += dir * (0.48 + (bf ? 0.2 : 0)) * rankKnockMul;
@@ -5377,7 +5415,7 @@
           const hx = boss.x + boss.w * 0.5;
           const hy = boss.y + boss.h * 0.4;
           const bf = rollBlackFlashHit(hx, hy, 1.14 + (wave.power || 0) * 1.08);
-          const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul * (bf ? 2 : 1)));
+          const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
           boss.hp = Math.max(0, boss.hp - bossDamage);
           boss.invuln = bossDamageBonus() > 0 ? 9 : 13;
           boss.vx += dir * (0.62 + (wave.power || 0) * 0.28 + (bf ? 0.24 : 0));
@@ -5476,7 +5514,7 @@
           const bf = rollBlackFlashHit(hx, hy, 1.18 + shard.power * 0.94);
           const damage = Math.max(
             1,
-            Math.round((1 + bossDamageBonus() + shard.power * 0.42) * pinchAttackMultiplier() * (bf ? 2 : 1))
+            Math.round((1 + bossDamageBonus() + shard.power * 0.42) * pinchAttackMultiplier() * (bf ? BLACK_FLASH_DAMAGE_MUL : 1))
           );
           boss.hp = Math.max(0, boss.hp - damage);
           boss.invuln = bossDamageBonus() > 0 ? 8 : 11;
@@ -5654,7 +5692,7 @@
           const hitX = b.x + b.w * 0.5;
           const hitY = b.y + b.h * 0.25;
           const bf = rollBlackFlashHit(hitX, hitY, 1.28 + (kickCombo > 1 ? 0.24 : 0));
-          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier() * (bf ? 2 : 1)));
+          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier() * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
           b.hp = Math.max(0, b.hp - damage);
           b.invuln = bossDamageBonus() > 0 ? 13 : 20;
           b.vx += dir * (0.72 + (bf ? 0.28 : 0));
@@ -10902,7 +10940,9 @@
     }
 
     const blackFlashChainActive = blackFlashChain > 0;
-    const text = formatBlackFlashChanceText(blackFlashChanceWithRank());
+    const blackFlashChance = blackFlashChanceWithRank();
+    const blackFlashChanceStyle = blackFlashChanceHudColor(blackFlashChance);
+    const text = formatBlackFlashChanceText(blackFlashChance);
     const textW = Math.ceil(ctx.measureText(text).width);
     const padX = 3;
     const boxW = textW + padX * 2 + 1;
@@ -10910,11 +10950,12 @@
     const boxY = 3;
     ctx.fillStyle = `rgba(20, 12, 18, ${0.78 + (blackFlashChainActive ? 0.08 : 0)})`;
     ctx.fillRect(boxX, boxY, boxW, 8);
-    ctx.fillStyle = blackFlashChainActive
-      ? `rgba(255, 96, 126, ${0.9 + Math.sin(player.anim * 0.28) * 0.08})`
-      : "rgba(255, 96, 126, 0.92)";
+    const chanceBarAlpha = blackFlashChainActive
+      ? clamp(0.88 + Math.sin(player.anim * 0.28) * 0.08, 0.78, 0.98)
+      : 0.92;
+    ctx.fillStyle = `rgba(${blackFlashChanceStyle.barRgb}, ${chanceBarAlpha})`;
     ctx.fillRect(boxX, boxY + 7, boxW - 1, 1);
-    ctx.fillStyle = "rgba(255, 236, 242, 0.96)";
+    ctx.fillStyle = blackFlashChanceStyle.text;
     ctx.fillText(text, boxX + padX, boxY + 1);
 
     const rank = currentBattleRank();
