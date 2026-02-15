@@ -218,8 +218,10 @@
   const BOSS_BGM_PATH = "assets/boss_bgm.mp3";
   const INVINCIBLE_BGM_PATH = "assets/invincible_bgm.mp3";
   const WEAPON_DURATION = 600;
-  const PROTEIN_BURST_REQUIRE = 15;
+  const PROTEIN_BURST_REQUIRE = 18;
   const PROTEIN_BURST_MIN = Math.ceil(PROTEIN_BURST_REQUIRE * 0.5);
+  const PROTEIN_BURST_GAIN_PROTEIN = 0.6;
+  const PROTEIN_BURST_GAIN_DEFEAT_BASE = 0.18;
   const PROTEIN_BURST_DURATION = 98;
   const PROTEIN_BURST_BLAST_AT = 0.38;
   const PROTEIN_BURST_TOP_Y = 30;
@@ -314,6 +316,22 @@
     const sat = 44 + t * 52;
     const light = 48 + t * 20;
     return { hue, sat, light };
+  }
+
+  function addProteinBurstGauge(amount) {
+    if (proteinBurstTimer > 0) return 0;
+    const add = Math.max(0, amount || 0);
+    if (add <= 0) return 0;
+    const before = proteinBurstGauge;
+    proteinBurstGauge = clamp(proteinBurstGauge + add, 0, PROTEIN_BURST_REQUIRE);
+    return proteinBurstGauge - before;
+  }
+
+  function proteinBurstGainFromDefeat(power = 1) {
+    const p = clamp(power, 0.8, 5.4);
+    const rankMul = 1 + battleRankIndex * 0.14;
+    const powerBonus = Math.max(0, p - 1) * 0.05;
+    return (PROTEIN_BURST_GAIN_DEFEAT_BASE + powerBonus) * rankMul;
   }
 
   function blackFlashChanceWithRank(stageIndex = blackFlashChain) {
@@ -2096,7 +2114,7 @@
 
     if (!triggerProteinBurst()) {
       if (proteinBurstTimer > 0) return;
-      hudMessage = `BURST ${proteinBurstGauge}/${PROTEIN_BURST_MIN}+`;
+      hudMessage = `BURST ${Math.floor(proteinBurstGauge)}/${PROTEIN_BURST_MIN}+`;
       hudTimer = 28;
     }
   }
@@ -3127,6 +3145,7 @@
     spawnEnemyBlood(hitX, hitY, effectivePower + (blackFlash ? 0.22 : 0));
     if (freshDefeat) {
       triggerInvincibleKillBonus(hitX, hitY, effectivePower);
+      addProteinBurstGauge(proteinBurstGainFromDefeat(effectivePower));
       registerNoDamageDefeat(hitX, hitY, effectivePower, rankStyle);
       if (enemy.bossArenaTarget && !enemy.bossArenaCounted) {
         enemy.bossArenaCounted = true;
@@ -3944,7 +3963,7 @@
       const pLv = proteinLevel();
       const speedPct = Math.round(pLv * 2.2);
       proteinRushTimer = Math.min(90, proteinRushTimer + 44);
-      proteinBurstGauge = clamp(proteinBurstGauge + 1, 0, PROTEIN_BURST_REQUIRE);
+      addProteinBurstGauge(PROTEIN_BURST_GAIN_PROTEIN);
       const lifeUp = pLv % 30 === 0;
       if (lifeUp) {
         playerLives = Math.min(99, playerLives + 1);
