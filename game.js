@@ -314,6 +314,9 @@
   const HYAKURETSU_COMBO_AUTO_DURATION = 60;
   const HYAKURETSU_HIT_INTERVAL = 2;
   const HYAKURETSU_POST_COOLDOWN = 10;
+  const HYAKURETSU_FINISHER_CHARGE_RATIO = 0.94;
+  const HYAKURETSU_FINISHER_POWER_MUL = 1.34;
+  const HYAKURETSU_FINISHER_BOSS_MUL = 1.26;
   const STOMP_VERTICAL_GRACE = 16;
   const STOMP_SIDE_GRACE = 6;
   const STOMP_DESCEND_MIN = -0.25;
@@ -5179,6 +5182,7 @@
       ? (comboStage === 1 ? "punch" : comboStage === 2 ? "kick" : "upper")
       : "none";
     const forcePunch = options.forcePunch === true;
+    const hyakuretsuFinisher = options.hyakuretsuFinisher === true;
     const chargeRatio = clamp(chargeFrames / ATTACK_CHARGE_MAX, 0, 1);
     const strongWave = !forcePunch && chargeFrames >= ATTACK_WAVE_CHARGE_MIN - 0.01;
     const morningStarSpin = !forcePunch && !comboPunch && !strongWave
@@ -5220,7 +5224,7 @@
       : comboPunch
         ? 12 + comboStage * 4 + comboReachBonus + Math.floor(chargeRatio * 4)
       : 12 + Math.floor(chargeRatio * 50);
-    const reach = Math.max(10, Math.floor(baseReach * rankRangeMul));
+    const reach = Math.max(10, Math.floor((baseReach + (hyakuretsuFinisher ? 6 : 0)) * rankRangeMul));
     const rankHitHBonus = Math.max(0, Math.floor(rankBoost.blend * 4));
     let hitBox = {
       x: dir > 0 ? player.x + player.w - 1 : player.x - reach + 1,
@@ -5274,15 +5278,17 @@
       hitBoxes.length = 0;
       hitBoxes.push(overheadBox, hitBox);
     }
-    const baseRankStyle = strongWave
-      ? "atk1_wave"
-      : morningStarSpin
-        ? "atk1_morning_spin"
-      : morningStarStrike
-        ? (morningStarLong ? "atk1_morning_long" : "atk1_morning")
-        : comboPunch
-          ? `atk1_combo_${comboType}`
-          : "atk1_punch";
+    const baseRankStyle = hyakuretsuFinisher
+      ? "atk1_hyakuretsu_finish"
+      : strongWave
+        ? "atk1_wave"
+        : morningStarSpin
+          ? "atk1_morning_spin"
+        : morningStarStrike
+          ? (morningStarLong ? "atk1_morning_long" : "atk1_morning")
+          : comboPunch
+            ? `atk1_combo_${comboType}`
+            : "atk1_punch";
     const tipBoxes = [];
     if (morningStarStrike) {
       const tipW = Math.max(6, Math.floor(hitBox.w * 0.36));
@@ -5345,6 +5351,7 @@
     let hitY = morningStarSpin ? player.y + player.h * 0.5 : hitBox.y + hitBox.h * 0.5;
     let parryX = hitX;
     let parryY = hitY;
+    const finisherPowerMul = hyakuretsuFinisher ? HYAKURETSU_FINISHER_POWER_MUL : 1;
     const hitPower = (
       0.94
       + chargeRatio * 0.68
@@ -5353,7 +5360,7 @@
       + (morningStarStrike ? 0.28 : 0)
       + (morningStarSpin ? 0.22 : 0)
       + pLv * 0.01
-    ) * crisisMul * rankPowerMul;
+    ) * crisisMul * rankPowerMul * finisherPowerMul;
     let blackFlash = false;
     let blackFlashRolled = false;
     const tryBlackFlash = (x, y, power = 1, chanceMul = 1) => {
@@ -5472,7 +5479,17 @@
         tipChanceMul
       );
       const bossDamageBase = 1 + bossDamageBonus();
-      const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * rankPowerMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1) * (tipHit ? 1.24 : 1)));
+      const bossDamage = Math.max(
+        1,
+        Math.round(
+          bossDamageBase *
+          crisisMul *
+          rankPowerMul *
+          (hyakuretsuFinisher ? HYAKURETSU_FINISHER_BOSS_MUL : 1) *
+          (bf ? BLACK_FLASH_DAMAGE_MUL : 1) *
+          (tipHit ? 1.24 : 1)
+        )
+      );
       boss.hp = Math.max(0, boss.hp - bossDamage);
       boss.invuln = BOSS_HIT_INVULN_FRAMES;
       const bossDir = morningStarSpin ? (bossCenterX < px ? -1 : 1) : dir;
@@ -5562,6 +5579,9 @@
     if (comboPunch) {
       hudMessage = comboType === "kick" ? "2段: キック" : comboType === "upper" ? "3段: アッパー" : "1段: パンチ";
       hudTimer = Math.max(hudTimer, 18);
+    } else if (hyakuretsuFinisher) {
+      hudMessage = "百裂フィニッシュ: 正拳突き!";
+      hudTimer = Math.max(hudTimer, 30);
     } else if (morningStarSpin) {
       hudMessage = "モーニングスター全方位!";
       hudTimer = Math.max(hudTimer, 20);
@@ -5576,6 +5596,9 @@
         : morningStarStrike
           ? ATTACK_PUNCH_COOLDOWN + 4
         : ATTACK_PUNCH_COOLDOWN;
+    if (hyakuretsuFinisher) {
+      attackCooldown = Math.max(attackCooldown, ATTACK_PUNCH_COOLDOWN + 6);
+    }
     const baseEffectTimer = strongWave ? 16 : comboPunch ? 8 + comboStage * 2 : morningStarSpin ? 24 : morningStarStrike ? 16 : 11;
     attackEffectTimer = Math.round(baseEffectTimer + rankBoost.blend * (strongWave ? 9 : morningStarSpin ? 8 : morningStarStrike ? 6 : 5));
     attackEffectMode = strongWave ? "wave" : comboPunch ? `combo${comboStage}` : morningStarSpin ? "morningstar_spin" : morningStarStrike ? "morningstar" : "punch";
@@ -5885,6 +5908,19 @@
     attackEffectPower = clamp((0.62 + hits * 0.06 + parryHits * 0.04) * rankFxMul + rankBoost.blend * 0.06, 0.62, 1.8);
   }
 
+  function triggerHyakuretsuFinisher() {
+    hyakuretsuTimer = 0;
+    hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
+    attackMashCount = 0;
+    attackMashTimer = 0;
+    attackChargeTimer = 0;
+    attackMaxHoldTimer = 0;
+    attackChargeReadyPlayed = false;
+    const finisherCharge = ATTACK_CHARGE_MAX * HYAKURETSU_FINISHER_CHARGE_RATIO;
+    releaseChargeAttack(finisherCharge, { forcePunch: true, hyakuretsuFinisher: true });
+  }
+
   function updatePlayerAttack(dt, actions) {
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
     if (!playable) {
@@ -5925,6 +5961,10 @@
       attackChargeReadyPlayed = false;
       attack2ChargeTimer = 0;
       attack2ChargeReadyPlayed = false;
+      if (actions.attackPressed) {
+        triggerHyakuretsuFinisher();
+        return;
+      }
       const autoMode = hyakuretsuAutoTimer > 0;
       if (!autoMode && !input.attack) {
         hyakuretsuTimer = 0;
