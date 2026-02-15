@@ -345,7 +345,8 @@
     const idx = clamp(stageIndex, 0, BLACK_FLASH_CHANCES.length - 1);
     const baseChance = BLACK_FLASH_CHANCES[idx];
     const rankBonus = battleRankIndex * 0.0025;
-    return clamp(baseChance + rankBonus, 0.01, 0.98);
+    const slightBonus = 0.0075;
+    return clamp(baseChance + rankBonus + slightBonus, 0.01, 0.98);
   }
 
   function formatBlackFlashChanceText(chance) {
@@ -444,6 +445,10 @@
     battleRankRecentStyles.push(style);
     if (battleRankRecentStyles.length > 5) {
       battleRankRecentStyles.shift();
+    }
+
+    if (style.includes("morning") && style.includes("tip")) {
+      gain *= 1.3;
     }
 
     const highRankDamp = 1 - battleRankIndex * 0.03;
@@ -4502,7 +4507,39 @@
       hitBoxes.length = 0;
       hitBoxes.push(overheadBox, hitBox);
     }
+    const baseRankStyle = strongWave
+      ? "atk1_wave"
+      : morningStarSpin
+        ? "atk1_morning_spin"
+      : morningStarStrike
+        ? (morningStarLong ? "atk1_morning_long" : "atk1_morning")
+        : comboPunch
+          ? `atk1_combo_${comboType}`
+          : "atk1_punch";
+    const tipBoxes = [];
+    if (morningStarStrike) {
+      const tipW = Math.max(6, Math.floor(hitBox.w * 0.36));
+      tipBoxes.push({
+        x: dir > 0 ? hitBox.x + hitBox.w - tipW : hitBox.x,
+        y: hitBox.y - 2,
+        w: tipW,
+        h: hitBox.h + 4,
+      });
+    } else if (morningStarSpin) {
+      const spinBox = hitBoxes[0];
+      if (spinBox) {
+        const edge = Math.max(3, Math.floor(4 + chargeRatio * 3));
+        const innerH = Math.max(1, spinBox.h - edge * 2);
+        tipBoxes.push(
+          { x: spinBox.x, y: spinBox.y, w: spinBox.w, h: edge },
+          { x: spinBox.x, y: spinBox.y + spinBox.h - edge, w: spinBox.w, h: edge },
+          { x: spinBox.x, y: spinBox.y + edge, w: edge, h: innerH },
+          { x: spinBox.x + spinBox.w - edge, y: spinBox.y + edge, w: edge, h: innerH }
+        );
+      }
+    }
     const overlapsAny = (target) => hitBoxes.some((box) => overlap(box, target));
+    const isMorningStarTipHit = (target) => tipBoxes.length > 0 && tipBoxes.some((box) => overlap(box, target));
 
     let hits = 0;
     let parryHits = 0;
@@ -4544,27 +4581,25 @@
       if (!overlapsAny(enemy)) continue;
       const enemyCenterX = enemy.x + enemy.w * 0.5;
       const enemyCenterY = enemy.y + enemy.h * 0.5;
+      const tipHit = isMorningStarTipHit(enemy);
       hitX = enemy.x + enemy.w * 0.5;
       hitY = enemy.y + enemy.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.34 : 0.42);
-      const bf = tryBlackFlash(hitX, hitY, 1.15 + chargeRatio * 1.4 + comboStage * 0.28 + (morningStarSpin ? 0.24 : 0));
+      const bf = tryBlackFlash(
+        hitX,
+        hitY,
+        1.15 + chargeRatio * 1.4 + comboStage * 0.28 + (morningStarSpin ? 0.24 : 0) + (tipHit ? 0.12 : 0)
+      );
       const criticalPowerMul = bf ? 1.45 : 1;
+      const tipDamageMul = tipHit ? 1.24 : 1;
       const knockDir = morningStarSpin
         ? (enemyCenterX < px ? -1 : 1)
         : dir;
-      kickEnemy(enemy, knockDir, (hitPower + 0.2) * criticalPowerMul, {
+      kickEnemy(enemy, knockDir, (hitPower + 0.2 + (tipHit ? 0.24 : 0)) * criticalPowerMul * tipDamageMul, {
         immediateRemove: false,
         flyLifetime: 32 + Math.round(chargeRatio * 16),
         blackFlash: bf,
         blackFlashPowerApplied: true,
-        rankStyle: strongWave
-          ? "atk1_wave"
-          : morningStarSpin
-            ? "atk1_morning_spin"
-          : morningStarStrike
-            ? (morningStarLong ? "atk1_morning_long" : "atk1_morning")
-            : comboPunch
-              ? `atk1_combo_${comboType}`
-              : "atk1_punch",
+        rankStyle: tipHit ? `${baseRankStyle}_tip` : baseRankStyle,
       });
       enemy.vx = knockDir * (
         3.8
@@ -4573,6 +4608,7 @@
         + comboVxBonus
         + (morningStarStrike ? 0.8 : 0)
         + (morningStarSpin ? 0.56 : 0)
+        + (tipHit ? 0.48 : 0)
       );
       const spinVertical = morningStarSpin
         ? (enemyCenterY < player.y + player.h * 0.46 ? 0.42 : enemyCenterY > player.y + player.h * 0.64 ? -0.18 : 0.14)
@@ -4585,7 +4621,7 @@
             : morningStarSpin
               ? 3.1 + chargeRatio * 0.7 + spinVertical + (bf ? 0.34 : 0)
             : 3.4 + chargeRatio * 1.3 + comboStage * 0.14 + comboVyBonus + (bf ? 0.46 : 0)
-        )
+        ) + (tipHit ? 0.42 : 0)
       );
       enemy.flash = 12;
       hits += 1;
@@ -4608,11 +4644,12 @@
     for (const boss of getBossEntities()) {
       if (!overlapsAny(boss) || boss.invuln > 0 || boss.hp <= 0) continue;
       const bossCenterX = boss.x + boss.w * 0.5;
+      const tipHit = isMorningStarTipHit(boss);
       hitX = bossCenterX;
       hitY = boss.y + boss.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.34 : 0.45);
-      const bf = tryBlackFlash(hitX, hitY, 1.3 + chargeRatio * 1.6 + comboStage * 0.35);
+      const bf = tryBlackFlash(hitX, hitY, 1.3 + chargeRatio * 1.6 + comboStage * 0.35 + (tipHit ? 0.14 : 0));
       const bossDamageBase = 1 + bossDamageBonus();
-      const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * (bf ? 2 : 1)));
+      const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * (bf ? 2 : 1) * (tipHit ? 1.24 : 1)));
       boss.hp = Math.max(0, boss.hp - bossDamage);
       boss.invuln = morningStarSpin
         ? (bossDamageBonus() > 0 ? 10 : 14)
@@ -4627,6 +4664,7 @@
         + (morningStarStrike ? (morningStarLong ? 0.52 : 0.34) : 0)
         + (morningStarSpin ? 0.42 : 0)
         + (bf ? 0.34 : 0)
+        + (tipHit ? 0.26 : 0)
       );
       boss.vy = Math.min(
         boss.vy,
@@ -4636,7 +4674,7 @@
             : morningStarStrike
               ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0)
               : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5
-        ) - (bf ? 0.24 : 0)
+        ) - (bf ? 0.24 : 0) - (tipHit ? 0.18 : 0)
       );
       hits += 1;
       handleBossHpZero();
