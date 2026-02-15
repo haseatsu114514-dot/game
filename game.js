@@ -362,7 +362,8 @@
     if (triggered) {
       blackFlashChain = Math.min(blackFlashChain + 1, BLACK_FLASH_CHANCES.length - 1);
     } else {
-      blackFlashChain = Math.max(0, blackFlashChain - 1);
+      // On miss, reset the continuation chain back to the initial chance tier.
+      blackFlashChain = 0;
     }
     return triggered;
   }
