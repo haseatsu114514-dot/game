@@ -30,7 +30,9 @@ body {
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
-  touch-action: manipulation;
+  touch-action: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -98,6 +100,18 @@ body {
   gap: 8px;
 }
 
+.cluster-right {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 334px;
+}
+
+.cluster-right .ctrl {
+  width: 100%;
+  min-width: 0;
+}
+
 .ctrl {
   border: 2px solid #68536f;
   background: linear-gradient(180deg, #4b3951, var(--btn));
@@ -124,6 +138,44 @@ body {
   border-color: #be6c6c;
 }
 
+.ctrl.attack2 {
+  background: linear-gradient(180deg, #5f4c38, #3f3021);
+  border-color: #b89a76;
+}
+
+.ctrl.special {
+  --burst-fill: 0%;
+  --burst-alpha: 0.12;
+  grid-column: 1 / -1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(96, 198, 236, var(--burst-alpha)) 0 var(--burst-fill),
+      rgba(35, 47, 66, 0.9) var(--burst-fill) 100%
+    ),
+    linear-gradient(180deg, #2d3b4f, #1f2a3b);
+  border-color: #5f799b;
+  color: #d7e8ff;
+  opacity: 0.72;
+}
+
+.ctrl.special.ready {
+  border-color: #9cecff;
+  color: #f7fcff;
+  opacity: 1;
+  box-shadow:
+    inset 0 0 0 1px rgba(240, 252, 255, 0.18),
+    0 0 12px rgba(110, 225, 255, 0.3);
+}
+
+.ctrl.special.full {
+  border-color: #ffd9a0;
+}
+
+.ctrl.special:disabled {
+  opacity: 0.62;
+}
+
 .ctrl:active,
 .ctrl.is-down {
   transform: translateY(1px) scale(0.98);
@@ -133,6 +185,29 @@ body {
 .ctrl.attack:active,
 .ctrl.attack.is-down {
   background: linear-gradient(180deg, #aa3f3f, #6f1717);
+}
+
+.ctrl.attack2:active,
+.ctrl.attack2.is-down {
+  background: linear-gradient(180deg, #866949, #56402a);
+}
+
+.ctrl.special:active,
+.ctrl.special.is-down {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(126, 220, 255, calc(var(--burst-alpha) + 0.08)) 0 var(--burst-fill),
+      rgba(46, 61, 84, 0.94) var(--burst-fill) 100%
+    ),
+    linear-gradient(180deg, #35506a, #213753);
+}
+
+.ctrl.special.ready:active,
+.ctrl.special.ready.is-down {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    0 0 14px rgba(132, 238, 255, 0.42);
 }
 
 .help {
@@ -150,11 +225,19 @@ body {
 
 @media (max-width: 720px) {
   .controls {
-    gap: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .cluster {
-    gap: 14px;
+    gap: 12px;
+    width: min(100%, 340px);
+    justify-content: center;
+  }
+
+  .cluster-right {
+    width: min(100%, 340px);
   }
 
   .title-bar p {
@@ -171,6 +254,10 @@ body {
 
   .ctrl.action {
     min-width: 154px;
+  }
+
+  .cluster-right .ctrl.action {
+    min-width: 0;
   }
 
   .help p {

@@ -35,6 +35,7 @@
     right: false,
     jump: false,
     attack: false,
+    attack2: false,
     special: false,
     start: false,
   };
@@ -42,6 +43,7 @@
   const prevInput = {
     jump: false,
     attack: false,
+    attack2: false,
     special: false,
     start: false,
   };
@@ -107,8 +109,10 @@
   let dashJumpAssistTimer = 0;
   let attackCooldown = 0;
   let attackChargeTimer = 0;
+  let attack2ChargeTimer = 0;
   let attackMaxHoldTimer = 0;
   let attackChargeReadyPlayed = false;
+  let attack2ChargeReadyPlayed = false;
   let attackMashCount = 0;
   let attackMashTimer = 0;
   let hyakuretsuTimer = 0;
@@ -222,6 +226,11 @@
   const DASH_JUMP_SPEED_CAP_MULT = 1.45;
   const DASH_JUMP_GRAVITY_MULT = 0.84;
   const ATTACK_CHARGE_MAX = 132;
+  const ATTACK2_CHARGE_MAX = 110;
+  const ATTACK2_BREAK_CHARGE_MIN = ATTACK2_CHARGE_MAX * 0.58;
+  const ATTACK2_COOLDOWN = 26;
+  const ATTACK2_COOLDOWN_CHARGED = 40;
+  const HAMMER_SHARD_LIFE = 48;
   const ATTACK_WAVE_CHARGE_MIN = ATTACK_CHARGE_MAX;
   const ATTACK_MORNINGSTAR_CHARGE_MIN = ATTACK_CHARGE_MAX * 0.3;
   const ATTACK_MORNINGSTAR_LONG_MIN = ATTACK_CHARGE_MAX * 0.6;
@@ -1717,6 +1726,8 @@
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
@@ -1728,6 +1739,7 @@
     resetBlackFlashState();
     resetBattleRank();
     stage.playerWaves = [];
+    stage.hammerShards = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -2127,6 +2139,7 @@
         godGimmicks: [],
         bossArenaControl: null,
         playerWaves: [],
+        hammerShards: [],
         checkpoints,
         goal: { x: 4208, y: 112, w: 24, h: 48 },
         bossArena: { minX: 4260, maxX: 4740 },
@@ -2414,6 +2427,7 @@
       godGimmicks: [],
       bossArenaControl: null,
       playerWaves: [],
+      hammerShards: [],
       checkpoints,
       goal: { x: 8108, y: 112, w: 24, h: 48 },
       bossArena: { minX: 8160, maxX: 8840 },
@@ -2935,6 +2949,8 @@
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
@@ -2945,6 +2961,7 @@
     attackEffectPower = 0;
     resetBlackFlashState();
     stage.playerWaves = [];
+    stage.hammerShards = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -3011,6 +3028,8 @@
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
@@ -3021,6 +3040,7 @@
     attackEffectPower = 0;
     resetBlackFlashState();
     stage.playerWaves = [];
+    stage.hammerShards = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -3086,6 +3106,8 @@
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
@@ -3096,6 +3118,7 @@
     attackEffectPower = 0;
     resetBattleRank();
     stage.playerWaves = [];
+    stage.hammerShards = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -3847,6 +3870,142 @@
     attackEffectPower = comboPunch ? clamp(0.32 + comboStage * 0.24 + chargeRatio * 0.2, 0, 1) : morningStarStrike ? clamp(0.5 + chargeRatio * 0.55, 0, 1) : chargeRatio;
   }
 
+  function emitHammerShards(x, y, dir, chargeRatio, crisisMul) {
+    if (!stage.hammerShards) stage.hammerShards = [];
+    const shardCount = 6 + Math.floor(chargeRatio * 4);
+    const baseSpeed = 1.9 + chargeRatio * 0.9;
+    for (let i = 0; i < shardCount; i += 1) {
+      const spread = (i / Math.max(1, shardCount - 1)) * 1.22 - 0.61;
+      const vx = dir * (baseSpeed + Math.abs(spread) * 0.9 + Math.random() * 0.4);
+      const vy = -(1.8 + Math.max(0, 0.5 - Math.abs(spread)) * 1.4 + Math.random() * 0.4);
+      stage.hammerShards.push({
+        x: x + dir * (2 + Math.random() * 5),
+        y: y - 2 + Math.random() * 5,
+        w: 3 + (i % 2),
+        h: 2 + (i % 2),
+        vx,
+        vy,
+        ttl: HAMMER_SHARD_LIFE + Math.floor(Math.random() * 14),
+        power: 1 + chargeRatio * 1.15 + (crisisMul - 1) * 0.8,
+        spin: Math.random() * Math.PI * 2,
+        dead: false,
+      });
+    }
+  }
+
+  function releaseHammerAttack(chargeFrames) {
+    const chargeRatio = clamp(chargeFrames / ATTACK2_CHARGE_MAX, 0, 1);
+    const chargedBreak = chargeFrames >= ATTACK2_BREAK_CHARGE_MIN;
+    const pLv = proteinLevel();
+    const crisisMul = pinchAttackMultiplier();
+    const dir = player.facing;
+    const reach = 18 + Math.floor(chargeRatio * 18);
+    const sx = dir > 0 ? player.x + player.w - 2 : player.x - reach + 2;
+    const sy = player.y + 5;
+    const mainBox = { x: sx, y: sy, w: reach, h: 18 };
+    const overheadBox = { x: player.x - 4, y: player.y - 10, w: player.w + 8, h: 16 };
+    const impactBox = {
+      x: (dir > 0 ? player.x + player.w - 10 : player.x - 20) - Math.floor(chargeRatio * 5),
+      y: player.y + player.h - 2,
+      w: 30 + Math.floor(chargeRatio * 14),
+      h: 16,
+    };
+    const hitBoxes = chargedBreak ? [overheadBox, mainBox, impactBox] : [overheadBox, mainBox];
+    const overlapsAny = (obj) => hitBoxes.some((box) => overlap(box, obj));
+
+    let hits = 0;
+    let parryHits = 0;
+    let hitX = player.x + player.w * 0.5 + dir * (8 + reach * 0.44);
+    let hitY = player.y + player.h * 0.6;
+
+    let gimmickBreaks = 0;
+    for (const box of hitBoxes) {
+      gimmickBreaks += hitBreakableGimmicks(box, 1.45 + chargeRatio * 1.25);
+    }
+    if (gimmickBreaks > 0) {
+      hitX = impactBox.x + impactBox.w * 0.5;
+      hitY = impactBox.y + 2;
+      hits += gimmickBreaks;
+    }
+
+    const enemyPower = (1.72 + chargeRatio * 1.18 + pLv * 0.016) * crisisMul;
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlapsAny(enemy)) continue;
+      hitX = enemy.x + enemy.w * 0.5;
+      hitY = enemy.y + enemy.h * 0.44;
+      kickEnemy(enemy, dir, enemyPower + (chargedBreak ? 0.34 : 0), { immediateRemove: false, flyLifetime: 36 });
+      enemy.vx = dir * (4.6 + enemyPower * 1.06 + (chargedBreak ? 0.7 : 0));
+      enemy.vy = Math.min(enemy.vy, -(3.9 + chargeRatio * 1.25 + (chargedBreak ? 0.5 : 0)));
+      enemy.flash = 13;
+      hits += 1;
+    }
+
+    for (const bullet of stage.hazardBullets) {
+      if (!overlapsAny(bullet)) continue;
+      bullet.dead = true;
+      hits += 1;
+      parryHits += 1;
+    }
+
+    for (const shot of stage.bossShots) {
+      if (!overlapsAny(shot)) continue;
+      shot.dead = true;
+      hits += 1;
+      parryHits += 1;
+    }
+
+    if (stage.boss.active && stage.boss.hp > 0 && overlapsAny(stage.boss) && stage.boss.invuln <= 0) {
+      hitX = stage.boss.x + stage.boss.w * 0.5;
+      hitY = stage.boss.y + stage.boss.h * 0.42;
+      const baseDamage = 2 + bossDamageBonus() + Math.floor(chargeRatio * 2.2);
+      const damage = Math.max(1, Math.round(baseDamage * crisisMul));
+      stage.boss.hp = Math.max(0, stage.boss.hp - damage);
+      stage.boss.invuln = bossDamageBonus() > 0 ? 10 : 15;
+      stage.boss.vx += dir * (0.88 + chargeRatio * 0.46);
+      stage.boss.vy = Math.min(stage.boss.vy, -(2.2 + chargeRatio * 0.34));
+      hits += 1;
+      handleBossHpZero();
+    }
+
+    if (chargedBreak) {
+      emitHammerShards(impactBox.x + impactBox.w * 0.5, impactBox.y + 2, dir, chargeRatio, crisisMul);
+    }
+
+    if (hits > 0) {
+      if (kickComboTimer > 0) {
+        kickCombo = Math.min(99, kickCombo + hits);
+      } else {
+        kickCombo = hits;
+      }
+      kickComboTimer = 42;
+    }
+
+    triggerKickBurst(hitX, hitY, 2.2 + chargeRatio * 1.2 + (chargedBreak ? 0.65 : 0));
+    triggerImpact(
+      2.5 + chargeRatio * 1.5 + (chargedBreak ? 0.95 : 0),
+      hitX,
+      hitY,
+      4.0 + chargeRatio * 1.55 + (chargedBreak ? 1.2 : 0)
+    );
+    spawnHitSparks(hitX, hitY, "#ffeec4", "#ff9b6d");
+    spawnHitSparks(hitX, hitY, "#fff8de", "#ff6f5c");
+    playKickSfx(1.58 + chargeRatio * 0.34 + (chargedBreak ? 0.32 : 0));
+    if (parryHits > 0) playParrySfx();
+    playRilaRobotVoice("attack");
+    if (chargedBreak) {
+      hudMessage = "ATK2: ハンマーブレイク!";
+      hudTimer = Math.max(hudTimer, 30);
+    }
+
+    attackCooldown = chargedBreak ? ATTACK2_COOLDOWN_CHARGED : ATTACK2_COOLDOWN;
+    attackEffectTimer = chargedBreak ? 24 : 18;
+    attackEffectMode = "hammer";
+    attackEffectPhase = chargeRatio * 2.2;
+    attackEffectPower = clamp(0.48 + chargeRatio * 0.6, 0, 1);
+    player.vx *= chargedBreak ? 0.6 : 0.72;
+  }
+
   function startHyakuretsuMode() {
     if (hyakuretsuTimer > 0) return;
     hyakuretsuTimer = HYAKURETSU_DURATION;
@@ -3858,6 +4017,8 @@
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackEffectTimer = 8;
     attackEffectMode = "hyakuretsu";
     attackEffectPhase = 0;
@@ -3994,6 +4155,10 @@
         attackChargeTimer = 0;
         attackChargeReadyPlayed = false;
       }
+      if (!input.attack2) {
+        attack2ChargeTimer = 0;
+        attack2ChargeReadyPlayed = false;
+      }
       attackMashCount = 0;
       attackMashTimer = 0;
       hyakuretsuTimer = 0;
@@ -4001,10 +4166,25 @@
       return;
     }
 
+    if (input.attack2) {
+      attackChargeTimer = 0;
+      attackMaxHoldTimer = 0;
+      attackChargeReadyPlayed = false;
+      attackMashCount = 0;
+      attackMashTimer = 0;
+      if (hyakuretsuTimer > 0) {
+        hyakuretsuTimer = 0;
+        hyakuretsuHitTimer = 0;
+        attackCooldown = Math.max(attackCooldown, HYAKURETSU_POST_COOLDOWN);
+      }
+    }
+
     if (hyakuretsuTimer > 0) {
       attackChargeTimer = 0;
       attackMaxHoldTimer = 0;
       attackChargeReadyPlayed = false;
+      attack2ChargeTimer = 0;
+      attack2ChargeReadyPlayed = false;
       if (!input.attack) {
         hyakuretsuTimer = 0;
         hyakuretsuHitTimer = 0;
@@ -4026,8 +4206,33 @@
         attackMaxHoldTimer = 0;
         attackChargeReadyPlayed = false;
       }
+      if (!input.attack2) {
+        attack2ChargeTimer = 0;
+        attack2ChargeReadyPlayed = false;
+      }
       return;
     }
+
+    if (input.attack2) {
+      const beforeCharge2 = attack2ChargeTimer;
+      const chargeMul2 = battleRankChargeMultiplier();
+      attack2ChargeTimer = Math.min(ATTACK2_CHARGE_MAX, attack2ChargeTimer + dt * chargeMul2);
+      if (
+        !attack2ChargeReadyPlayed &&
+        attack2ChargeTimer >= ATTACK2_BREAK_CHARGE_MIN &&
+        beforeCharge2 < ATTACK2_BREAK_CHARGE_MIN
+      ) {
+        attack2ChargeReadyPlayed = true;
+        playChargeReadySfx();
+      }
+      return;
+    }
+
+    if (actions.attack2Released && attack2ChargeTimer > 0) {
+      releaseHammerAttack(attack2ChargeTimer);
+    }
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
 
     if (input.attack) {
       const beforeCharge = attackChargeTimer;
@@ -4149,6 +4354,75 @@
     }
 
     stage.playerWaves = stage.playerWaves.filter((w) => !w.dead);
+  }
+
+  function updateHammerShards(dt, solids) {
+    if (!stage.hammerShards || stage.hammerShards.length === 0) return;
+
+    for (const shard of stage.hammerShards) {
+      if (shard.dead) continue;
+      shard.ttl -= dt;
+      shard.spin += dt * (0.2 + Math.abs(shard.vx) * 0.06);
+      shard.vy = Math.min(shard.vy + GRAVITY * 0.54 * dt, MAX_FALL);
+      shard.x += shard.vx * dt;
+      shard.y += shard.vy * dt;
+
+      let hitSolid = false;
+      for (const s of solids) {
+        if (s.kind === "crumble" && s.state === "gone") continue;
+        if (!overlap(shard, s)) continue;
+        hitSolid = true;
+        break;
+      }
+      if (hitSolid || shard.ttl <= 0 || shard.x < -36 || shard.x > stage.width + 36 || shard.y > H + 80) {
+        shard.dead = true;
+        continue;
+      }
+
+      hitBreakableGimmicks(shard, 1 + shard.power * 0.22);
+
+      for (const enemy of stage.enemies) {
+        if (shard.dead) break;
+        if (!enemy.alive || enemy.kicked) continue;
+        if (!overlap(shard, enemy)) continue;
+        const dir = shard.vx >= 0 ? 1 : -1;
+        kickEnemy(enemy, dir, 1.1 + shard.power * 0.85, { immediateRemove: false, flyLifetime: 24 });
+        enemy.vx = dir * (4.0 + shard.power * 0.7);
+        enemy.vy = Math.min(enemy.vy, -(3.1 + shard.power * 0.4));
+        enemy.flash = 10;
+        const hx = enemy.x + enemy.w * 0.5;
+        const hy = enemy.y + enemy.h * 0.44;
+        triggerImpact(1.2 + shard.power * 0.25, hx, hy, 1.8 + shard.power * 0.32);
+        shard.dead = true;
+      }
+
+      if (!shard.dead && stage.boss.active && stage.boss.hp > 0 && overlap(shard, stage.boss) && stage.boss.invuln <= 0) {
+        const damage = Math.max(1, Math.round((1 + bossDamageBonus() + shard.power * 0.42) * pinchAttackMultiplier()));
+        stage.boss.hp = Math.max(0, stage.boss.hp - damage);
+        stage.boss.invuln = bossDamageBonus() > 0 ? 8 : 11;
+        stage.boss.vx += (shard.vx >= 0 ? 1 : -1) * (0.34 + shard.power * 0.2);
+        stage.boss.vy = Math.min(stage.boss.vy, -(1.55 + shard.power * 0.18));
+        const hx = stage.boss.x + stage.boss.w * 0.5;
+        const hy = stage.boss.y + stage.boss.h * 0.45;
+        triggerImpact(1.5 + shard.power * 0.34, hx, hy, 2.3 + shard.power * 0.4);
+        handleBossHpZero();
+        shard.dead = true;
+      }
+
+      for (const bullet of stage.hazardBullets) {
+        if (bullet.dead) continue;
+        if (!overlap(shard, bullet)) continue;
+        bullet.dead = true;
+      }
+
+      for (const shot of stage.bossShots) {
+        if (shot.dead) continue;
+        if (!overlap(shard, shot)) continue;
+        shot.dead = true;
+      }
+    }
+
+    stage.hammerShards = stage.hammerShards.filter((s) => !s.dead);
   }
 
   function resolveEnemyContactDamage() {
@@ -4472,6 +4746,7 @@
     b.vx = 0;
     b.vy = -1.8;
     stage.bossShots = [];
+    stage.hammerShards = [];
     if (!stage.godGimmicks || stage.godGimmicks.length === 0) {
       setupGodPhaseGimmicks();
     }
@@ -4556,6 +4831,7 @@
     stage.godGimmicks = [];
     stage.bossArenaControl = null;
     stage.playerWaves = [];
+    stage.hammerShards = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -4585,6 +4861,8 @@
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
@@ -4623,9 +4901,12 @@
     }
     stage.bossShots = [];
     stage.playerWaves = [];
+    stage.hammerShards = [];
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
@@ -5448,12 +5729,15 @@
     stopInvincibleMusic();
     stopBossMusic(true);
     stage.playerWaves = [];
+    stage.hammerShards = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
     invincibleBonusPops = [];
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
@@ -5475,12 +5759,15 @@
       jumpPressed: input.jump && !prevInput.jump,
       attackPressed: input.attack && !prevInput.attack,
       attackReleased: !input.attack && prevInput.attack,
+      attack2Pressed: input.attack2 && !prevInput.attack2,
+      attack2Released: !input.attack2 && prevInput.attack2,
       specialPressed: input.special && !prevInput.special,
       startPressed: input.start && !prevInput.start,
     };
 
     prevInput.jump = input.jump;
     prevInput.attack = input.attack;
+    prevInput.attack2 = input.attack2;
     prevInput.special = input.special;
     prevInput.start = input.start;
 
@@ -5564,6 +5851,7 @@
       updatePlayerAttack(dt, actions);
     }
     updatePlayerWaves(dt, solidsAfter);
+    updateHammerShards(dt, solidsAfter);
     resolveEnemyContactDamage();
     resolveBreakWalls(dt);
     resolveHazards();
@@ -5645,6 +5933,7 @@
       updatePlayerAttack(dt, actions);
     }
     updatePlayerWaves(dt, solids);
+    updateHammerShards(dt, solids);
     resolveEnemyContactDamage();
     resolveBossContactDamage();
     resolveBreakWalls(dt);
@@ -5669,7 +5958,7 @@
     player.anim += dt * 0.45;
     startOpeningTheme();
 
-    if (actions.startPressed || actions.jumpPressed || actions.attackPressed) {
+    if (actions.startPressed || actions.jumpPressed || actions.attackPressed || actions.attack2Pressed) {
       beginOpeningCutscene();
     }
   }
@@ -5743,6 +6032,8 @@
     attackCooldown = 0;
     attackChargeTimer = 0;
     attackChargeReadyPlayed = false;
+    attack2ChargeTimer = 0;
+    attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
@@ -5762,6 +6053,7 @@
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
     stage.playerWaves = [];
+    stage.hammerShards = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
     waveBursts = [];
@@ -5844,7 +6136,7 @@
 
     const finalStage = currentStageNumber >= FINAL_STAGE_NUMBER;
     if (!finalStage) {
-      if (clearTimer > 150 && (actions.startPressed || actions.jumpPressed || actions.attackPressed)) {
+      if (clearTimer > 150 && (actions.startPressed || actions.jumpPressed || actions.attackPressed || actions.attack2Pressed)) {
         startNextStage();
         return;
       }
@@ -5854,7 +6146,7 @@
       return;
     }
 
-    if (clearTimer > 180 && (actions.startPressed || actions.jumpPressed || actions.attackPressed)) {
+    if (clearTimer > 180 && (actions.startPressed || actions.jumpPressed || actions.attackPressed || actions.attack2Pressed)) {
       returnToTitle();
     }
   }
@@ -7389,6 +7681,29 @@
       }
     }
 
+    const showingHammerCharge = input.attack2 && attackCooldown <= 0 && attack2ChargeTimer > 2;
+    if (showingHammerCharge) {
+      const chargeRatio2 = clamp(attack2ChargeTimer / ATTACK2_CHARGE_MAX, 0, 1);
+      const breakReady = attack2ChargeTimer >= ATTACK2_BREAK_CHARGE_MIN;
+      const barW2 = 26;
+      const barX2 = cx - Math.floor(barW2 * 0.5);
+      const barY2 = Math.floor(player.y - 12);
+      ctx.fillStyle = "rgba(18, 12, 10, 0.88)";
+      ctx.fillRect(barX2, barY2, barW2, 4);
+      ctx.fillStyle = breakReady ? "#ffd08a" : "#ff9a78";
+      ctx.fillRect(barX2 + 1, barY2 + 1, Math.max(1, Math.floor((barW2 - 2) * chargeRatio2)), 2);
+
+      const groundW = 20 + Math.floor(chargeRatio2 * 18);
+      const groundH = 10 + Math.floor(chargeRatio2 * 5);
+      const gx = dir > 0 ? cx + 3 : cx - groundW - 3;
+      const gy = cy + 8;
+      const alpha = 0.08 + chargeRatio2 * 0.11;
+      ctx.fillStyle = `rgba(255, 153, 120, ${alpha})`;
+      ctx.fillRect(gx, gy - Math.floor(groundH * 0.5), groundW, groundH);
+      ctx.strokeStyle = `rgba(255, 210, 182, ${0.1 + chargeRatio2 * 0.14})`;
+      ctx.strokeRect(gx, gy - Math.floor(groundH * 0.5), groundW, groundH);
+    }
+
     if (attackEffectTimer <= 0) return;
 
     const mode = attackEffectMode;
@@ -7398,13 +7713,44 @@
     const isWave = mode === "wave";
     const isHyakuretsu = mode === "hyakuretsu";
     const isMorningStar = mode === "morningstar";
+    const isHammer = mode === "hammer";
     const isCombo = comboStage > 0;
     const comboMove = isCombo
       ? (comboStage === 1 ? "punch" : comboStage === 2 ? "kick" : "upper")
       : "none";
-    const effectDuration = isWave ? 16 : isHyakuretsu ? 6 : isMorningStar ? 16 : isCombo ? 8 + comboStage * 2 : 11;
+    const effectDuration = isHammer ? 22 : isWave ? 16 : isHyakuretsu ? 6 : isMorningStar ? 16 : isCombo ? 8 + comboStage * 2 : 11;
     const ratio = clamp(attackEffectTimer / effectDuration, 0, 1);
     const effectPower = clamp(attackEffectPower, 0, 1);
+    if (isHammer) {
+      const swing = clamp(1 - ratio, 0, 1);
+      const arcLen = Math.floor(18 + effectPower * 18 + swing * 6);
+      const anchorX = dir > 0 ? cx + 5 : cx - 5;
+      const anchorY = cy - 10;
+      const headX = dir > 0 ? anchorX + arcLen : anchorX - arcLen;
+      const headY = anchorY + Math.floor(10 + swing * 12);
+
+      for (let i = 0; i < 6; i += 1) {
+        const t = i / 5;
+        const lx = Math.round(anchorX + (headX - anchorX) * t);
+        const ly = Math.round(anchorY + (headY - anchorY) * t + Math.sin((t + swing) * Math.PI) * 2);
+        ctx.fillStyle = i % 2 === 0 ? "rgba(255, 168, 136, 0.55)" : "rgba(255, 216, 168, 0.44)";
+        ctx.fillRect(lx, ly, 2, 1);
+      }
+
+      const hammerW = 8;
+      const hammerH = 5;
+      const hx = headX - Math.floor(hammerW * 0.5);
+      const hy = headY - Math.floor(hammerH * 0.5);
+      ctx.fillStyle = "#4f586e";
+      ctx.fillRect(hx, hy, hammerW, hammerH);
+      ctx.fillStyle = "#a8b4ca";
+      ctx.fillRect(hx + 1, hy + 1, hammerW - 2, hammerH - 2);
+      ctx.fillStyle = "#dce6f8";
+      ctx.fillRect(hx + 2, hy + 1, 2, 1);
+      ctx.fillStyle = "rgba(255, 186, 132, 0.48)";
+      ctx.fillRect(hx - 4, hy + 2, hammerW + 8, 1);
+      return;
+    }
     const reach = isWave
       ? 34 + effectPower * 18
       : isHyakuretsu
@@ -8040,6 +8386,20 @@
       ctx.fillRect(bx, by, b.w, b.h);
       ctx.fillStyle = enemyShot ? "#9f7dff" : "#ffa934";
       ctx.fillRect(bx + 1, by + 1, b.w - 2, b.h - 2);
+    }
+
+    for (const shard of stage.hammerShards || []) {
+      if (shard.dead) continue;
+      const sx = Math.floor(shard.x - cameraX);
+      const sy = Math.floor(shard.y);
+      const pulse = 0.5 + Math.sin((shard.spin || 0) * 1.9) * 0.5;
+      const glowA = 0.22 + pulse * 0.16;
+      ctx.fillStyle = `rgba(255, 198, 132, ${glowA})`;
+      ctx.fillRect(sx - 1, sy - 1, shard.w + 2, shard.h + 2);
+      ctx.fillStyle = "#5b5f73";
+      ctx.fillRect(sx, sy, shard.w, shard.h);
+      ctx.fillStyle = "#b5c1d8";
+      ctx.fillRect(sx + 1, sy, Math.max(1, shard.w - 1), 1);
     }
 
     for (const wave of stage.playerWaves) {
@@ -9331,6 +9691,7 @@
   bindHoldButton("btn-right", "right");
   bindHoldButton("btn-jump", "jump");
   bindHoldButton("btn-attack", "attack");
+  bindHoldButton("btn-attack2", "attack2");
   bindHoldButton("btn-special", "special");
   refreshBurstButtonUi();
 
@@ -9375,6 +9736,8 @@
     Space: "jump",
     KeyJ: "attack",
     KeyF: "attack",
+    KeyL: "attack2",
+    KeyG: "attack2",
     KeyK: "special",
     Enter: "start",
   };
@@ -9402,6 +9765,7 @@
     input.right = false;
     input.jump = false;
     input.attack = false;
+    input.attack2 = false;
     input.special = false;
     input.start = false;
   });
