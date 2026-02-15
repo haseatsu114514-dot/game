@@ -303,6 +303,18 @@
     return 1 + pinchRatioByHearts() * PINCH_ATTACK_BONUS_MAX;
   }
 
+  function burstChargeTone(ratio = 0) {
+    const r = clamp(ratio, 0, 1);
+    const readyRatio = PROTEIN_BURST_MIN / Math.max(1, PROTEIN_BURST_REQUIRE);
+    const t = r < readyRatio
+      ? (r / Math.max(0.0001, readyRatio)) * 0.55
+      : 0.55 + ((r - readyRatio) / Math.max(0.0001, 1 - readyRatio)) * 0.45;
+    const hue = 212 - t * 170;
+    const sat = 44 + t * 52;
+    const light = 48 + t * 20;
+    return { hue, sat, light };
+  }
+
   function blackFlashChanceWithRank(stageIndex = blackFlashChain) {
     const idx = clamp(stageIndex, 0, BLACK_FLASH_CHANCES.length - 1);
     const baseChance = BLACK_FLASH_CHANCES[idx];
@@ -9857,10 +9869,18 @@
     const burstBarW = bossActive ? 90 : 150;
     const burstRatio = clamp(proteinBurstGauge / PROTEIN_BURST_REQUIRE, 0, 1);
     const burstReady = proteinBurstGauge >= PROTEIN_BURST_MIN;
-    ctx.fillStyle = "#1d2436";
+    const burstTone = burstChargeTone(burstRatio);
+    const burstFillLight = clamp(burstTone.light + (burstReady ? 8 : 2), 44, 84);
+    const burstFillAlpha = clamp(0.62 + burstRatio * 0.3 + (burstReady ? 0.08 : 0), 0.58, 0.98);
+    ctx.fillStyle = "rgba(27, 34, 50, 0.96)";
     ctx.fillRect(burstBarX, burstBarY, burstBarW, 6);
-    ctx.fillStyle = burstReady ? "#78ebff" : "#5d7f97";
+    ctx.fillStyle = `hsla(${burstTone.hue}, ${burstTone.sat}%, ${burstFillLight}%, ${burstFillAlpha})`;
     ctx.fillRect(burstBarX + 1, burstBarY + 1, Math.floor((burstBarW - 2) * burstRatio), 4);
+    if (burstRatio > 0.02) {
+      const sheenW = Math.max(1, Math.floor((burstBarW - 2) * Math.min(1, burstRatio * 1.08)));
+      ctx.fillStyle = `hsla(${burstTone.hue}, ${Math.min(100, burstTone.sat + 10)}%, ${Math.min(90, burstFillLight + 14)}%, ${0.22 + burstRatio * 0.22})`;
+      ctx.fillRect(burstBarX + 1, burstBarY + 1, sheenW, 1);
+    }
     const minMarkerX = burstBarX + 1 + Math.floor((burstBarW - 2) * (PROTEIN_BURST_MIN / PROTEIN_BURST_REQUIRE));
     ctx.fillStyle = "rgba(255, 225, 140, 0.9)";
     ctx.fillRect(minMarkerX, burstBarY + 1, 1, 4);
@@ -10687,10 +10707,23 @@
     if (!burstButton) return;
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
     const chargeRatio = clamp(proteinBurstGauge / PROTEIN_BURST_REQUIRE, 0, 1);
+    const tone = burstChargeTone(chargeRatio);
     const ready = playable && proteinBurstGauge >= PROTEIN_BURST_MIN && proteinBurstTimer <= 0;
     const full = proteinBurstGauge >= PROTEIN_BURST_REQUIRE;
+    const fillLight = clamp(tone.light + (ready ? 10 : 4) + (full ? 5 : 0), 46, 90);
+    const topLight = clamp(tone.light * 0.66 + 11, 22, 62);
+    const bottomLight = clamp(tone.light * 0.4 + 8, 16, 45);
+    const borderLight = clamp(fillLight + 5, 52, 93);
+    const glowAlpha = clamp((ready ? 0.2 : 0.06) + chargeRatio * 0.22 + (full ? 0.1 : 0), 0.06, 0.6);
     burstButton.style.setProperty("--burst-fill", `${Math.round(chargeRatio * 100)}%`);
     burstButton.style.setProperty("--burst-alpha", (0.12 + chargeRatio * 0.62).toFixed(3));
+    burstButton.style.setProperty("--burst-hue", tone.hue.toFixed(1));
+    burstButton.style.setProperty("--burst-sat", `${tone.sat.toFixed(1)}%`);
+    burstButton.style.setProperty("--burst-fill-light", `${fillLight.toFixed(1)}%`);
+    burstButton.style.setProperty("--burst-top-light", `${topLight.toFixed(1)}%`);
+    burstButton.style.setProperty("--burst-bottom-light", `${bottomLight.toFixed(1)}%`);
+    burstButton.style.setProperty("--burst-border-light", `${borderLight.toFixed(1)}%`);
+    burstButton.style.setProperty("--burst-glow-alpha", glowAlpha.toFixed(3));
     burstButton.disabled = !ready;
     burstButton.classList.toggle("not-ready", playable && !ready);
     burstButton.classList.toggle("ready", ready);

@@ -141,30 +141,43 @@ body {
 .ctrl.special {
   --burst-fill: 0%;
   --burst-alpha: 0.12;
+  --burst-hue: 210;
+  --burst-sat: 46%;
+  --burst-fill-light: 56%;
+  --burst-top-light: 32%;
+  --burst-bottom-light: 22%;
+  --burst-border-light: 64%;
+  --burst-glow-alpha: 0.22;
   grid-column: 1 / -1;
   background:
     linear-gradient(
       90deg,
-      rgba(96, 198, 236, var(--burst-alpha)) 0 var(--burst-fill),
+      hsla(var(--burst-hue), var(--burst-sat), var(--burst-fill-light), var(--burst-alpha)) 0 var(--burst-fill),
       rgba(35, 47, 66, 0.9) var(--burst-fill) 100%
     ),
-    linear-gradient(180deg, #2d3b4f, #1f2a3b);
-  border-color: #5f799b;
+    linear-gradient(
+      180deg,
+      hsl(var(--burst-hue), var(--burst-sat), var(--burst-top-light)),
+      hsl(var(--burst-hue), var(--burst-sat), var(--burst-bottom-light))
+    );
+  border-color: hsl(var(--burst-hue), var(--burst-sat), var(--burst-border-light));
   color: #d7e8ff;
   opacity: 0.72;
 }
 
 .ctrl.special.ready {
-  border-color: #9cecff;
+  border-color: hsl(var(--burst-hue), var(--burst-sat), var(--burst-border-light));
   color: #f7fcff;
   opacity: 1;
   box-shadow:
     inset 0 0 0 1px rgba(240, 252, 255, 0.18),
-    0 0 12px rgba(110, 225, 255, 0.3);
+    0 0 12px hsla(var(--burst-hue), var(--burst-sat), 72%, var(--burst-glow-alpha));
 }
 
 .ctrl.special.full {
-  border-color: #ffd9a0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 252, 232, 0.32),
+    0 0 16px hsla(var(--burst-hue), 100%, 74%, calc(var(--burst-glow-alpha) + 0.14));
 }
 
 .ctrl.special:disabled {
@@ -187,10 +200,14 @@ body {
   background:
     linear-gradient(
       90deg,
-      rgba(126, 220, 255, calc(var(--burst-alpha) + 0.08)) 0 var(--burst-fill),
+      hsla(var(--burst-hue), var(--burst-sat), calc(var(--burst-fill-light) + 6%), calc(var(--burst-alpha) + 0.08)) 0 var(--burst-fill),
       rgba(46, 61, 84, 0.94) var(--burst-fill) 100%
     ),
-    linear-gradient(180deg, #35506a, #213753);
+    linear-gradient(
+      180deg,
+      hsl(var(--burst-hue), var(--burst-sat), calc(var(--burst-top-light) + 6%)),
+      hsl(var(--burst-hue), var(--burst-sat), calc(var(--burst-bottom-light) + 4%))
+    );
 }
 
 .ctrl.special.ready:active,
