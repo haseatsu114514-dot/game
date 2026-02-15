@@ -5787,20 +5787,9 @@
     player.onGround = true;
     player.facing = 1;
 
-    stopBossMusic(false);
-    ensureInvincibleMusic();
-    if (invincibleMusic) {
-      invincibleMusicFadeTimer = 0;
-      invincibleMusicFadeDuration = 0;
-      try {
-        invincibleMusic.muted = false;
-        invincibleMusic.volume = INVINCIBLE_BGM_VOL;
-        invincibleMusic.currentTime = 0;
-        invincibleMusic.play().catch(() => {});
-      } catch (_e) {
-        // Ignore media errors and keep gameplay responsive.
-      }
-    }
+    // Keep the same boss BGM in phase 2 (no switch to invincible theme).
+    stopInvincibleMusic(false);
+    startBossMusic(false);
     triggerImpact(3.6, b.x + b.w * 0.5, b.y + b.h * 0.45, 6.4);
     playBossStartSfx();
     playKickSfx(2.18);
