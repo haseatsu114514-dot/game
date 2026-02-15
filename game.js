@@ -202,12 +202,12 @@
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
-    { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
-    { short: "Badass", long: "Badass", threshold: 120, chargeMul: 1.24, color: "#79d9ff" },
-    { short: "ApocalypticA", long: "ApocalypticA", threshold: 280, chargeMul: 1.46, color: "#96f0b2" },
-    { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.72, color: "#ffd47d" },
-    { short: "SS", long: "SS sick style", threshold: 820, chargeMul: 2.02, color: "#ffa27e" },
-    { short: "SSS", long: "SSS special sick style", threshold: 1220, chargeMul: 2.34, color: "#ff5f73" },
+    { short: "C", long: "C", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
+    { short: "B", long: "B", threshold: 120, chargeMul: 1.24, color: "#79d9ff" },
+    { short: "A", long: "A", threshold: 280, chargeMul: 1.46, color: "#96f0b2" },
+    { short: "S", long: "S", threshold: 520, chargeMul: 1.72, color: "#ffd47d" },
+    { short: "SS", long: "SS", threshold: 820, chargeMul: 2.02, color: "#ffa27e" },
+    { short: "SSS", long: "SSS", threshold: 1220, chargeMul: 2.34, color: "#ff5f73" },
   ];
   const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
@@ -9847,9 +9847,9 @@
     const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
     const rankBreak = clamp(battleRankBreakFlashTimer / 30, 0, 1);
     const rankBoxX = 6;
-    const rankBoxY = 14;
-    const rankBoxW = 70;
-    const rankBoxH = 7;
+    const rankBoxY = 13;
+    const rankBoxW = 92;
+    const rankBoxH = 9;
     const rankFill = 0.52 + rankFlash * 0.2;
     ctx.fillStyle = `rgba(10, 12, 20, ${rankFill})`;
     ctx.fillRect(rankBoxX, rankBoxY, rankBoxW, rankBoxH);
@@ -9857,27 +9857,27 @@
       ? `rgba(255, 96, 96, ${0.52 + rankBreak * 0.36})`
       : `rgba(176, 204, 226, ${0.26 + rankFlash * 0.38})`;
     ctx.strokeRect(rankBoxX, rankBoxY, rankBoxW, rankBoxH);
-    ctx.font = "7px monospace";
+    ctx.font = "8px monospace";
     ctx.fillStyle = rankBreak > 0.01 ? "#ff9f9f" : rank.color;
-    ctx.fillText(rank.short, rankBoxX + 3, rankBoxY);
-    const gaugeX = rankBoxX + 23;
-    const gaugeY = rankBoxY + 2;
-    const gaugeW = rankBoxW - 26;
+    ctx.fillText(rank.short, rankBoxX + 4, rankBoxY + 1);
+    const gaugeX = rankBoxX + 27;
+    const gaugeY = rankBoxY + 3;
+    const gaugeW = rankBoxW - 30;
     ctx.fillStyle = "rgba(18, 28, 36, 0.95)";
-    ctx.fillRect(gaugeX, gaugeY, gaugeW, 3);
+    ctx.fillRect(gaugeX, gaugeY, gaugeW, 4);
     ctx.fillStyle = rankBreak > 0.01
       ? "rgba(255, 122, 122, 0.8)"
       : `rgba(124, 234, 255, ${0.64 + rankFlash * 0.22})`;
-    ctx.fillRect(gaugeX + 1, gaugeY + 1, Math.max(1, Math.floor((gaugeW - 2) * rankProgress)), 1);
+    ctx.fillRect(gaugeX + 1, gaugeY + 1, Math.max(1, Math.floor((gaugeW - 2) * rankProgress)), 2);
 
     if (battleRankFlashTimer > 24) {
       const upRatio = clamp((battleRankFlashTimer - 24) / 32, 0, 1);
       const upPulse = 0.5 + Math.sin(player.anim * 0.34) * 0.5;
       ctx.fillStyle = `rgba(255, 130, 108, ${0.24 + upRatio * 0.34})`;
-      ctx.fillRect(rankBoxX + 14, rankBoxY - 8, 32, 7);
+      ctx.fillRect(rankBoxX + 22, rankBoxY - 9, 36, 8);
       ctx.fillStyle = `rgba(255, 246, 194, ${0.72 + upPulse * 0.22})`;
-      ctx.font = "8px monospace";
-      ctx.fillText("UP!", rankBoxX + 22, rankBoxY - 7);
+      ctx.font = "9px monospace";
+      ctx.fillText("UP!", rankBoxX + 32, rankBoxY - 8);
     }
 
     if (invincibleTimer > 0) {
