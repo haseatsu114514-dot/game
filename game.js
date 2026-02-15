@@ -7501,6 +7501,103 @@
     const cast = b.mode === "shoot" || b.mode === "ring" || b.mode === "rain" || b.mode === "spiral" || b.mode === "nova" || b.mode === "phase_shift";
     const rage = b.hp <= Math.ceil(b.maxHp * (phase2 ? 0.45 : 0.35));
 
+    if (phase2) {
+      const mantle = rage ? "#3f2737" : "#34293f";
+      const mantleHi = rage ? "#61324f" : "#51406b";
+      const armor = rage ? "#d0c5db" : "#bfc8dd";
+      const armorHi = rage ? "#ece4f4" : "#e0e8f9";
+      const mask = rage ? "#f1d1bf" : "#e9d9c8";
+      const eye = rage || warn || cast ? "#ff6e7f" : "#a8d9ff";
+      const aura = transitioning ? 0.48 : (advantage ? 0.4 : 0.28);
+
+      // Outer aura shell for a clear phase change silhouette.
+      ctx.fillStyle = `rgba(120, 186, 255, ${aura})`;
+      ctx.fillRect(x - 5, y - 6, b.w + 10, b.h + 12);
+      ctx.fillStyle = `rgba(255, 131, 162, ${0.14 + (rage ? 0.16 : 0.08)})`;
+      ctx.fillRect(x - 3, y - 4, b.w + 6, b.h + 8);
+
+      // Horned crown + head.
+      ctx.fillStyle = "#10131c";
+      ctx.fillRect(x + 8, y - 7, 8, 2);
+      ctx.fillRect(x + 4, y - 4, 3, 3);
+      ctx.fillRect(x + 17, y - 4, 3, 3);
+      ctx.fillStyle = rage ? "#f7d695" : "#f0cf8a";
+      ctx.fillRect(x + 9, y - 6, 6, 1);
+
+      ctx.fillStyle = armor;
+      ctx.fillRect(x + 4, y, 16, 7);
+      ctx.fillStyle = armorHi;
+      ctx.fillRect(x + 6, y + 1, 12, 3);
+      ctx.fillStyle = mask;
+      ctx.fillRect(x + 7, y + 7, 10, 7);
+      ctx.fillStyle = eye;
+      ctx.fillRect(x + 9, y + 9, 2, 1);
+      ctx.fillRect(x + 13, y + 9, 2, 1);
+      ctx.fillStyle = "#d3b09a";
+      ctx.fillRect(x + 10, y + 12, 4, 1);
+
+      // Torso + cape.
+      ctx.fillStyle = armor;
+      ctx.fillRect(x + 6, y + 14, 12, 6);
+      ctx.fillStyle = "#93a0bc";
+      ctx.fillRect(x + 11, y + 14, 2, 11);
+      ctx.fillStyle = mantle;
+      ctx.fillRect(x + 2, y + 18, 20, 12);
+      ctx.fillStyle = mantleHi;
+      ctx.fillRect(x + 3, y + 19, 18, 4);
+      ctx.fillStyle = "#211a2a";
+      ctx.fillRect(x - 3, y + 18, 5, 11);
+      ctx.fillRect(x + 22, y + 18, 5, 11);
+      ctx.fillStyle = "rgba(255, 180, 210, 0.3)";
+      ctx.fillRect(x - 2, y + 20, 1, 6);
+      ctx.fillRect(x + 24, y + 20, 1, 6);
+
+      // Arms + claws.
+      ctx.fillStyle = "#a6b1cb";
+      ctx.fillRect(x + 1, y + 15, 3, 11);
+      ctx.fillRect(x + 20, y + 15, 3, 11);
+      ctx.fillStyle = rage ? "#ffd39d" : "#e9e4d1";
+      ctx.fillRect(x, y + 24, 2, 3);
+      ctx.fillRect(x + 22, y + 24, 2, 3);
+
+      // Legs.
+      ctx.fillStyle = "#2f3a55";
+      ctx.fillRect(x + 6, y + 30, 5, 6);
+      ctx.fillRect(x + 13, y + 30, 5, 6);
+      ctx.fillStyle = "#121722";
+      ctx.fillRect(x + 6, y + 36, 5, 1);
+      ctx.fillRect(x + 13, y + 36, 5, 1);
+
+      if (cast || warn) {
+        ctx.fillStyle = "#e7c17a";
+        ctx.fillRect(x + 21, y + 9, 2, 18);
+        ctx.fillRect(x + 20, y + 8, 4, 2);
+        ctx.fillStyle = "#ffe9c3";
+        ctx.fillRect(x + 19, y + 7, 6, 1);
+        ctx.fillStyle = "rgba(186, 232, 255, 0.5)";
+        ctx.fillRect(x + 18, y + 8, 8, 1);
+      }
+
+      if (warn) {
+        ctx.strokeStyle = rage ? "rgba(255,132,148,0.95)" : "rgba(255,220,165,0.9)";
+        ctx.strokeRect(x - 3, y - 4, b.w + 6, b.h + 7);
+      }
+
+      if (transitioning) {
+        const pulse = 0.36 + Math.sin(player.anim * 0.5) * 0.1;
+        ctx.fillStyle = `rgba(255, 247, 206, ${pulse})`;
+        ctx.fillRect(x - 1, y + 3, b.w + 2, 2);
+      }
+
+      if (stunned) {
+        ctx.fillStyle = "rgba(134, 236, 255, 0.78)";
+        ctx.fillRect(x + 5, y - 8, 2, 2);
+        ctx.fillRect(x + 11, y - 10, 2, 2);
+        ctx.fillRect(x + 17, y - 8, 2, 2);
+      }
+      return;
+    }
+
     ctx.fillStyle = "#11131a";
     ctx.fillRect(x + 1, y, 22, 1);
     ctx.fillRect(x, y + 1, 24, 35);
