@@ -98,7 +98,11 @@
   let blackFlashX = 0;
   let blackFlashY = 0;
   let battleRankDefeats = 0;
+  let battleRankGauge = 0;
   let battleRankIndex = 0;
+  let battleRankLastStyle = "";
+  let battleRankStyleStreak = 0;
+  let battleRankRecentStyles = [];
   let battleRankFlashTimer = 0;
   let battleRankBreakFlashTimer = 0;
   let hammerTimer = 0;
@@ -191,12 +195,12 @@
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [1 / 32, 1 / 4, 1 / 2, 1 / 1.5];
   const BATTLE_RANK_DATA = [
-    { short: "Crazy", long: "Crazy", need: 0, chargeMul: 1.0, color: "#8db2d9" },
-    { short: "Badass", long: "Badass", need: 2, chargeMul: 1.1, color: "#79d9ff" },
-    { short: "ApocalypticA", long: "ApocalypticA", need: 4, chargeMul: 1.22, color: "#96f0b2" },
-    { short: "Savege", long: "Savege", need: 7, chargeMul: 1.36, color: "#ffd47d" },
-    { short: "SS", long: "SS sick style", need: 11, chargeMul: 1.54, color: "#ffa27e" },
-    { short: "SSS", long: "SSS special sick style", need: 16, chargeMul: 1.74, color: "#ff5f73" },
+    { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 1.0, color: "#8db2d9" },
+    { short: "Badass", long: "Badass", threshold: 120, chargeMul: 1.1, color: "#79d9ff" },
+    { short: "ApocalypticA", long: "ApocalypticA", threshold: 280, chargeMul: 1.22, color: "#96f0b2" },
+    { short: "Savege", long: "Savege", threshold: 520, chargeMul: 1.36, color: "#ffd47d" },
+    { short: "SS", long: "SS sick style", threshold: 820, chargeMul: 1.54, color: "#ffa27e" },
+    { short: "SSS", long: "SSS special sick style", threshold: 1220, chargeMul: 1.74, color: "#ff5f73" },
   ];
   const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
@@ -285,7 +289,7 @@
   function updateBattleRankTier() {
     let next = 0;
     for (let i = 0; i < BATTLE_RANK_DATA.length; i += 1) {
-      if (battleRankDefeats >= BATTLE_RANK_DATA[i].need) {
+      if (battleRankGauge >= BATTLE_RANK_DATA[i].threshold) {
         next = i;
       } else {
         break;
@@ -302,9 +306,51 @@
     return currentBattleRank().chargeMul;
   }
 
+  function battleRankProgressRatio() {
+    const idx = clamp(battleRankIndex, 0, BATTLE_RANK_DATA.length - 1);
+    const curr = BATTLE_RANK_DATA[idx];
+    if (idx >= BATTLE_RANK_DATA.length - 1) return 1;
+    const next = BATTLE_RANK_DATA[idx + 1];
+    const span = Math.max(1, next.threshold - curr.threshold);
+    return clamp((battleRankGauge - curr.threshold) / span, 0, 1);
+  }
+
+  function battleRankGainByStyle(styleKey, power = 1) {
+    const style = styleKey || "impact";
+    const p = clamp(power, 0.8, 4.8);
+    let gain = 20 + p * 6.2;
+
+    const sameStyle = style === battleRankLastStyle;
+    if (sameStyle) {
+      battleRankStyleStreak += 1;
+      gain *= Math.max(0.42, 0.92 - battleRankStyleStreak * 0.12);
+    } else {
+      const seenRecent = battleRankRecentStyles.includes(style);
+      battleRankStyleStreak = 0;
+      gain *= seenRecent ? 1.08 : 1.45;
+      if (!seenRecent && battleRankRecentStyles.length >= 2) {
+        gain *= 1.1;
+      }
+    }
+
+    battleRankLastStyle = style;
+    battleRankRecentStyles.push(style);
+    if (battleRankRecentStyles.length > 5) {
+      battleRankRecentStyles.shift();
+    }
+
+    const highRankDamp = 1 - battleRankIndex * 0.04;
+    gain *= Math.max(0.72, highRankDamp);
+    return Math.max(4, gain);
+  }
+
   function resetBattleRank(showBreak = false) {
     battleRankDefeats = 0;
+    battleRankGauge = 0;
     battleRankIndex = 0;
+    battleRankLastStyle = "";
+    battleRankStyleStreak = 0;
+    battleRankRecentStyles = [];
     battleRankFlashTimer = 0;
     battleRankBreakFlashTimer = showBreak ? 30 : 0;
   }
@@ -1179,9 +1225,11 @@
     }
   }
 
-  function registerNoDamageDefeat(x, y, power = 1) {
+  function registerNoDamageDefeat(x, y, power = 1, styleKey = "impact") {
     const previousRank = battleRankIndex;
     battleRankDefeats += 1;
+    const gaugeCap = BATTLE_RANK_DATA[BATTLE_RANK_DATA.length - 1].threshold + 360;
+    battleRankGauge = Math.min(gaugeCap, battleRankGauge + battleRankGainByStyle(styleKey, power));
     updateBattleRankTier();
     battleRankFlashTimer = Math.max(battleRankFlashTimer, 9);
 
@@ -1784,7 +1832,7 @@
       if (!enemy.alive || enemy.kicked) continue;
       const ex = enemy.x + enemy.w * 0.5;
       const ey = enemy.y + enemy.h * 0.45;
-      registerNoDamageDefeat(ex, ey, 1.1 + gaugeRatio * 1.2);
+      registerNoDamageDefeat(ex, ey, 1.1 + gaugeRatio * 1.2, "burst_sweep");
       enemy.alive = false;
       enemy.kicked = true;
       enemy.vx = 0;
@@ -2825,13 +2873,14 @@
   function kickEnemy(enemy, dir, power = 1, options = {}) {
     const immediateRemove = options.immediateRemove !== false;
     const flyLifetime = options.flyLifetime || 42;
+    const rankStyle = options.rankStyle || "impact";
     const freshDefeat = enemy.alive && !enemy.kicked;
     const hitX = enemy.x + enemy.w * 0.5;
     const hitY = enemy.y + enemy.h * 0.45;
     spawnEnemyBlood(hitX, hitY, power);
     if (freshDefeat) {
       triggerInvincibleKillBonus(hitX, hitY, power);
-      registerNoDamageDefeat(hitX, hitY, power);
+      registerNoDamageDefeat(hitX, hitY, power, rankStyle);
       if (enemy.bossArenaTarget && !enemy.bossArenaCounted) {
         enemy.bossArenaCounted = true;
         registerBossArenaTargetDestroyed("enemy", hitX, hitY);
@@ -3758,7 +3807,17 @@
       hitY = enemy.y + enemy.h * (morningStarStrike ? 0.34 : 0.42);
       const bf = tryBlackFlash(hitX, hitY, 1.15 + chargeRatio * 1.4 + comboStage * 0.28);
       const criticalPowerMul = bf ? 1.45 : 1;
-      kickEnemy(enemy, dir, (hitPower + 0.2) * criticalPowerMul, { immediateRemove: false, flyLifetime: 32 + Math.round(chargeRatio * 16) });
+      kickEnemy(enemy, dir, (hitPower + 0.2) * criticalPowerMul, {
+        immediateRemove: false,
+        flyLifetime: 32 + Math.round(chargeRatio * 16),
+        rankStyle: strongWave
+          ? "atk1_wave"
+          : morningStarStrike
+            ? (morningStarLong ? "atk1_morning_long" : "atk1_morning")
+            : comboPunch
+              ? `atk1_combo_${comboType}`
+              : "atk1_punch",
+      });
       enemy.vx = dir * (3.8 + hitPower * 0.95 * criticalPowerMul + comboStage * 0.2 + comboVxBonus + (morningStarStrike ? 0.8 : 0));
       enemy.vy = Math.min(
         enemy.vy,
@@ -3934,7 +3993,11 @@
       if (!overlapsAny(enemy)) continue;
       hitX = enemy.x + enemy.w * 0.5;
       hitY = enemy.y + enemy.h * 0.44;
-      kickEnemy(enemy, dir, enemyPower + (chargedBreak ? 0.34 : 0), { immediateRemove: false, flyLifetime: 36 });
+      kickEnemy(enemy, dir, enemyPower + (chargedBreak ? 0.34 : 0), {
+        immediateRemove: false,
+        flyLifetime: 36,
+        rankStyle: chargedBreak ? "atk2_break" : "atk2_hammer",
+      });
       enemy.vx = dir * (4.6 + enemyPower * 1.06 + (chargedBreak ? 0.7 : 0));
       enemy.vy = Math.min(enemy.vy, -(3.9 + chargeRatio * 1.25 + (chargedBreak ? 0.5 : 0)));
       enemy.flash = 13;
@@ -4086,7 +4149,11 @@
       hitY = laneBoxes[Math.max(0, laneIndex)].y + 2;
       const bf = tryBlackFlash(hitX, hitY, 1.08 + pLv * 0.02);
       const criticalPowerMul = bf ? 1.45 : 1;
-      kickEnemy(enemy, dir, (hitPower + 0.15) * criticalPowerMul, { immediateRemove: false, flyLifetime: 24 });
+      kickEnemy(enemy, dir, (hitPower + 0.15) * criticalPowerMul, {
+        immediateRemove: false,
+        flyLifetime: 24,
+        rankStyle: "atk1_hyakuretsu",
+      });
       enemy.vx = dir * (4.0 + hitPower * 0.72 * criticalPowerMul);
       enemy.vy = Math.min(enemy.vy, -(2.6 + hitPower * 0.5 + (laneIndex === 0 ? 0.6 : laneIndex === 1 ? 0.2 : -0.1) + (bf ? 0.24 : 0)));
       enemy.flash = 10;
@@ -4296,7 +4363,11 @@
         if (!enemy.alive || enemy.kicked) continue;
         if (!overlap(wave, enemy)) continue;
         const dir = wave.vx >= 0 ? 1 : -1;
-        kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul, { immediateRemove: false, flyLifetime: 38 });
+        kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul, {
+          immediateRemove: false,
+          flyLifetime: 38,
+          rankStyle: "atk1_wave_shot",
+        });
         enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3) * crisisMul;
         enemy.vy = -(3.5 + (wave.power || 0) * 0.7 + (crisisMul - 1) * 0.9);
         enemy.flash = 12;
@@ -4386,7 +4457,11 @@
         if (!enemy.alive || enemy.kicked) continue;
         if (!overlap(shard, enemy)) continue;
         const dir = shard.vx >= 0 ? 1 : -1;
-        kickEnemy(enemy, dir, 1.1 + shard.power * 0.85, { immediateRemove: false, flyLifetime: 24 });
+        kickEnemy(enemy, dir, 1.1 + shard.power * 0.85, {
+          immediateRemove: false,
+          flyLifetime: 24,
+          rankStyle: "atk2_shard",
+        });
         enemy.vx = dir * (4.0 + shard.power * 0.7);
         enemy.vy = Math.min(enemy.vy, -(3.1 + shard.power * 0.4));
         enemy.flash = 10;
@@ -4463,7 +4538,7 @@
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
         const pLv = proteinLevel();
         const stompPower = ((weakPartyGuest ? 1.28 : 1.45) + pLv * 0.045) * crisisMul;
-        kickEnemy(enemy, dir, stompPower + 0.35);
+        kickEnemy(enemy, dir, stompPower + 0.35, { rankStyle: "stomp" });
         player.vy = -6.35 - Math.min(0.45, Math.abs(player.vx) * 0.08);
         player.vx += dir * 0.12;
         player.onGround = false;
@@ -4497,7 +4572,11 @@
         const speedBoost = Math.min(2.2, Math.abs(player.vx) * 0.5);
         const burstBonus = proteinBurstTimer > 0 ? 2.0 : 0;
         const blastPower = 3.4 + speedBoost + burstBonus;
-        kickEnemy(enemy, dir, blastPower, { immediateRemove: false, flyLifetime: 48 });
+        kickEnemy(enemy, dir, blastPower, {
+          immediateRemove: false,
+          flyLifetime: 48,
+          rankStyle: proteinBurstTimer > 0 ? "burst_ram" : "invincible_ram",
+        });
         enemy.vx = dir * (9.4 + blastPower * 1.2);
         enemy.vy = -(6.6 + blastPower * 0.7);
         enemy.flash = 14;
@@ -9051,10 +9130,11 @@
     ctx.fillText(`STAGE ${currentStageNumber}`, W - 56, 6);
 
     const rank = currentBattleRank();
+    const rankProgress = battleRankProgressRatio();
     const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
     const rankBreak = clamp(battleRankBreakFlashTimer / 30, 0, 1);
     const rankBoxW = 194;
-    const rankBoxH = 10;
+    const rankBoxH = 13;
     const rankBoxX = Math.floor((W - rankBoxW) * 0.5);
     const rankBoxY = hudH + 1;
     const rankFill = 0.52 + rankFlash * 0.16;
@@ -9066,11 +9146,21 @@
     ctx.strokeRect(rankBoxX, rankBoxY, rankBoxW, rankBoxH);
     ctx.font = "8px monospace";
     ctx.fillStyle = rankBreak > 0.01 ? "#ff9f9f" : rank.color;
-    ctx.fillText(`RANK ${rank.long}`, rankBoxX + 4, rankBoxY + 1);
-    const koText = `KO ${battleRankDefeats}`;
-    const koW = Math.ceil(ctx.measureText(koText).width);
+    ctx.fillText(`RANK ${rank.short}`, rankBoxX + 4, rankBoxY + 1);
+    const rankMax = battleRankIndex >= BATTLE_RANK_DATA.length - 1;
+    const rightText = rankMax ? "MAX" : "STYLE";
+    const rightW = Math.ceil(ctx.measureText(rightText).width);
     ctx.fillStyle = "#e8f4ff";
-    ctx.fillText(koText, rankBoxX + rankBoxW - koW - 4, rankBoxY + 1);
+    ctx.fillText(rightText, rankBoxX + rankBoxW - rightW - 4, rankBoxY + 1);
+    const gaugeX = rankBoxX + 3;
+    const gaugeY = rankBoxY + 8;
+    const gaugeW = rankBoxW - 6;
+    ctx.fillStyle = "rgba(18, 28, 36, 0.9)";
+    ctx.fillRect(gaugeX, gaugeY, gaugeW, 3);
+    ctx.fillStyle = rankBreak > 0.01
+      ? "rgba(255, 122, 122, 0.7)"
+      : `rgba(124, 234, 255, ${0.62 + rankFlash * 0.2})`;
+    ctx.fillRect(gaugeX + 1, gaugeY + 1, Math.max(1, Math.floor((gaugeW - 2) * rankProgress)), 1);
 
     if (invincibleTimer > 0) {
       const sec = Math.max(0, invincibleTimer / 60);
