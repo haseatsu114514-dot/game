@@ -255,8 +255,8 @@
   const ATTACK_WAVE_COOLDOWN = 28;
   const ATTACK_MASH_WINDOW = 42;
   const ATTACK_MASH_TRIGGER = 4;
-  const HYAKURETSU_DURATION = 120;
-  const HYAKURETSU_COMBO_AUTO_DURATION = 120;
+  const HYAKURETSU_DURATION = 78;
+  const HYAKURETSU_COMBO_AUTO_DURATION = 78;
   const HYAKURETSU_HIT_INTERVAL = 2;
   const HYAKURETSU_POST_COOLDOWN = 10;
   const HYAKURETSU_HOLD_AFTER_MAX = 18;
@@ -4319,7 +4319,7 @@
     attackEffectMode = "hyakuretsu";
     attackEffectPhase = 0;
     attackEffectPower = 0.72;
-    hudMessage = autoMode ? "4段: 3秒オート百裂拳!" : "百裂拳!";
+    hudMessage = autoMode ? "4段: 1.3秒オート百裂拳!" : "百裂拳!";
     hudTimer = 24;
     playKickSfx(1.78);
     playRilaRobotVoice("attack");
