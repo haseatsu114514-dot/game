@@ -254,8 +254,8 @@
   const TIME_BURST_SLOW_MIN_DURATION = 60;
   const TIME_BURST_SLOW_MAX_DURATION = 120;
   const TIME_BURST_STOP_DURATION = 180;
-  const TIME_BURST_SLOW_SCALE_MIN = 0.34;
-  const TIME_BURST_SLOW_SCALE_MAX = 0.62;
+  const TIME_BURST_SLOW_SCALE_MIN = 0.22;
+  const TIME_BURST_SLOW_SCALE_MAX = 0.45;
   const TIME_BURST_RANK_GAIN_SLOW_MUL = 1.35;
   const TIME_BURST_RANK_GAIN_STOP_MUL = 1.7;
   const OPENING_CUTSCENE_DURATION = 760;
@@ -10513,6 +10513,16 @@
     ctx.restore();
   }
 
+  function drawPlayerTrueColorPass() {
+    const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
+    if (hurtBlink) return;
+    if (invincibleTimer > 0) {
+      drawInvincibleBikeRide();
+      return;
+    }
+    drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+  }
+
   function drawTextPanel(lines, y = 136) {
     ctx.fillStyle = "rgba(10,10,14,0.78)";
     ctx.fillRect(6, y, 308, 38);
@@ -12000,6 +12010,10 @@
       ctx.filter = "none";
     }
     drawTimeBurstOverlay();
+    if (isTimeBurstActive()) {
+      // Keep protagonist colors stable during time-burst post effects.
+      drawPlayerTrueColorPass();
+    }
     drawHUD();
 
     if (gameState === STATE.DEAD) {
