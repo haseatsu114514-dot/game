@@ -10222,6 +10222,75 @@
     ctx.fillRect(0, 0, W, H);
   }
 
+  function drawBattleRankStyleOverlay() {
+    if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
+
+    const maxTier = Math.max(1, BATTLE_RANK_DATA.length - 1);
+    const rankTier = clamp(battleRankIndex, 0, maxTier);
+    const tierRatio = rankTier / maxTier;
+    const progress = battleRankProgressRatio();
+    const stylePower = clamp(tierRatio * 0.86 + progress * 0.14, 0, 1);
+    if (stylePower <= 0.02) return;
+
+    const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
+    const pulse = 0.5 + Math.sin(player.anim * 0.14) * 0.5;
+    const px = Math.floor(player.x - cameraX + player.w * 0.5);
+    const py = Math.floor(player.y + player.h * 0.45);
+    const top = 24;
+
+    ctx.fillStyle = `rgba(94, 166, 255, ${0.03 + stylePower * 0.07})`;
+    ctx.fillRect(0, top, W, H - top);
+    ctx.fillStyle = `rgba(255, 120, 86, ${0.01 + stylePower * 0.06 * (0.5 + pulse * 0.5)})`;
+    ctx.fillRect(0, top, W, H - top);
+
+    const edgeAlpha = 0.04 + stylePower * 0.16 + rankFlash * 0.06;
+    ctx.fillStyle = `rgba(120, 214, 255, ${edgeAlpha})`;
+    ctx.fillRect(0, top, 5, H - top);
+    ctx.fillRect(W - 5, top, 5, H - top);
+    ctx.fillStyle = `rgba(255, 134, 128, ${edgeAlpha * 0.8})`;
+    ctx.fillRect(5, top, 2, H - top);
+    ctx.fillRect(W - 7, top, 2, H - top);
+
+    const streakCount = 3 + Math.floor(stylePower * 10);
+    const travel = Math.floor(player.anim * (1.6 + stylePower * 1.8));
+    for (let i = 0; i < streakCount; i += 1) {
+      const y = top + ((i * 13 + travel * 2) % (H - top - 4));
+      const len = 16 + Math.floor(stylePower * 64) + (i % 4) * 7;
+      const sx = (W + 24) - ((travel * 5 + i * 29) % (W + len + 24));
+      const alphaA = 0.05 + stylePower * 0.09 + rankFlash * 0.08;
+      const alphaB = 0.04 + stylePower * 0.08;
+      ctx.fillStyle = `rgba(132, 232, 255, ${alphaA})`;
+      ctx.fillRect(sx, y, len, 1);
+      ctx.fillStyle = `rgba(255, 146, 116, ${alphaB})`;
+      ctx.fillRect(Math.max(0, sx - 8), y + 1, Math.max(1, len - 10), 1);
+    }
+
+    const auraBase = 10 + stylePower * 18;
+    const auraCount = 1 + Math.floor(stylePower * 3);
+    for (let i = 0; i < auraCount; i += 1) {
+      const radius = auraBase + i * (7 + stylePower * 3) + Math.sin(player.anim * 0.16 + i * 1.3) * 1.4;
+      ctx.strokeStyle = `rgba(147, 241, 255, ${0.1 + stylePower * 0.12 - i * 0.02 + rankFlash * 0.05})`;
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(4, radius), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    if (rankFlash > 0.3) {
+      const flare = clamp((rankFlash - 0.3) / 0.7, 0, 1);
+      const text = currentBattleRank().short;
+      ctx.font = "10px monospace";
+      const textW = Math.ceil(ctx.measureText(text).width);
+      const cx = Math.floor(W * 0.5 - textW * 0.5);
+      const cy = 54 + Math.floor(Math.sin(player.anim * 0.2) * 2);
+      ctx.fillStyle = `rgba(12, 18, 28, ${0.28 + flare * 0.28})`;
+      ctx.fillRect(cx - 10, cy - 2, textW + 20, 12);
+      ctx.fillStyle = `rgba(255, 234, 176, ${0.5 + flare * 0.45})`;
+      ctx.fillText(text, cx + 1, cy - 1);
+      ctx.fillStyle = `rgba(255, 122, 122, ${0.4 + flare * 0.4})`;
+      ctx.fillText(text, cx, cy);
+    }
+  }
+
   function drawBlackFlashOverlay() {
     if (blackFlashTimer <= 0 || blackFlashPower <= 0.01) return;
 
@@ -10439,6 +10508,7 @@
     ctx.save();
     ctx.translate(shakeX, shakeY);
     drawWorld();
+    drawBattleRankStyleOverlay();
     drawBlackFlashOverlay();
     drawKickBurstOverlay();
     drawWaveFlashOverlay();
