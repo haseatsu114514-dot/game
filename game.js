@@ -177,6 +177,8 @@
   let audioUnlockedByUser = false;
   let openingThemeMutedAutoplayTried = false;
   let timeStopSilenceActive = false;
+  let timeStopClockTickTimer = 0;
+  let timeStopClockTickPhase = 0;
   let rilaVoiceNextAt = 0;
   let enemyDefeatSeNextAt = 0;
   let uiSeNextAt = 0;
@@ -260,12 +262,13 @@
   const TIME_BURST_MODE_SLOW = "slow";
   const TIME_BURST_MODE_STOP = "stop";
   const TIME_BURST_SLOW_MIN_DURATION = 60;
-  const TIME_BURST_SLOW_MAX_DURATION = 180;
-  const TIME_BURST_STOP_DURATION = 240;
+  const TIME_BURST_SLOW_MAX_DURATION = 240;
+  const TIME_BURST_STOP_DURATION = 300;
   const TIME_BURST_SLOW_SCALE_MIN = 0.22;
   const TIME_BURST_SLOW_SCALE_MAX = 0.45;
   const TIME_BURST_RANK_GAIN_SLOW_MUL = 1.35;
   const TIME_BURST_RANK_GAIN_STOP_MUL = 1.7;
+  const TIME_STOP_CLOCK_TICK_INTERVAL = 30;
   const OPENING_CUTSCENE_DURATION = 760;
   const PRE_BOSS_CUTSCENE_DURATION = 460;
   const PRE_BOSS_ENTRY_DURATION = 78;
@@ -380,6 +383,8 @@
     timeBurstSlowScale = 1;
     timeBurstPhase = 0;
     timeBurstStopDeadlineMs = 0;
+    timeStopClockTickTimer = 0;
+    timeStopClockTickPhase = 0;
   }
 
   function timeBurstRankGainMultiplier() {
@@ -2073,6 +2078,37 @@
     }
   }
 
+  function playTimeStopClockTickSfx(accent = false) {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+    const baseHz = accent ? 1260 : 980;
+    const tone = audioCtx.createOscillator();
+    const toneGain = audioCtx.createGain();
+    tone.type = "square";
+    tone.frequency.setValueAtTime(baseHz, now);
+    tone.frequency.exponentialRampToValueAtTime(baseHz * 0.78, now + 0.04);
+    toneGain.gain.setValueAtTime(0.0001, now);
+    toneGain.gain.exponentialRampToValueAtTime(0.028, now + 0.003);
+    toneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+    tone.connect(toneGain);
+    toneGain.connect(audioCtx.destination);
+    tone.start(now);
+    tone.stop(now + 0.07);
+
+    const click = audioCtx.createOscillator();
+    const clickGain = audioCtx.createGain();
+    click.type = "triangle";
+    click.frequency.setValueAtTime(accent ? 2100 : 1680, now);
+    click.frequency.exponentialRampToValueAtTime(accent ? 1320 : 1140, now + 0.028);
+    clickGain.gain.setValueAtTime(0.0001, now);
+    clickGain.gain.exponentialRampToValueAtTime(0.02, now + 0.002);
+    clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+    click.connect(clickGain);
+    clickGain.connect(audioCtx.destination);
+    click.start(now);
+    click.stop(now + 0.05);
+  }
+
   function getRobotVoiceCurve() {
     if (robotVoiceCurve) return robotVoiceCurve;
     const size = 257;
@@ -2809,6 +2845,23 @@
       hudMessage = wasStop ? "TIME FLOW RETURN" : "SLOW END";
       hudTimer = Math.max(hudTimer, 30);
     }
+  }
+
+  function updateTimeStopClockSfx(rawDt) {
+    const inCombat = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    const ticking = inCombat && isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_STOP;
+    if (!ticking) {
+      timeStopClockTickTimer = 0;
+      timeStopClockTickPhase = 0;
+      return;
+    }
+    if (timeStopClockTickTimer <= 0) {
+      timeStopClockTickPhase += 1;
+      const accent = timeStopClockTickPhase % 2 === 0;
+      playTimeStopClockTickSfx(accent);
+      timeStopClockTickTimer = TIME_STOP_CLOCK_TICK_INTERVAL;
+    }
+    timeStopClockTickTimer = Math.max(0, timeStopClockTickTimer - rawDt);
   }
 
   function applyTimeStopSilence() {
@@ -8408,6 +8461,10 @@
 
   function drawHeroAfterimageTrail() {
     const speed = Math.abs(player.vx || 0);
+    const slowActive = isTimeBurstActive() && timeBurstMode === TIME_BURST_MODE_SLOW;
+    const slowRatio = slowActive
+      ? clamp(timeBurstTimer / Math.max(1, timeBurstDuration || TIME_BURST_SLOW_MAX_DURATION), 0, 1)
+      : 0;
     const blackRatio = clamp(
       Math.max(
         blackFlashTimer > 0 ? blackFlashTimer / 52 : 0,
@@ -8432,20 +8489,26 @@
       attackRatio * 0.34 +
       rushRatio * 0.22 +
       blackRatio * 0.46 +
-      invRatio * 0.34,
+      invRatio * 0.34 +
+      slowRatio * 0.56,
       0,
       1
     );
     if (trailPower <= 0.02) return;
 
-    const count = 2 + Math.floor(trailPower * 3);
+    const count = 2 + Math.floor(trailPower * 3) + (slowActive ? 1 : 0);
     const dir = player.facing || 1;
     const sway = Math.sin(player.anim * 0.2) * 0.55;
     for (let i = 0; i < count; i += 1) {
       const t = (i + 1) / (count + 1);
       const offsetX = dir * (1.6 + t * (4 + speed * 2.2 + trailPower * 3.4));
       const offsetY = (player.onGround ? 0 : sway) * t;
-      const alpha = (0.07 + trailPower * 0.17 + blackRatio * 0.08) * (1 - i / (count + 1));
+      const alpha = (
+        0.07 +
+        trailPower * 0.17 +
+        blackRatio * 0.08 +
+        slowRatio * 0.1
+      ) * (1 - i / (count + 1));
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(-offsetX, offsetY);
@@ -8454,6 +8517,11 @@
         drawInvincibleBikeRide();
       } else {
         drawHero(player.x - cameraX, player.y, player.facing, player.anim - t * 2.4, 1);
+        if (slowActive) {
+          ctx.globalCompositeOperation = "source-atop";
+          ctx.fillStyle = `rgba(132, 244, 255, ${0.34 + slowRatio * 0.22})`;
+          ctx.fillRect(player.x - cameraX - 1, player.y - 1, player.w + 2, player.h + 2);
+        }
       }
       ctx.restore();
     }
@@ -12378,6 +12446,7 @@
     const rawDt = Math.min(2.4, (now - last) / 16.6667);
     last = now;
     updateTimeBurstState(rawDt);
+    updateTimeStopClockSfx(rawDt);
     applyTimeStopSilence();
 
     let dt = rawDt;
