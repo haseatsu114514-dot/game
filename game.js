@@ -90,6 +90,11 @@
   let kickFlashPower = 0;
   let kickBurstX = 0;
   let kickBurstY = 0;
+  let blackFlashChain = 0;
+  let blackFlashTimer = 0;
+  let blackFlashPower = 0;
+  let blackFlashX = 0;
+  let blackFlashY = 0;
   let hammerTimer = 0;
   let gloveTimer = 0;
   let hammerHitCooldown = 0;
@@ -172,7 +177,10 @@
   const BOSS_BGM_VOL = 0.41;
   const INVINCIBLE_BGM_VOL = 0.44;
   const CLEAR_BGM_VOL = 0.4;
-  const SE_GAIN_BOOST = 1.42;
+  const SE_GAIN_BOOST = 1.62;
+  const PINCH_BGM_RATE_MAX = 1.18;
+  const PINCH_ATTACK_BONUS_MAX = 0.7;
+  const BLACK_FLASH_CHANCES = [1 / 32, 1 / 4, 1 / 2, 1 / 1.5];
   const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
   const INVINCIBLE_BONUS_POP_LIFE = 44;
@@ -224,6 +232,32 @@
 
   function powerFactor() {
     return 1;
+  }
+
+  function pinchRatioByHearts() {
+    return clamp((MAX_HEARTS - playerHearts) / Math.max(1, MAX_HEARTS - 1), 0, 1);
+  }
+
+  function pinchAttackMultiplier() {
+    return 1 + pinchRatioByHearts() * PINCH_ATTACK_BONUS_MAX;
+  }
+
+  function resolveBlackFlashAttempt() {
+    const stageIndex = clamp(blackFlashChain, 0, BLACK_FLASH_CHANCES.length - 1);
+    const chance = BLACK_FLASH_CHANCES[stageIndex];
+    const triggered = Math.random() < chance;
+    if (triggered) {
+      blackFlashChain = Math.min(blackFlashChain + 1, BLACK_FLASH_CHANCES.length - 1);
+    } else {
+      blackFlashChain = 0;
+    }
+    return triggered;
+  }
+
+  function resetBlackFlashState() {
+    blackFlashChain = 0;
+    blackFlashTimer = 0;
+    blackFlashPower = 0;
   }
 
   function clamp(n, min, max) {
@@ -345,6 +379,33 @@
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
+  }
+
+  function setMusicRate(media, targetRate, dt = 1) {
+    if (!media) return;
+    const safeTarget = clamp(targetRate, 0.85, 1.35);
+    const blend = clamp(dt * 0.08, 0.03, 0.4);
+    try {
+      const current = typeof media.playbackRate === "number" ? media.playbackRate : 1;
+      const next = current + (safeTarget - current) * blend;
+      media.playbackRate = next;
+      if ("defaultPlaybackRate" in media) media.defaultPlaybackRate = next;
+      if ("preservesPitch" in media) media.preservesPitch = false;
+      if ("webkitPreservesPitch" in media) media.webkitPreservesPitch = false;
+      if ("mozPreservesPitch" in media) media.mozPreservesPitch = false;
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
+  }
+
+  function updatePinchBgmTension(dt) {
+    const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    const pinch = playable ? pinchRatioByHearts() : 0;
+    const targetRate = playable
+      ? 1 + pinch * (PINCH_BGM_RATE_MAX - 1)
+      : 1;
+    setMusicRate(stageMusic, targetRate, dt);
+    setMusicRate(bossMusic, targetRate, dt);
   }
 
   function setBgmVolume(target, fadeSec = 0.08) {
@@ -963,6 +1024,69 @@
     }
   }
 
+  function playBlackFlashSfx(power = 1) {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+    const p = clamp(power, 0.8, 4.6);
+
+    const core = audioCtx.createOscillator();
+    const coreGain = audioCtx.createGain();
+    core.type = "sawtooth";
+    core.frequency.setValueAtTime(180 + p * 54, now);
+    core.frequency.exponentialRampToValueAtTime(86 + p * 18, now + 0.12);
+    coreGain.gain.setValueAtTime(0.0001, now);
+    coreGain.gain.exponentialRampToValueAtTime(seLevel(0.16 + p * 0.01), now + 0.004);
+    coreGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    core.connect(coreGain);
+    coreGain.connect(audioCtx.destination);
+    core.start(now);
+    core.stop(now + 0.15);
+
+    const crack = audioCtx.createOscillator();
+    const crackGain = audioCtx.createGain();
+    crack.type = "square";
+    crack.frequency.setValueAtTime(1380 + p * 110, now + 0.008);
+    crack.frequency.exponentialRampToValueAtTime(420 + p * 40, now + 0.09);
+    crackGain.gain.setValueAtTime(0.0001, now + 0.004);
+    crackGain.gain.exponentialRampToValueAtTime(seLevel(0.11), now + 0.014);
+    crackGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+    crack.connect(crackGain);
+    crackGain.connect(audioCtx.destination);
+    crack.start(now + 0.004);
+    crack.stop(now + 0.12);
+
+    if (bgmNoiseBuffer) {
+      const src = audioCtx.createBufferSource();
+      const hp = audioCtx.createBiquadFilter();
+      const ng = audioCtx.createGain();
+      src.buffer = bgmNoiseBuffer;
+      hp.type = "highpass";
+      hp.frequency.setValueAtTime(1200 + p * 120, now);
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(seLevel(0.1), now + 0.002);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+      src.connect(hp);
+      hp.connect(ng);
+      ng.connect(audioCtx.destination);
+      src.start(now);
+      src.stop(now + 0.08);
+    }
+  }
+
+  function triggerBlackFlashEffect(x, y, power = 1) {
+    const p = clamp(power, 0.8, 4.8);
+    blackFlashTimer = Math.max(blackFlashTimer, 20 + p * 2.2);
+    blackFlashPower = Math.max(blackFlashPower, 1.2 + p * 0.46);
+    blackFlashX = x;
+    blackFlashY = y;
+    triggerImpact(2.2 + p * 0.48, x, y, 3.4 + p * 0.55);
+    spawnHitSparks(x, y, "#ffc0c0", "#ff4747");
+    spawnHitSparks(x, y, "#2a0b12", "#77111e");
+    playBlackFlashSfx(p);
+    hudMessage = "黒閃! CRITICAL x2";
+    hudTimer = Math.max(hudTimer, 34);
+  }
+
   function playEnemyDefeatSfx(power = 1) {
     if (!audioCtx || audioCtx.state !== "running") return;
     const now = audioCtx.currentTime;
@@ -1500,6 +1624,7 @@
     attackEffectPhase = 0;
     attackEffectMode = "none";
     attackEffectPower = 0;
+    resetBlackFlashState();
     stage.playerWaves = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
@@ -1538,6 +1663,7 @@
       1
     );
     const sweepPower = clamp(proteinBurstPower, 0.9, 2.4);
+    const crisisMul = pinchAttackMultiplier();
 
     let swept = 0;
     for (const enemy of stage.enemies) {
@@ -1566,7 +1692,7 @@
     stage.bossShots = stage.bossShots.filter((s) => !s.dead);
 
     if (stage.boss.active && stage.boss.hp > 0 && stage.boss.invuln <= 0) {
-      const bossDamage = 1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus();
+      const bossDamage = Math.max(1, Math.round((1 + Math.floor(gaugeRatio * 2.2) + bossDamageBonus()) * crisisMul));
       stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
       stage.boss.invuln = bossDamageBonus() > 0 ? 12 : 20;
       stage.boss.vx += player.facing * (0.5 + gaugeRatio * 0.95);
@@ -2709,6 +2835,7 @@
     attackEffectPhase = 0;
     attackEffectMode = "none";
     attackEffectPower = 0;
+    resetBlackFlashState();
     stage.playerWaves = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
@@ -2784,6 +2911,7 @@
     attackEffectPhase = 0;
     attackEffectMode = "none";
     attackEffectPower = 0;
+    resetBlackFlashState();
     stage.playerWaves = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
@@ -3428,6 +3556,7 @@
     const comboVxBonus = comboType === "kick" ? 0.62 : comboType === "upper" ? 0.18 : 0;
     const comboVyBonus = comboType === "upper" ? 1.05 : comboType === "kick" ? -0.22 : 0;
     const pLv = proteinLevel();
+    const crisisMul = pinchAttackMultiplier();
     const dir = player.facing;
     const px = player.x + player.w * 0.5;
     const reach = strongWave
@@ -3468,7 +3597,18 @@
       ? (dir > 0 ? hitBox.x + hitBox.w - 2 : hitBox.x + 2)
       : px + dir * (12 + reach * 0.48);
     let hitY = hitBox.y + hitBox.h * 0.5;
-    const hitPower = 0.94 + chargeRatio * 0.68 + comboStage * 0.14 + comboPowerBonus + (morningStarStrike ? 0.28 : 0) + pLv * 0.01;
+    const hitPower = (0.94 + chargeRatio * 0.68 + comboStage * 0.14 + comboPowerBonus + (morningStarStrike ? 0.28 : 0) + pLv * 0.01) * crisisMul;
+    let blackFlash = false;
+    let blackFlashRolled = false;
+    const tryBlackFlash = (x, y, power = 1) => {
+      if (blackFlashRolled) return blackFlash;
+      blackFlashRolled = true;
+      blackFlash = resolveBlackFlashAttempt();
+      if (blackFlash) {
+        triggerBlackFlashEffect(x, y, power);
+      }
+      return blackFlash;
+    };
     let gimmickBreaks = 0;
     for (const box of hitBoxes) {
       gimmickBreaks += hitBreakableGimmicks(box, 1 + chargeRatio * 0.8);
@@ -3482,19 +3622,21 @@
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlapsAny(enemy)) continue;
-      kickEnemy(enemy, dir, hitPower + 0.2, { immediateRemove: false, flyLifetime: 32 + Math.round(chargeRatio * 16) });
-      enemy.vx = dir * (3.8 + hitPower * 0.95 + comboStage * 0.2 + comboVxBonus + (morningStarStrike ? 0.8 : 0));
+      hitX = enemy.x + enemy.w * 0.5;
+      hitY = enemy.y + enemy.h * (morningStarStrike ? 0.34 : 0.42);
+      const bf = tryBlackFlash(hitX, hitY, 1.15 + chargeRatio * 1.4 + comboStage * 0.28);
+      const criticalPowerMul = bf ? 1.45 : 1;
+      kickEnemy(enemy, dir, (hitPower + 0.2) * criticalPowerMul, { immediateRemove: false, flyLifetime: 32 + Math.round(chargeRatio * 16) });
+      enemy.vx = dir * (3.8 + hitPower * 0.95 * criticalPowerMul + comboStage * 0.2 + comboVxBonus + (morningStarStrike ? 0.8 : 0));
       enemy.vy = Math.min(
         enemy.vy,
         -(
           morningStarStrike
-            ? 2.8 + chargeRatio * 0.9 + (morningStarLong ? 0.4 : 0)
-            : 3.4 + chargeRatio * 1.3 + comboStage * 0.14 + comboVyBonus
+            ? 2.8 + chargeRatio * 0.9 + (morningStarLong ? 0.4 : 0) + (bf ? 0.38 : 0)
+            : 3.4 + chargeRatio * 1.3 + comboStage * 0.14 + comboVyBonus + (bf ? 0.46 : 0)
         )
       );
       enemy.flash = 12;
-      hitX = enemy.x + enemy.w * 0.5;
-      hitY = enemy.y + enemy.h * (morningStarStrike ? 0.34 : 0.42);
       hits += 1;
     }
 
@@ -3513,15 +3655,17 @@
     }
 
     if (stage.boss.active && stage.boss.hp > 0 && overlapsAny(stage.boss) && stage.boss.invuln <= 0) {
-      const bossDamage = 1 + bossDamageBonus();
+      hitX = stage.boss.x + stage.boss.w * 0.5;
+      hitY = stage.boss.y + stage.boss.h * (morningStarStrike ? 0.34 : 0.45);
+      const bf = tryBlackFlash(hitX, hitY, 1.3 + chargeRatio * 1.6 + comboStage * 0.35);
+      const bossDamageBase = 1 + bossDamageBonus();
+      const bossDamage = Math.max(1, Math.round(bossDamageBase * crisisMul * (bf ? 2 : 1)));
       stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
       stage.boss.invuln = morningStarStrike
         ? (bossDamageBonus() > 0 ? 9 : 13)
         : (bossDamageBonus() > 0 ? 11 : 15);
-      stage.boss.vx += dir * (0.62 + chargeRatio * 0.38 + comboVxBonus * 0.45 + (morningStarStrike ? (morningStarLong ? 0.52 : 0.34) : 0));
-      stage.boss.vy = Math.min(stage.boss.vy, -(morningStarStrike ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0) : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5));
-      hitX = stage.boss.x + stage.boss.w * 0.5;
-      hitY = stage.boss.y + stage.boss.h * (morningStarStrike ? 0.34 : 0.45);
+      stage.boss.vx += dir * (0.62 + chargeRatio * 0.38 + comboVxBonus * 0.45 + (morningStarStrike ? (morningStarLong ? 0.52 : 0.34) : 0) + (bf ? 0.34 : 0));
+      stage.boss.vy = Math.min(stage.boss.vy, -(morningStarStrike ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0) : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5) - (bf ? 0.24 : 0));
       hits += 1;
       handleBossHpZero();
     }
@@ -3573,7 +3717,7 @@
     } else if (morningStarStrike) {
       spawnWaveBurst(hitX, hitY, 0.95 + chargeRatio * 0.5);
     }
-    playKickSfx(1.16 + chargeRatio * 0.42 + comboStage * 0.08 + (comboType === "kick" ? 0.08 : comboType === "upper" ? 0.16 : 0) + (morningStarStrike ? 0.04 : 0));
+    playKickSfx(1.16 + chargeRatio * 0.42 + comboStage * 0.08 + (comboType === "kick" ? 0.08 : comboType === "upper" ? 0.16 : 0) + (morningStarStrike ? 0.04 : 0) + (blackFlash ? 0.26 : 0));
     if (parryHits > 0) playParrySfx();
     playRilaRobotVoice("attack");
     if (comboPunch) {
@@ -3617,6 +3761,7 @@
 
   function performHyakuretsuStrike() {
     const pLv = proteinLevel();
+    const crisisMul = pinchAttackMultiplier();
     const dir = player.facing;
     const reach = 13 + Math.min(7, Math.floor(pLv * 0.14));
     const laneData = [
@@ -3640,7 +3785,18 @@
     let parryHits = 0;
     let hitX = player.x + player.w * 0.5 + dir * (6 + laneBoxes[activeLane].w * 0.36);
     let hitY = laneBoxes[activeLane].y + laneBoxes[activeLane].h * 0.5;
-    const hitPower = 0.86 + pLv * 0.006;
+    const hitPower = (0.86 + pLv * 0.006) * crisisMul;
+    let blackFlash = false;
+    let blackFlashRolled = false;
+    const tryBlackFlash = (x, y, power = 1) => {
+      if (blackFlashRolled) return blackFlash;
+      blackFlashRolled = true;
+      blackFlash = resolveBlackFlashAttempt();
+      if (blackFlash) {
+        triggerBlackFlashEffect(x, y, power);
+      }
+      return blackFlash;
+    };
     let gimmickBreaks = 0;
     for (const box of laneBoxes) {
       gimmickBreaks += hitBreakableGimmicks(box, 1 + pLv * 0.015);
@@ -3656,12 +3812,14 @@
       if (!enemy.alive || enemy.kicked) continue;
       const laneIndex = firstLaneIndexFor(enemy);
       if (laneIndex < 0) continue;
-      kickEnemy(enemy, dir, hitPower + 0.15, { immediateRemove: false, flyLifetime: 24 });
-      enemy.vx = dir * (4.0 + hitPower * 0.72);
-      enemy.vy = Math.min(enemy.vy, -(2.6 + hitPower * 0.5 + (laneIndex === 0 ? 0.6 : laneIndex === 1 ? 0.2 : -0.1)));
-      enemy.flash = 10;
       hitX = enemy.x + enemy.w * 0.5;
       hitY = laneBoxes[Math.max(0, laneIndex)].y + 2;
+      const bf = tryBlackFlash(hitX, hitY, 1.08 + pLv * 0.02);
+      const criticalPowerMul = bf ? 1.45 : 1;
+      kickEnemy(enemy, dir, (hitPower + 0.15) * criticalPowerMul, { immediateRemove: false, flyLifetime: 24 });
+      enemy.vx = dir * (4.0 + hitPower * 0.72 * criticalPowerMul);
+      enemy.vy = Math.min(enemy.vy, -(2.6 + hitPower * 0.5 + (laneIndex === 0 ? 0.6 : laneIndex === 1 ? 0.2 : -0.1) + (bf ? 0.24 : 0)));
+      enemy.flash = 10;
       hits += 1;
     }
 
@@ -3678,12 +3836,15 @@
     }
 
     if (stage.boss.active && stage.boss.hp > 0 && overlapsAnyLane(stage.boss) && stage.boss.invuln <= 0) {
-      stage.boss.hp = Math.max(0, stage.boss.hp - (1 + bossDamageBonus()));
-      stage.boss.invuln = bossDamageBonus() > 0 ? 10 : 16;
-      stage.boss.vx += dir * 0.48;
-      stage.boss.vy = Math.min(stage.boss.vy, -1.85);
       hitX = stage.boss.x + stage.boss.w * 0.5;
       hitY = stage.boss.y + stage.boss.h * 0.44;
+      const bf = tryBlackFlash(hitX, hitY, 1.2 + pLv * 0.02);
+      const baseDamage = 1 + bossDamageBonus();
+      const damage = Math.max(1, Math.round(baseDamage * crisisMul * (bf ? 2 : 1)));
+      stage.boss.hp = Math.max(0, stage.boss.hp - damage);
+      stage.boss.invuln = bossDamageBonus() > 0 ? 10 : 16;
+      stage.boss.vx += dir * (0.48 + (bf ? 0.2 : 0));
+      stage.boss.vy = Math.min(stage.boss.vy, -1.85 - (bf ? 0.2 : 0));
       hits += 1;
       handleBossHpZero();
     }
@@ -3701,7 +3862,7 @@
       triggerImpact(1.08 + Math.min(0.8, hits * 0.07), hitX, hitY, 1.4);
       spawnHitSparks(hitX, hitY, "#fff0bc", "#ff9369");
       spawnHitSparks(hitX, hitY, "#ffe6b6", "#ff6b58");
-      playKickSfx(1.36 + Math.random() * 0.18);
+      playKickSfx(1.36 + Math.random() * 0.18 + (blackFlash ? 0.2 : 0));
       if (Math.random() < 0.36) {
         playRilaRobotVoice("attack");
       }
@@ -3801,6 +3962,7 @@
 
   function updatePlayerWaves(dt, solids) {
     if (!stage.playerWaves || stage.playerWaves.length === 0) return;
+    const crisisMul = pinchAttackMultiplier();
 
     for (const wave of stage.playerWaves) {
       if (wave.dead) continue;
@@ -3819,9 +3981,9 @@
         if (!enemy.alive || enemy.kicked) continue;
         if (!overlap(wave, enemy)) continue;
         const dir = wave.vx >= 0 ? 1 : -1;
-        kickEnemy(enemy, dir, 1.2 + (wave.power || 0) * 0.7, { immediateRemove: false, flyLifetime: 38 });
-        enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3);
-        enemy.vy = -(3.5 + (wave.power || 0) * 0.7);
+        kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul, { immediateRemove: false, flyLifetime: 38 });
+        enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3) * crisisMul;
+        enemy.vy = -(3.5 + (wave.power || 0) * 0.7 + (crisisMul - 1) * 0.9);
         enemy.flash = 12;
         const hx = enemy.x + enemy.w * 0.5;
         const hy = enemy.y + enemy.h * 0.4;
@@ -3832,7 +3994,7 @@
 
       if (!wave.dead && stage.boss.active && stage.boss.hp > 0 && overlap(wave, stage.boss) && stage.boss.invuln <= 0) {
         const dir = wave.vx >= 0 ? 1 : -1;
-        const bossDamage = 1 + bossDamageBonus();
+        const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul));
         stage.boss.hp = Math.max(0, stage.boss.hp - bossDamage);
         stage.boss.invuln = bossDamageBonus() > 0 ? 9 : 13;
         stage.boss.vx += dir * (0.62 + (wave.power || 0) * 0.28);
@@ -3880,6 +4042,7 @@
   }
 
   function resolveEnemyContactDamage() {
+    const crisisMul = pinchAttackMultiplier();
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
 
@@ -3915,7 +4078,7 @@
       if (stompable) {
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
         const pLv = proteinLevel();
-        const stompPower = (weakPartyGuest ? 1.28 : 1.45) + pLv * 0.045;
+        const stompPower = ((weakPartyGuest ? 1.28 : 1.45) + pLv * 0.045) * crisisMul;
         kickEnemy(enemy, dir, stompPower + 0.35);
         player.vy = -6.35 - Math.min(0.45, Math.abs(player.vx) * 0.08);
         player.vx += dir * 0.12;
@@ -4019,7 +4182,8 @@
     if (stompable) {
       const dir = player.x + player.w * 0.5 < b.x + b.w * 0.5 ? 1 : -1;
       if (b.invuln <= 0 && b.hp > 0) {
-        b.hp = Math.max(0, b.hp - (1 + bossDamageBonus()));
+        const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier()));
+        b.hp = Math.max(0, b.hp - damage);
         b.invuln = bossDamageBonus() > 0 ? 13 : 20;
         b.vx += dir * 0.72;
         b.vy = Math.min(b.vy, -2.2);
@@ -4319,6 +4483,7 @@
     attackEffectMode = "none";
     attackEffectPhase = 0;
     attackEffectPower = 0;
+    resetBlackFlashState();
     stopInvincibleMusic();
 
     gameState = STATE.BOSS;
@@ -5030,6 +5195,7 @@
   }
 
   function updateImpactEffects(dt) {
+    updatePinchBgmTension(dt);
     impactShakeTimer = Math.max(0, impactShakeTimer - dt);
     proteinRushTimer = Math.max(0, proteinRushTimer - dt);
     invincibleHitCooldown = Math.max(0, invincibleHitCooldown - dt);
@@ -5037,6 +5203,8 @@
     hurtFlashTimer = Math.max(0, hurtFlashTimer - dt);
     kickFlashTimer = Math.max(0, kickFlashTimer - dt);
     kickFlashPower = Math.max(0, kickFlashPower - dt * 0.24);
+    blackFlashTimer = Math.max(0, blackFlashTimer - dt);
+    blackFlashPower = Math.max(0, blackFlashPower - dt * 0.18);
     stompChainGuardTimer = Math.max(0, stompChainGuardTimer - dt);
     hammerTimer = Math.max(0, hammerTimer - dt);
     gloveTimer = Math.max(0, gloveTimer - dt);
@@ -5471,6 +5639,7 @@
     attackEffectMode = "none";
     attackEffectPhase = 0;
     attackEffectPower = 0;
+    resetBlackFlashState();
     stompChainGuardTimer = 0;
     proteinBurstGauge = 0;
     proteinBurstTimer = 0;
@@ -7851,13 +8020,14 @@
     drawBoyfriend(228, 104 + heroBob * 0.4);
 
     ctx.fillStyle = "rgba(12, 10, 16, 0.82)";
-    ctx.fillRect(45, 126, 230, 34);
+    ctx.fillRect(28, 118, 264, 44);
     ctx.strokeStyle = "rgba(223, 177, 181, 0.7)";
-    ctx.strokeRect(45, 126, 230, 34);
+    ctx.strokeRect(28, 118, 264, 44);
     ctx.fillStyle = "#f5ebf1";
     ctx.font = "10px monospace";
-    ctx.fillText("彼氏救出アクション / 都会ステージ", 66, 134);
-    ctx.fillText("バイクで10秒無敵・踏みつけ&チャージ攻撃", 52, 146);
+    ctx.fillText("彼氏救出アクション / 都会ステージ", 52, 126);
+    ctx.fillText("ピンチでBGM加速 & 攻撃力アップ", 54, 138);
+    ctx.fillText("ごく稀に黒閃(クリティカル2倍) 1/32→1/4→1/2→1/1.5", 34, 150);
 
     const blink = Math.floor(t / 24) % 2 === 0;
     if (blink) {
@@ -8763,6 +8933,47 @@
     ctx.fillRect(0, 0, W, H);
   }
 
+  function drawBlackFlashOverlay() {
+    if (blackFlashTimer <= 0 || blackFlashPower <= 0.01) return;
+
+    const ratio = clamp(blackFlashTimer / 24, 0, 1);
+    const power = clamp(blackFlashPower, 0, 6);
+    const sx = Math.floor(blackFlashX - cameraX);
+    const sy = Math.floor(blackFlashY);
+    const pulse = 0.5 + Math.sin((player.anim + blackFlashTimer) * 0.32) * 0.5;
+
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.22 * ratio * (0.8 + power * 0.2)})`;
+    ctx.fillRect(0, 24, W, H - 24);
+    ctx.fillStyle = `rgba(190, 12, 30, ${0.12 * ratio * (0.8 + pulse * 0.7)})`;
+    ctx.fillRect(0, 24, W, H - 24);
+
+    for (let i = 0; i < 12; i += 1) {
+      const ang = (Math.PI * 2 * i) / 12 + player.anim * 0.05;
+      const len = 14 + power * 9 + (i % 2 === 0 ? 6 : 0);
+      const ex = Math.floor(sx + Math.cos(ang) * len);
+      const ey = Math.floor(sy + Math.sin(ang) * len * 0.72);
+      ctx.strokeStyle = `rgba(255, 44, 66, ${0.46 * ratio})`;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(16, 8, 10, ${0.4 * ratio})`;
+      ctx.beginPath();
+      ctx.moveTo(sx + 1, sy + 1);
+      ctx.lineTo(ex + 1, ey + 1);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.24 * ratio})`;
+    ctx.fillRect(sx - 2, sy - 2, 4, 4);
+    ctx.fillStyle = `rgba(255, 30, 50, ${0.68 * ratio})`;
+    ctx.fillRect(sx - 8, sy - 1, 16, 2);
+    ctx.fillRect(sx - 1, sy - 8, 2, 16);
+    ctx.fillStyle = `rgba(10, 6, 8, ${0.56 * ratio})`;
+    ctx.fillRect(sx - 6, sy, 12, 1);
+    ctx.fillRect(sx, sy - 6, 1, 12);
+  }
+
   function drawKickBurstOverlay() {
     if (kickFlashTimer <= 0 || kickFlashPower <= 0.01) return;
 
@@ -8914,6 +9125,7 @@
     ctx.save();
     ctx.translate(shakeX, shakeY);
     drawWorld();
+    drawBlackFlashOverlay();
     drawKickBurstOverlay();
     drawWaveFlashOverlay();
     drawProteinBurstLaserOverlay();
