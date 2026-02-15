@@ -15,6 +15,7 @@
   const STATE = {
     TITLE: "title",
     CUTSCENE: "cutscene",
+    STAGE_INTRO: "stage_intro",
     PRE_BOSS: "pre_boss",
     GOD_PHASE_CUTSCENE: "god_phase_cutscene",
     PLAY: "play",
@@ -54,6 +55,7 @@
   let gameState = STATE.TITLE;
   let titleTimer = 0;
   let cutsceneTime = 0;
+  let stageIntroTimer = 0;
   let preBossCutsceneTimer = 0;
   let godPhaseCutsceneTimer = 0;
   let deadTimer = 0;
@@ -281,7 +283,8 @@
   const TIME_BURST_RANK_GAIN_SLOW_MUL = 1.35;
   const TIME_BURST_RANK_GAIN_STOP_MUL = 1.7;
   const TIME_STOP_CLOCK_TICK_INTERVAL = 30;
-  const OPENING_CUTSCENE_DURATION = 760;
+  const OPENING_CUTSCENE_DURATION = 940;
+  const STAGE_INTRO_CUTSCENE_DURATION = 340;
   const PRE_BOSS_CUTSCENE_DURATION = 460;
   const PRE_BOSS_ENTRY_DURATION = 78;
   const PRE_BOSS_MOVIE_START_AT = 230;
@@ -326,6 +329,9 @@
   const HYAKURETSU_FINISHER_CHARGE_RATIO = 0.94;
   const HYAKURETSU_FINISHER_POWER_MUL = 1.34;
   const HYAKURETSU_FINISHER_BOSS_MUL = 1.26;
+  const HYAKURETSU_SHORYU_RISE_VY = 5.2;
+  const HYAKURETSU_SHORYU_RISE_VY_BONUS = 1.1;
+  const HYAKURETSU_SHORYU_FORWARD_BOOST = 0.46;
   const STOMP_VERTICAL_GRACE = 16;
   const STOMP_SIDE_GRACE = 6;
   const STOMP_DESCEND_MIN = -0.25;
@@ -1033,7 +1039,12 @@
   }
 
   function startOpeningTheme() {
-    if (gameState !== STATE.TITLE && gameState !== STATE.CUTSCENE && gameState !== STATE.PRE_BOSS) return;
+    if (
+      gameState !== STATE.TITLE
+      && gameState !== STATE.CUTSCENE
+      && gameState !== STATE.STAGE_INTRO
+      && gameState !== STATE.PRE_BOSS
+    ) return;
     ensureInvincibleMusic();
     if (!invincibleMusic) return;
     if (!audioUnlockedByUser && openingThemeMutedAutoplayTried && invincibleMusic.paused) return;
@@ -1284,7 +1295,7 @@
       }
     }
 
-    if (gameState === STATE.TITLE || gameState === STATE.CUTSCENE || gameState === STATE.PRE_BOSS) {
+    if (gameState === STATE.TITLE || gameState === STATE.CUTSCENE || gameState === STATE.STAGE_INTRO || gameState === STATE.PRE_BOSS) {
       startOpeningTheme();
     }
   }
@@ -4411,6 +4422,7 @@
     checkpointIndex = 0;
     deathContinueMode = "checkpoint";
     preBossCutsceneTimer = 0;
+    stageIntroTimer = 0;
     godPhaseCutsceneTimer = 0;
     stage = buildStage();
     const cp = stage.checkpoints[checkpointIndex];
@@ -4495,6 +4507,7 @@
 
   function respawnFromCheckpoint() {
     preBossCutsceneTimer = 0;
+    stageIntroTimer = 0;
     godPhaseCutsceneTimer = 0;
     deathContinueMode = "checkpoint";
     stage = buildStage();
@@ -5214,6 +5227,7 @@
       : "none";
     const forcePunch = options.forcePunch === true;
     const hyakuretsuFinisher = options.hyakuretsuFinisher === true;
+    const shoryuFinisher = hyakuretsuFinisher;
     const chargeRatio = clamp(chargeFrames / ATTACK_CHARGE_MAX, 0, 1);
     const strongWave = !forcePunch && chargeFrames >= ATTACK_WAVE_CHARGE_MIN - 0.01;
     const morningStarSpin = !forcePunch && !comboPunch && !strongWave
@@ -5264,6 +5278,18 @@
       h: (morningStarStrike ? 12 + Math.floor(chargeRatio * 4) : comboPunch ? comboHitH : 13 + Math.floor(chargeRatio * 8)) + rankHitHBonus,
     };
     const hitBoxes = [hitBox];
+    if (shoryuFinisher) {
+      const shoryuReach = Math.max(12, Math.floor((14 + chargeRatio * 14) * rankRangeMul));
+      const shoryuHeight = Math.max(16, 18 + Math.floor(chargeRatio * 6) + rankHitHBonus);
+      hitBox = {
+        x: dir > 0 ? player.x + player.w - 2 : player.x - shoryuReach + 2,
+        y: player.y - 8,
+        w: shoryuReach,
+        h: shoryuHeight,
+      };
+      hitBoxes.length = 0;
+      hitBoxes.push(hitBox);
+    }
     if (morningStarSpin) {
       const spinBox = {
         x: px - spinRadiusX,
@@ -5309,8 +5335,8 @@
       hitBoxes.length = 0;
       hitBoxes.push(overheadBox, hitBox);
     }
-    const baseRankStyle = hyakuretsuFinisher
-      ? "atk1_hyakuretsu_finish"
+    const baseRankStyle = shoryuFinisher
+      ? "atk1_hyakuretsu_shoryu"
       : strongWave
         ? "atk1_wave"
         : morningStarSpin
@@ -5445,6 +5471,7 @@
         + hitPower * 0.95 * criticalPowerMul
         + comboStage * 0.2
         + comboVxBonus
+        + (shoryuFinisher ? 0.34 : 0)
         + (morningStarStrike ? 0.8 : 0)
         + (morningStarSpin ? 0.56 : 0)
         + (tipHit ? 0.48 : 0)
@@ -5453,7 +5480,9 @@
         ? (enemyCenterY < player.y + player.h * 0.46 ? 0.42 : enemyCenterY > player.y + player.h * 0.64 ? -0.18 : 0.14)
         : 0;
       const liftPower = (
-        morningStarStrike
+        shoryuFinisher
+          ? 4.75 + chargeRatio * 1.12 + (bf ? 0.44 : 0)
+          : morningStarStrike
           ? 2.8 + chargeRatio * 0.9 + (morningStarLong ? 0.4 : 0) + (bf ? 0.38 : 0)
           : morningStarSpin
             ? 3.1 + chargeRatio * 0.7 + spinVertical + (bf ? 0.34 : 0)
@@ -5502,7 +5531,7 @@
         ? MORNINGSTAR_TIP_BLACKFLASH_CHANCE_MUL
         : 1;
       hitX = bossCenterX;
-      hitY = boss.y + boss.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.42 : 0.45);
+      hitY = boss.y + boss.h * (morningStarSpin ? 0.5 : morningStarStrike ? 0.42 : shoryuFinisher ? 0.36 : 0.45);
       const bf = tryBlackFlash(
         hitX,
         hitY,
@@ -5528,13 +5557,16 @@
         0.62
         + chargeRatio * 0.38
         + comboVxBonus * 0.45
+        + (shoryuFinisher ? 0.24 : 0)
         + (morningStarStrike ? (morningStarLong ? 0.52 : 0.34) : 0)
         + (morningStarSpin ? 0.42 : 0)
         + (bf ? 0.34 : 0)
         + (tipHit ? 0.26 : 0)
       ) * rankKnockMul;
       const bossLiftPower = (
-        morningStarSpin
+        shoryuFinisher
+          ? 2.62 + chargeRatio * 0.52
+          : morningStarSpin
           ? 1.86 + chargeRatio * 0.28
           : morningStarStrike
             ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0)
@@ -5610,8 +5642,8 @@
     if (comboPunch) {
       hudMessage = comboType === "kick" ? "2段: キック" : comboType === "upper" ? "3段: アッパー" : "1段: パンチ";
       hudTimer = Math.max(hudTimer, 18);
-    } else if (hyakuretsuFinisher) {
-      hudMessage = "百裂フィニッシュ: 正拳突き!";
+    } else if (shoryuFinisher) {
+      hudMessage = "百裂フィニッシュ: 昇竜拳!";
       hudTimer = Math.max(hudTimer, 30);
     } else if (morningStarSpin) {
       hudMessage = "モーニングスター全方位!";
@@ -5627,21 +5659,38 @@
         : morningStarStrike
           ? ATTACK_PUNCH_COOLDOWN + 4
         : ATTACK_PUNCH_COOLDOWN;
-    if (hyakuretsuFinisher) {
-      attackCooldown = Math.max(attackCooldown, ATTACK_PUNCH_COOLDOWN + 6);
+    if (shoryuFinisher) {
+      attackCooldown = Math.max(attackCooldown, ATTACK_PUNCH_COOLDOWN + 10);
     }
-    const baseEffectTimer = strongWave ? 16 : comboPunch ? 8 + comboStage * 2 : morningStarSpin ? 24 : morningStarStrike ? 16 : 11;
+    const baseEffectTimer = strongWave ? 16 : shoryuFinisher ? 18 : comboPunch ? 8 + comboStage * 2 : morningStarSpin ? 24 : morningStarStrike ? 16 : 11;
     attackEffectTimer = Math.round(baseEffectTimer + rankBoost.blend * (strongWave ? 9 : morningStarSpin ? 8 : morningStarStrike ? 6 : 5));
-    attackEffectMode = strongWave ? "wave" : comboPunch ? `combo${comboStage}` : morningStarSpin ? "morningstar_spin" : morningStarStrike ? "morningstar" : "punch";
-    attackEffectPhase = comboPunch ? comboStage * 0.75 + chargeRatio * 0.8 : morningStarSpin ? 0.8 + chargeRatio * 3.4 : morningStarStrike ? 0.4 + chargeRatio * 1.7 : chargeRatio * 2.6;
+    attackEffectMode = strongWave ? "wave" : shoryuFinisher ? "shoryu" : comboPunch ? `combo${comboStage}` : morningStarSpin ? "morningstar_spin" : morningStarStrike ? "morningstar" : "punch";
+    attackEffectPhase = shoryuFinisher
+      ? 0.3 + chargeRatio * 2.2
+      : comboPunch
+        ? comboStage * 0.75 + chargeRatio * 0.8
+        : morningStarSpin
+          ? 0.8 + chargeRatio * 3.4
+          : morningStarStrike
+            ? 0.4 + chargeRatio * 1.7
+            : chargeRatio * 2.6;
     const baseEffectPower = comboPunch
       ? clamp(0.32 + comboStage * 0.24 + chargeRatio * 0.2, 0, 1)
+      : shoryuFinisher
+        ? clamp(0.62 + chargeRatio * 0.55, 0, 1)
       : morningStarSpin
         ? clamp(0.56 + chargeRatio * 0.5, 0, 1)
       : morningStarStrike
         ? clamp(0.5 + chargeRatio * 0.55, 0, 1)
         : chargeRatio;
     attackEffectPower = clamp(baseEffectPower * rankFxMul + rankBoost.blend * 0.12, 0, 1.8);
+
+    if (shoryuFinisher) {
+      const riseVy = HYAKURETSU_SHORYU_RISE_VY + chargeRatio * HYAKURETSU_SHORYU_RISE_VY_BONUS;
+      player.vy = Math.min(player.vy, -riseVy);
+      player.vx = clamp(player.vx + dir * HYAKURETSU_SHORYU_FORWARD_BOOST, -3.2, 3.2);
+      player.onGround = false;
+    }
   }
 
   function emitHammerShards(x, y, dir, chargeRatio, crisisMul) {
@@ -8137,6 +8186,7 @@
     playUiStartSfx();
     titleTimer = 0;
     cutsceneTime = 0;
+    stageIntroTimer = 0;
     preBossCutsceneTimer = 0;
     godPhaseCutsceneTimer = 0;
     cameraX = 0;
@@ -8170,9 +8220,49 @@
     }
   }
 
+  function stageIntroDuration() {
+    return currentStageNumber >= 3
+      ? STAGE_INTRO_CUTSCENE_DURATION + 70
+      : STAGE_INTRO_CUTSCENE_DURATION;
+  }
+
+  function beginStageIntroCutscene() {
+    stageIntroTimer = 0;
+    gameState = STATE.STAGE_INTRO;
+    cameraX = 0;
+    startOpeningTheme();
+  }
+
+  function finishStageIntroCutscene() {
+    stageIntroTimer = 0;
+    gameState = STATE.PLAY;
+    stopInvincibleMusic();
+    startStageMusic(true);
+    setBgmVolume(0, 0);
+    setBgmVolume(BGM_NORMAL_VOL, 0.08);
+    hudMessage = stageStartMessage();
+    hudTimer = Math.max(hudTimer, currentStageNumber >= 3 ? 168 : 150);
+  }
+
+  function updateStageIntroCutscene(dt, actions) {
+    cameraX = 0;
+    stageIntroTimer += dt;
+    player.anim += dt * 0.72;
+    startOpeningTheme();
+
+    if (actions.startPressed || actions.jumpPressed || actions.attackPressed || actions.attack2Pressed) {
+      finishStageIntroCutscene();
+      return;
+    }
+
+    if (stageIntroTimer > stageIntroDuration()) {
+      finishStageIntroCutscene();
+    }
+  }
+
   function updatePreBossCutscene(dt, actions) {
     const peacockBoss = stage.boss && (stage.boss.kind === "peacock" || stage.boss.kind === "peacockman");
-    const movieDuration = peacockBoss ? 320 : PRE_BOSS_CUTSCENE_DURATION;
+    const movieDuration = peacockBoss ? 420 : PRE_BOSS_CUTSCENE_DURATION;
     if (actions.startPressed || actions.jumpPressed) {
       startBossBattle();
       return;
@@ -8218,6 +8308,7 @@
     deadTimer = 0;
     deadTimerMax = 0;
     cutsceneTime = 0;
+    stageIntroTimer = 0;
     preBossCutsceneTimer = 0;
     godPhaseCutsceneTimer = 0;
     deathContinueMode = "checkpoint";
@@ -8270,6 +8361,7 @@
     }
     currentStageNumber += 1;
     cutsceneTime = 0;
+    stageIntroTimer = 0;
     preBossCutsceneTimer = 0;
     godPhaseCutsceneTimer = 0;
     deadReason = "";
@@ -8287,6 +8379,7 @@
     stopBossMusic(true);
     stopStageMusic(true);
     startGameplay(false, { keepLives: true, keepDeaths: true, keepBlackFlash: true });
+    beginStageIntroCutscene();
   }
 
   function updateDead(dt, actions) {
@@ -8363,6 +8456,11 @@
 
     if (gameState === STATE.CUTSCENE) {
       updateCutscene(dt, actions);
+      return;
+    }
+
+    if (gameState === STATE.STAGE_INTRO) {
+      updateStageIntroCutscene(dt, actions);
       return;
     }
 
@@ -10598,12 +10696,13 @@
     const isHyakuretsu = mode === "hyakuretsu";
     const isMorningStarSpin = mode === "morningstar_spin";
     const isMorningStar = mode === "morningstar";
+    const isShoryu = mode === "shoryu";
     const isHammer = mode === "hammer";
     const isCombo = comboStage > 0;
     const comboMove = isCombo
       ? (comboStage === 1 ? "punch" : comboStage === 2 ? "kick" : "upper")
       : "none";
-    const effectDuration = isHammer ? 22 : isWave ? 16 : isHyakuretsu ? 6 : isMorningStarSpin ? 18 : isMorningStar ? 16 : isCombo ? 8 + comboStage * 2 : 11;
+    const effectDuration = isHammer ? 22 : isWave ? 16 : isHyakuretsu ? 6 : isMorningStarSpin ? 18 : isMorningStar ? 16 : isShoryu ? 18 : isCombo ? 8 + comboStage * 2 : 11;
     const ratio = clamp(attackEffectTimer / effectDuration, 0, 1);
     const effectPower = clamp(attackEffectPower, 0, 1.8);
     const visualPower = effectPower <= 1 ? effectPower : 1 + (effectPower - 1) * 0.72;
@@ -10681,6 +10780,36 @@
       ctx.beginPath();
       ctx.arc(anchorX, anchorY, radius + 1, 0, Math.PI * 2);
       ctx.stroke();
+      return;
+    }
+    if (isShoryu) {
+      const rise = clamp(1 - ratio, 0, 1);
+      const topY = cy - 18 - Math.floor((1 - rise) * 12);
+      const laneCount = 6 + Math.floor(flashyBoost * 4);
+      for (let i = 0; i < laneCount; i += 1) {
+        const lane = i - Math.floor(laneCount * 0.5);
+        const laneShift = lane * 2;
+        const laneLen = 8 + Math.floor(visualPower * 5) - Math.abs(lane);
+        const sy = topY + i * 3;
+        const sx = dir > 0 ? cx + 5 + laneShift : cx - 13 - laneShift;
+        const alpha = clamp(0.68 - i * 0.08 + flashyBoost * 0.16, 0.12, 0.9);
+        ctx.fillStyle = `rgba(255, 216, 148, ${alpha})`;
+        ctx.fillRect(sx, sy, Math.max(3, laneLen), 2);
+        ctx.fillStyle = `rgba(255, 245, 216, ${Math.max(0.08, alpha - 0.22)})`;
+        ctx.fillRect(sx + 1, sy, Math.max(1, laneLen - 2), 1);
+      }
+
+      const arcPulse = 0.5 + Math.sin((attackEffectPhase + visualPower * 2.4) * 1.1) * 0.5;
+      const fistX = dir > 0 ? cx + 13 : cx - 19;
+      const fistY = topY - 3;
+      ctx.fillStyle = "#f5ddcf";
+      ctx.fillRect(fistX, fistY, 7, 4);
+      ctx.fillStyle = "#2a3348";
+      ctx.fillRect(fistX + 1, fistY - 1, 4, 1);
+      ctx.fillStyle = `rgba(160, 232, 255, ${0.2 + arcPulse * 0.24})`;
+      ctx.fillRect(fistX - 7, fistY + 1, 18, 1);
+      ctx.fillStyle = `rgba(255, 218, 152, ${0.28 + arcPulse * 0.2})`;
+      ctx.fillRect(fistX - 2, fistY - 5, 8, 3);
       return;
     }
     const baseReach = isWave
@@ -11701,58 +11830,208 @@
         "シュークリームで元気回復、プロテインはバニラ派!",
       ]);
     } else {
-      const k = clamp((t - 260) / 430, 0, 1);
-      const vanX = 128 + k * 126;
-      const run = Math.sin(t * 0.22) * 1.1;
-      drawCutsceneHero(70 + run + k * 12, 111, 1, t * 1.2);
+      if (t < 720) {
+        const k = clamp((t - 260) / 430, 0, 1);
+        const vanX = 128 + k * 126;
+        const run = Math.sin(t * 0.22) * 1.1;
+        drawCutsceneHero(70 + run + k * 12, 111, 1, t * 1.2);
 
-      drawKidnapVan(vanX - 12, 104 + Math.sin(t * 0.13) * 1);
-      drawBoyfriend(vanX + 6, 102 + Math.sin(t * 0.18) * 0.7);
+        drawKidnapVan(vanX - 12, 104 + Math.sin(t * 0.13) * 1);
+        drawBoyfriend(vanX + 6, 102 + Math.sin(t * 0.18) * 0.7);
 
-      const gruntBob = Math.sin(t * 0.22) * 1.1;
-      ctx.fillStyle = "#191820";
-      ctx.fillRect(vanX + 18, 101 + gruntBob, 12, 24);
-      ctx.fillStyle = "#7d2f54";
-      ctx.fillRect(vanX + 20, 100 + gruntBob, 8, 4);
-      ctx.fillStyle = "#f0c8b2";
-      ctx.fillRect(vanX + 21, 105 + gruntBob, 6, 4);
-      ctx.fillStyle = "#212430";
-      ctx.fillRect(vanX + 22, 106 + gruntBob, 1, 1);
-      ctx.fillRect(vanX + 25, 106 + gruntBob, 1, 1);
-      ctx.fillStyle = "#2d3548";
-      ctx.fillRect(vanX + 19, 110 + gruntBob, 10, 8);
-      ctx.fillStyle = "#151821";
-      ctx.fillRect(vanX + 20, 118 + gruntBob, 3, 7);
-      ctx.fillRect(vanX + 25, 118 + gruntBob, 3, 7);
-      ctx.fillStyle = "#ff6f9f";
-      ctx.fillRect(vanX + 12, 108 + gruntBob, 4, 2);
+        const gruntBob = Math.sin(t * 0.22) * 1.1;
+        ctx.fillStyle = "#191820";
+        ctx.fillRect(vanX + 18, 101 + gruntBob, 12, 24);
+        ctx.fillStyle = "#7d2f54";
+        ctx.fillRect(vanX + 20, 100 + gruntBob, 8, 4);
+        ctx.fillStyle = "#f0c8b2";
+        ctx.fillRect(vanX + 21, 105 + gruntBob, 6, 4);
+        ctx.fillStyle = "#212430";
+        ctx.fillRect(vanX + 22, 106 + gruntBob, 1, 1);
+        ctx.fillRect(vanX + 25, 106 + gruntBob, 1, 1);
+        ctx.fillStyle = "#2d3548";
+        ctx.fillRect(vanX + 19, 110 + gruntBob, 10, 8);
+        ctx.fillStyle = "#151821";
+        ctx.fillRect(vanX + 20, 118 + gruntBob, 3, 7);
+        ctx.fillRect(vanX + 25, 118 + gruntBob, 3, 7);
+        ctx.fillStyle = "#ff6f9f";
+        ctx.fillRect(vanX + 12, 108 + gruntBob, 4, 2);
 
-      for (let i = 0; i < 6; i += 1) {
-        const dx = vanX - 14 - i * 8 + (Math.floor(t * 0.5) % 8);
-        const dy = 125 + (i % 2);
-        ctx.fillStyle = `rgba(255, 206, 156, ${0.26 - i * 0.03})`;
-        ctx.fillRect(dx, dy, 5, 1);
-      }
+        for (let i = 0; i < 6; i += 1) {
+          const dx = vanX - 14 - i * 8 + (Math.floor(t * 0.5) % 8);
+          const dy = 125 + (i % 2);
+          ctx.fillStyle = `rgba(255, 206, 156, ${0.26 - i * 0.03})`;
+          ctx.fillRect(dx, dy, 5, 1);
+        }
 
-      if (t < 470) {
-        drawTextPanel([
-          "悪の組織が彼氏に甘い話を持ちかけた。",
-          "断った彼氏はホームパーティー会場へ連行された。",
-        ]);
-      } else if (t < 650) {
-        drawTextPanel([
-          "彼氏がさらわれた! りらは会場へ全力ダッシュ。",
-          "今すぐ追いかけて救出だ!",
-        ]);
+        if (t < 470) {
+          drawTextPanel([
+            "悪の組織が彼氏に甘い話を持ちかけた。",
+            "断った彼氏はホームパーティー会場へ連行された。",
+          ]);
+        } else if (t < 650) {
+          drawTextPanel([
+            "彼氏がさらわれた! りらは会場へ全力ダッシュ。",
+            "今すぐ追いかけて救出だ!",
+          ]);
+        } else {
+          drawTextPanel([
+            "ターゲットはマンション最上階のホームパーティー会場。",
+            "りらの救出作戦が今、始まる。",
+          ]);
+        }
       } else {
+        const prep = clamp((t - 720) / 220, 0, 1);
+        const heroX = 64 + prep * 42 + Math.sin(t * 0.12) * 1.1;
+        drawCutsceneHero(heroX, 110, 1, t * 1.22);
+        drawKidnapVan(26 + Math.sin(t * 0.18) * 0.9, 114, t);
+
+        const mx = 220;
+        const my = 44;
+        ctx.fillStyle = "#1a2031";
+        ctx.fillRect(mx, my, 88, 112);
+        ctx.fillStyle = "#2a324a";
+        ctx.fillRect(mx + 3, my + 4, 82, 104);
+        ctx.fillStyle = "#425076";
+        ctx.fillRect(mx + 10, my + 10, 68, 12);
+        ctx.fillStyle = "#7ad6ff";
+        for (let i = 0; i < 5; i += 1) {
+          ctx.fillRect(mx + 14 + i * 12, my + 14, 3, 3);
+        }
+        ctx.fillStyle = "#251d2b";
+        ctx.fillRect(mx + 32, my + 58, 24, 42);
+        ctx.fillStyle = "#8f2b58";
+        ctx.fillRect(mx + 30, my + 56, 28, 3);
+        ctx.fillStyle = "rgba(186, 228, 255, 0.2)";
+        ctx.fillRect(mx + 35, my + 63, 18, 30);
+
         drawTextPanel([
-          "ターゲットはマンション最上階のホームパーティー会場。",
-          "りらの救出作戦が今、始まる。",
+          "りらはマンション街区への侵入ルートを確保。",
+          "この先でSTAGE 1が始まる。",
         ]);
       }
     }
 
     drawCutscenePolish(t, dangerScene ? 0.84 : 0.64);
+
+    ctx.fillStyle = "rgba(0,0,0,0.44)";
+    ctx.fillRect(90, 8, 140, 14);
+    ctx.fillStyle = "#f4f3ff";
+    ctx.font = "9px monospace";
+    ctx.textBaseline = "top";
+    ctx.fillText("タップ / Enter でスキップ", 101, 11);
+  }
+
+  function drawStageIntroCutscene() {
+    const t = stageIntroTimer;
+    const stage2 = currentStageNumber === 2;
+    const stage3 = currentStageNumber >= 3;
+    drawCutsceneCityBackdrop(t * (stage3 ? 0.72 : 0.84), stage3);
+
+    if (stage2) {
+      ctx.fillStyle = "#2a3045";
+      ctx.fillRect(0, 132, W, 48);
+      ctx.fillStyle = "#4f5d74";
+      for (let i = 0; i < W; i += 16) {
+        ctx.fillRect(i, 140, 8, 1);
+      }
+
+      const approach = clamp(t / 210, 0, 1);
+      const heroX = 42 + approach * 76 + Math.sin(t * 0.18) * 1.1;
+      const heroY = 110 + Math.sin(t * 0.11) * 0.8;
+      drawCutsceneHero(heroX, heroY, 1, t * 1.2);
+
+      const bossX = 232 + Math.sin(t * 0.07) * 1.6;
+      const bossY = 100;
+      ctx.fillStyle = "#121928";
+      ctx.fillRect(bossX - 7, bossY + 2, 14, 6);
+      ctx.fillStyle = "#69b7ff";
+      ctx.fillRect(bossX - 5, bossY + 3, 10, 3);
+      ctx.fillStyle = "#f1d7c1";
+      ctx.fillRect(bossX - 4, bossY + 8, 8, 5);
+      ctx.fillStyle = "#29334a";
+      ctx.fillRect(bossX - 6, bossY + 13, 12, 12);
+      ctx.fillStyle = "#58d8b8";
+      ctx.fillRect(bossX - 13, bossY + 10, 5, 15);
+      ctx.fillRect(bossX + 8, bossY + 10, 5, 15);
+      ctx.fillStyle = "#ffe9af";
+      ctx.fillRect(bossX - 11, bossY + 14, 1, 2);
+      ctx.fillRect(bossX + 10, bossY + 14, 1, 2);
+      ctx.fillStyle = "rgba(125, 220, 255, 0.18)";
+      ctx.fillRect(bossX - 17, bossY + 5, 34, 24);
+
+      if (t < 118) {
+        drawTextPanel([
+          "STAGE 2: セントラルネオン街区へ到達。",
+          "孔雀人間が街区のゲートを封鎖している。",
+        ]);
+      } else if (t < 244) {
+        drawTextPanel([
+          "連撃と羽弾を見切り、中央アリーナを突破せよ。",
+          "ここを越えればマンション街区へのルートが開く。",
+        ]);
+      } else {
+        drawTextPanel([
+          "りら: 迷ってる時間はない。正面突破で行く!",
+          "STAGE 2 START",
+        ]);
+      }
+      drawCutscenePolish(t, 0.72);
+    } else {
+      const moonX = 250 + Math.sin(t * 0.03) * 3;
+      const moonY = 26 + Math.sin(t * 0.05) * 1.2;
+      ctx.fillStyle = "rgba(244, 235, 198, 0.2)";
+      ctx.fillRect(moonX - 12, moonY - 12, 24, 24);
+      ctx.fillStyle = "#f3ebcd";
+      ctx.fillRect(moonX - 5, moonY - 5, 10, 10);
+
+      const mx = 184;
+      const my = 40;
+      ctx.fillStyle = "#1a2031";
+      ctx.fillRect(mx, my, 98, 118);
+      ctx.fillStyle = "#2a324a";
+      ctx.fillRect(mx + 3, my + 4, 92, 110);
+      ctx.fillStyle = "#3e4a6a";
+      ctx.fillRect(mx + 10, my + 10, 78, 14);
+      ctx.fillStyle = "#7ad6ff";
+      for (let i = 0; i < 6; i += 1) {
+        ctx.fillRect(mx + 14 + i * 12, my + 14, 3, 3);
+      }
+      ctx.fillStyle = "#251d2b";
+      ctx.fillRect(mx + 37, my + 62, 26, 44);
+      ctx.fillStyle = "#8f2b58";
+      ctx.fillRect(mx + 35, my + 60, 30, 3);
+
+      drawBoyfriend(mx + 43, my + 70);
+      ctx.fillStyle = "rgba(160, 218, 255, 0.24)";
+      ctx.fillRect(mx + 40, my + 66, 20, 30);
+
+      const heroX = 72 + clamp(t / 220, 0, 1) * 70 + Math.sin(t * 0.12) * 1.1;
+      drawCutsceneHero(heroX, 110, 1, t * 1.14);
+
+      if (t >= 176) {
+        const vanX = 26 + Math.sin(t * 0.16) * 1.1;
+        drawKidnapVan(vanX, 114, t);
+      }
+
+      if (t < 130) {
+        drawTextPanel([
+          "STAGE 3: マンション街区へ突入。",
+          "彼氏は最上階のホームパーティー会場にいる。",
+        ]);
+      } else if (t < 264) {
+        drawTextPanel([
+          "会場には妨害ギミックと構成員が待ち構える。",
+          "突破して白ヒゲの神との決戦へ。",
+        ]);
+      } else {
+        drawTextPanel([
+          "りら: 必ず助け出して、ふたりで帰る。",
+          "FINAL STAGE START",
+        ]);
+      }
+      drawCutscenePolish(t, 0.82);
+    }
 
     ctx.fillStyle = "rgba(0,0,0,0.44)";
     ctx.fillRect(90, 8, 140, 14);
@@ -11867,7 +12146,7 @@
             "ステージ1終点: ネオンアリーナに到着。",
             "ゲートの先で孔雀ボスが待ち構える。",
           ]);
-      } else {
+      } else if (t < 290) {
         drawTextPanel(stage2PeacockHuman
           ? [
             "孔雀人間出現! 連撃と羽弾を見切って撃破せよ。",
@@ -11876,6 +12155,16 @@
           : [
             "孔雀ボス出現! 突進と羽弾を見切って倒せ。",
             "倒せばSTAGE 2の都会中心部へ進める。",
+          ]);
+      } else {
+        drawTextPanel(stage2PeacockHuman
+          ? [
+            "りら: 一気に決める。次は最終エリアへ。",
+            "準備完了、BOSS BATTLE!",
+          ]
+          : [
+            "りら: ここを突破して次の街区へ進む!",
+            "準備完了、BOSS BATTLE!",
           ]);
       }
       drawCutscenePolish(t, 0.62);
@@ -13078,6 +13367,12 @@
       return;
     }
 
+    if (gameState === STATE.STAGE_INTRO) {
+      drawStageIntroCutscene();
+      drawPs1Overlay();
+      return;
+    }
+
     if (gameState === STATE.PRE_BOSS) {
       drawPreBossCutscene();
       drawPs1Overlay();
@@ -13301,6 +13596,11 @@
 
     if (gameState === STATE.CUTSCENE) {
       startOpeningTheme();
+      return;
+    }
+
+    if (gameState === STATE.STAGE_INTRO) {
+      finishStageIntroCutscene();
       return;
     }
 
