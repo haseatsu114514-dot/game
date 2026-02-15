@@ -208,6 +208,7 @@
   const PROTEIN_LIFE_UP_STEP = 45;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [0.08, 0.5, 0.6, 0.7, 0.8, 0.9];
+  const BLACK_FLASH_LOW_CHANCE_RANK_BONUS_MAX = 0.04;
   const BLACK_FLASH_DAMAGE_MUL = 1.3;
   const BLACK_FLASH_RANK_GAIN_MUL = 1.3;
   const BLACK_FLASH_SLOW_DURATION = 20;
@@ -384,7 +385,13 @@
   function blackFlashChanceWithRank(stageIndex = blackFlashChain) {
     const idx = clamp(stageIndex, 0, BLACK_FLASH_CHANCES.length - 1);
     const baseChance = BLACK_FLASH_CHANCES[idx];
-    return clamp(baseChance, 0.01, 0.98);
+    if (baseChance >= 0.5) {
+      return clamp(baseChance, 0.01, 0.98);
+    }
+    const maxTier = Math.max(1, BATTLE_RANK_DATA.length - 1);
+    const rankRatio = clamp(battleRankIndex / maxTier, 0, 1);
+    const rankBonus = BLACK_FLASH_LOW_CHANCE_RANK_BONUS_MAX * rankRatio;
+    return clamp(baseChance + rankBonus, 0.01, 0.98);
   }
 
   function isBlackFlashHighMode() {
