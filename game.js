@@ -3798,6 +3798,7 @@
 
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
     const burstGuard = proteinBurstTimer > 0;
+    const burstRankGuard = burstGuard || isTimeBurstActive();
     if ((invincibleTimer > 0 || burstGuard) && !ignoreInvincible) {
       if (invincibleHitCooldown > 0) return;
       invincibleHitCooldown = 8;
@@ -3810,7 +3811,9 @@
     if (!instantGameOver) {
       if (damageInvulnTimer > 0) return;
 
-      dropBattleRankOnDamage(true);
+      if (!burstRankGuard) {
+        dropBattleRankOnDamage(true);
+      }
       playerHearts = Math.max(0, playerHearts - 1);
       damageInvulnTimer = 84;
       hurtFlashTimer = 24;
