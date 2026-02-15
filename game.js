@@ -350,7 +350,7 @@
   }
 
   function formatBlackFlashChanceText(chance) {
-    return `黒閃継続率 ${(chance * 100).toFixed(1)}%`;
+    return `黒閃発生率 ${(chance * 100).toFixed(1)}%`;
   }
 
   function resolveBlackFlashAttempt(forcedChance = null) {
