@@ -2611,10 +2611,13 @@
         { x: 430, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.38, minX: 340, maxX: 540, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
         { x: 920, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.42, minX: 860, maxX: 1040, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 142, hopInterval: 142 },
         { x: 1230, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.42, minX: 1130, maxX: 1330, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 1540, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.44, minX: 1450, maxX: 1660, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
         { x: 1840, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.46, minX: 1730, maxX: 1940, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 132, hopInterval: 132 },
         { x: 2380, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.46, minX: 2260, maxX: 2450, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { kind: "bruiser", x: 2720, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.32, minX: 2600, maxX: 2790, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 3, maxHp: 3 },
         { x: 2860, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.48, minX: 2750, maxX: 3010, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 124, hopInterval: 124 },
         { x: 3380, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.5, minX: 3260, maxX: 3460, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { x: 3730, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.52, minX: 3640, maxX: 3810, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 118, hopInterval: 118 },
         { x: 4010, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.52, minX: 3880, maxX: 4090, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 120, hopInterval: 120 },
         { kind: "peacock", x: 2100, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.38, minX: 1980, maxX: 2230, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.0, chargeCooldown: 76, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
         { kind: "peacock", x: 3620, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.4, minX: 3510, maxX: 3750, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.08, chargeCooldown: 78, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
@@ -2622,15 +2625,21 @@
         { x: 4680, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.56, minX: 4550, maxX: 4790, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 116, hopInterval: 116, forceShooter: true },
         { kind: "peacock", x: 5010, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.42, minX: 4890, maxX: 5150, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.12, chargeCooldown: 74, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
         { x: 5340, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.58, minX: 5220, maxX: 5450, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+        { kind: "bruiser", x: 5480, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.34, minX: 5400, maxX: 5640, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 3, maxHp: 3 },
         { x: 5670, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.6, minX: 5550, maxX: 5810, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 104, hopInterval: 104 },
+        { x: 5780, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.61, minX: 5680, maxX: 5930, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
         { kind: "peacock", x: 5870, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.44, minX: 5740, maxX: 5960, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.2, chargeCooldown: 72, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       );
       for (let i = 0; i < enemies.length; i += 1) {
         const enemy = enemies[i];
-        enemy.shooter = enemy.kind !== "peacock" && (enemy.forceShooter || i === 2 || i === 6 || i === 10);
+        const shooterCandidate = enemy.kind !== "peacock" && enemy.kind !== "bruiser";
+        enemy.shooter = shooterCandidate && (enemy.forceShooter || i === 2 || i === 7 || i === 12 || i === 16);
         enemy.shootInterval = enemy.shooter ? 176 + i * 9 : 0;
         enemy.shootCooldown = enemy.shooter ? 104 + i * 7 : 0;
         enemy.flash = 0;
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 3 : 1)));
+        enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
+        enemy.hitstun = 0;
       }
 
       fallBlocks.push(
@@ -2860,11 +2869,13 @@
     enemies.push(
       { x: 420, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.46, minX: 340, maxX: 520, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 880, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.52, minX: 770, maxX: 950, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 124, hopInterval: 124 },
+      { kind: "bruiser", x: 1100, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.32, minX: 1000, maxX: 1210, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 3, maxHp: 3 },
       { x: 1290, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.5, minX: 1130, maxX: 1360, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 1760, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.58, minX: 1550, maxX: 1830, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 102, hopInterval: 102 },
       { x: 2230, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.54, minX: 2010, maxX: 2260, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 2660, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.56, minX: 2410, maxX: 2690, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 3070, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.63, minX: 2870, maxX: 3160, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 98, hopInterval: 98 },
+      { x: 3520, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.64, minX: 3380, maxX: 3610, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 3970, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.66, minX: 3810, maxX: 4070, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 4480, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.68, minX: 4310, maxX: 4560, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { kind: "peacock", x: 1620, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.44, minX: 1500, maxX: 1740, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.3, chargeCooldown: 62, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
@@ -2872,31 +2883,39 @@
       { kind: "peacock", x: 4210, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.48, minX: 4100, maxX: 4350, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.5, chargeCooldown: 66, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       { x: 5480, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.7, minX: 5330, maxX: 5600, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 92, hopInterval: 92 },
       { x: 5950, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.72, minX: 5820, maxX: 6030, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+      { kind: "bruiser", x: 6120, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.35, minX: 6010, maxX: 6240, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 3, maxHp: 3 },
       { x: 6420, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.74, minX: 6280, maxX: 6480, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 86, hopInterval: 86 },
       { kind: "peacock", x: 6640, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.5, minX: 6520, maxX: 6750, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.58, chargeCooldown: 70, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       { x: 6890, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.76, minX: 6780, maxX: 7010, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true },
       { x: 7210, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.72, minX: 7070, maxX: 7290, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 90, hopInterval: 90 },
       { kind: "peacock", x: 7420, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.5, minX: 7310, maxX: 7520, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.5, chargeCooldown: 72, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       { x: 7600, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.74, minX: 7480, maxX: 7680, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
+      { x: 7760, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.77, minX: 7680, maxX: 7890, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 84, hopInterval: 84 },
       { x: 7920, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.76, minX: 7800, maxX: 8030, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 88, hopInterval: 88 },
       { kind: "peacock", x: 8180, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.52, minX: 8060, maxX: 8290, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.6, chargeCooldown: 74, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       { x: 8440, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.78, minX: 8320, maxX: 8510, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true },
       { kind: "peacock", x: 8620, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.54, minX: 8500, maxX: 8720, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.65, chargeCooldown: 76, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { kind: "bruiser", x: 8820, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: 1, speed: 0.37, minX: 8700, maxX: 8940, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, hp: 4, maxHp: 4 },
       { x: 9040, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.78, minX: 8940, maxX: 9160, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { kind: "peacock", x: 9300, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.54, minX: 9180, maxX: 9420, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.68, chargeCooldown: 72, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
       { x: 9560, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.8, minX: 9460, maxX: 9680, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 82, hopInterval: 82 },
       { x: 9840, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.82, minX: 9730, maxX: 9960, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0, forceShooter: true },
       { kind: "peacock", x: 10140, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.56, minX: 10020, maxX: 10280, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.72, chargeCooldown: 70, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 },
+      { x: 10360, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: -1, speed: 0.84, minX: 10240, maxX: 10480, kicked: false, onGround: false, alive: true, hop: false, hopTimer: 0, hopInterval: 0 },
       { x: 10620, y: 144, w: 14, h: 16, vx: 0, vy: 0, dir: 1, speed: 0.84, minX: 10520, maxX: 10750, kicked: false, onGround: false, alive: true, hop: true, hopTimer: 78, hopInterval: 78 },
       { kind: "peacock", x: 10930, y: 142, w: 16, h: 18, vx: 0, vy: 0, dir: -1, speed: 0.58, minX: 10820, maxX: 11020, kicked: false, onGround: false, alive: true, mode: "patrol", chargeSpeed: 2.75, chargeCooldown: 68, windupTimer: 0, chargeTimer: 0, recoverTimer: 0 }
     );
 
     for (let i = 0; i < enemies.length; i += 1) {
       const enemy = enemies[i];
-      enemy.shooter = enemy.kind !== "peacock" && (enemy.forceShooter || i === 2 || i === 7 || i === 13);
+      const shooterCandidate = enemy.kind !== "peacock" && enemy.kind !== "bruiser";
+      enemy.shooter = shooterCandidate && (enemy.forceShooter || i === 2 || i === 9 || i === 15 || i === 22);
       enemy.shootInterval = enemy.shooter ? 156 + i * 10 : 0;
       enemy.shootCooldown = enemy.shooter ? 96 + i * 10 : 0;
       enemy.flash = 0;
+      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 3 : 1)));
+      enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
+      enemy.hitstun = 0;
     }
 
     // Spikes removed per latest request.
@@ -3488,24 +3507,39 @@
     const immediateRemove = options.immediateRemove !== false;
     const flyLifetime = options.flyLifetime || 42;
     const rankStyle = options.rankStyle || "impact";
-    const freshDefeat = enemy.alive && !enemy.kicked;
+    const freshHit = enemy.alive && !enemy.kicked;
+    if (!freshHit) return;
     const hitX = enemy.x + enemy.w * 0.5;
     const hitY = enemy.y + enemy.h * 0.45;
     const hasBlackFlashOption = typeof options.blackFlash === "boolean";
-    const blackFlash = freshDefeat
+    const blackFlash = freshHit
       ? (hasBlackFlashOption ? options.blackFlash : rollBlackFlashHit(hitX, hitY, 1.02 + power * 0.55))
       : false;
     const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
     const effectivePower = blackFlash && !blackFlashPowerApplied ? power * 1.45 : power;
+    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 3 : 1)));
+    if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) {
+      enemy.hp = enemy.maxHp;
+    }
+    enemy.hp = Math.max(0, enemy.hp - 1);
+    const defeatedNow = enemy.hp <= 0;
     spawnEnemyBlood(hitX, hitY, effectivePower + (blackFlash ? 0.22 : 0));
-    if (freshDefeat) {
-      triggerInvincibleKillBonus(hitX, hitY, effectivePower);
-      addProteinBurstGauge(proteinBurstGainFromDefeat(effectivePower));
-      registerNoDamageDefeat(hitX, hitY, effectivePower, rankStyle);
-      if (enemy.bossArenaTarget && !enemy.bossArenaCounted) {
-        enemy.bossArenaCounted = true;
-        registerBossArenaTargetDestroyed("enemy", hitX, hitY);
-      }
+    if (!defeatedNow) {
+      enemy.hitstun = Math.max(enemy.hitstun || 0, 14 + effectivePower * 2.2);
+      enemy.vx = dir * (1.8 + effectivePower * 0.34);
+      enemy.vy = Math.min(enemy.vy, -(1.3 + effectivePower * 0.28 + (blackFlash ? 0.14 : 0)));
+      enemy.onGround = false;
+      enemy.flash = Math.max(enemy.flash || 0, 11);
+      hitStopTimer = Math.max(hitStopTimer, blackFlash ? 4.6 : 3.0);
+      playKickSfx(1.03 + effectivePower * 0.08 + (blackFlash ? 0.12 : 0));
+      return;
+    }
+    triggerInvincibleKillBonus(hitX, hitY, effectivePower);
+    addProteinBurstGauge(proteinBurstGainFromDefeat(effectivePower));
+    registerNoDamageDefeat(hitX, hitY, effectivePower, rankStyle);
+    if (enemy.bossArenaTarget && !enemy.bossArenaCounted) {
+      enemy.bossArenaCounted = true;
+      registerBossArenaTargetDestroyed("enemy", hitX, hitY);
     }
     enemy.kicked = true;
     enemy.vx = dir * (4.3 + effectivePower * 1.55);
@@ -3513,6 +3547,7 @@
     enemy.onGround = false;
     enemy.kickDespawn = immediateRemove ? 0 : Math.max(1, flyLifetime);
     enemy.alive = true;
+    enemy.hitstun = 0;
     if (immediateRemove) {
       enemy.alive = false;
     }
@@ -4166,6 +4201,7 @@
     for (const enemy of stage.enemies) {
       if (!enemy.alive) continue;
       enemy.flash = Math.max(0, (enemy.flash || 0) - enemyDt);
+      enemy.hitstun = Math.max(0, (enemy.hitstun || 0) - enemyDt);
 
       if (enemy.kicked) {
         if ((enemy.kickDespawn || 0) > 0) {
@@ -4181,6 +4217,20 @@
 
         if (enemy.y > H + 90 || enemy.x < -90 || enemy.x > stage.width + 90) {
           enemy.alive = false;
+        }
+        continue;
+      }
+
+      if (enemy.hitstun > 0) {
+        enemy.vy = Math.min(enemy.vy + GRAVITY * enemyDt, MAX_FALL);
+        enemy.vx *= Math.pow(enemy.kind === "bruiser" ? 0.9 : 0.84, enemyDt);
+        moveWithCollisions(enemy, solids, enemyDt);
+        if (enemy.x <= enemy.minX) {
+          enemy.x = enemy.minX;
+          enemy.dir = 1;
+        } else if (enemy.x >= enemy.maxX) {
+          enemy.x = enemy.maxX;
+          enemy.dir = -1;
         }
         continue;
       }
@@ -7995,6 +8045,25 @@
     paint("#f3f4f8", 12, 27, 1, 1);
   }
 
+  function drawEnemyHpPips(enemy, x, y) {
+    const maxHp = Math.max(1, Math.round(enemy.maxHp || 1));
+    if (maxHp <= 1) return;
+    const hp = clamp(Math.round(enemy.hp || maxHp), 0, maxHp);
+    const pipW = maxHp >= 4 ? 2 : 3;
+    const pipH = 2;
+    const gap = 1;
+    const totalW = maxHp * pipW + (maxHp - 1) * gap;
+    const startX = x + Math.floor((enemy.w - totalW) * 0.5);
+    const startY = y - 5;
+    ctx.fillStyle = "rgba(10,12,17,0.78)";
+    ctx.fillRect(startX - 1, startY - 1, totalW + 2, pipH + 2);
+    for (let i = 0; i < maxHp; i += 1) {
+      const filled = i < hp;
+      ctx.fillStyle = filled ? "#ff7468" : "#2d374a";
+      ctx.fillRect(startX + i * (pipW + gap), startY, pipW, pipH);
+    }
+  }
+
   function drawEnemy(enemy) {
     if (enemy.kind === "partygoon") {
       const x = Math.floor(enemy.x - cameraX);
@@ -8037,6 +8106,7 @@
         const sx = enemy.dir > 0 ? x + 12 : x - 2;
         ctx.fillRect(sx, y + 5, 1, 1);
       }
+      drawEnemyHpPips(enemy, x, y);
       return;
     }
 
@@ -8099,6 +8169,61 @@
         ctx.fillStyle = "rgba(120,195,245,0.55)";
         ctx.fillRect(fx + (dir > 0 ? -4 : 4), y + 9, 3, 1);
       }
+      drawEnemyHpPips(enemy, x, y);
+      return;
+    }
+
+    if (enemy.kind === "bruiser") {
+      const x = Math.floor(enemy.x - cameraX);
+      const y = Math.floor(enemy.y);
+      const armor = enemy.kicked ? "#3d4d63" : "#50627b";
+      const armorHi = enemy.kicked ? "#586f8a" : "#7187a6";
+      const armorDark = enemy.kicked ? "#2c394b" : "#38495f";
+      const visor = enemy.kicked ? "#9cc8eb" : "#c4e4ff";
+
+      ctx.fillStyle = "#0e131d";
+      ctx.fillRect(x + 1, y, 14, 1);
+      ctx.fillRect(x, y + 1, 16, 8);
+
+      ctx.fillStyle = "#7b3548";
+      ctx.fillRect(x + 4, y + 1, 8, 2);
+      ctx.fillStyle = "#f1c6aa";
+      ctx.fillRect(x + 5, y + 3, 6, 4);
+      ctx.fillStyle = "#263447";
+      ctx.fillRect(x + 5, y + 5, 6, 2);
+      ctx.fillStyle = visor;
+      ctx.fillRect(x + 6, y + 5, 1, 1);
+      ctx.fillRect(x + 9, y + 5, 1, 1);
+
+      ctx.fillStyle = armor;
+      ctx.fillRect(x + 2, y + 8, 12, 7);
+      ctx.fillStyle = armorHi;
+      ctx.fillRect(x + 3, y + 9, 10, 2);
+      ctx.fillStyle = armorDark;
+      ctx.fillRect(x + 4, y + 11, 8, 3);
+      ctx.fillStyle = "#9aa9bf";
+      ctx.fillRect(x + 7, y + 9, 1, 5);
+
+      ctx.fillStyle = armorDark;
+      ctx.fillRect(x + 0, y + 10, 2, 4);
+      ctx.fillRect(x + 14, y + 10, 2, 4);
+      ctx.fillStyle = armorHi;
+      ctx.fillRect(x + 0, y + 11, 1, 2);
+      ctx.fillRect(x + 15, y + 11, 1, 2);
+
+      ctx.fillStyle = "#2b3346";
+      ctx.fillRect(x + 3, y + 15, 4, 2);
+      ctx.fillRect(x + 9, y + 15, 4, 2);
+      ctx.fillStyle = "#1a1f2d";
+      ctx.fillRect(x + 3, y + 17, 4, 1);
+      ctx.fillRect(x + 9, y + 17, 4, 1);
+
+      if (enemy.flash > 0) {
+        const mx = enemy.dir > 0 ? x + 16 : x - 3;
+        ctx.fillStyle = "#ffe8a4";
+        ctx.fillRect(mx, y + 8, 2, 2);
+      }
+      drawEnemyHpPips(enemy, x, y);
       return;
     }
 
@@ -8146,6 +8271,7 @@
       ctx.fillStyle = "#ff9053";
       ctx.fillRect(mx + (enemy.dir > 0 ? 1 : -1), y + 7, 1, 1);
     }
+    drawEnemyHpPips(enemy, x, y);
   }
 
   function drawPeacockBossEntity(b) {
