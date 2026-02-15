@@ -1404,6 +1404,51 @@
     registerNoDamageDefeat(x, y, rankPower, styleKey);
   }
 
+  function registerNearMissRank(x, y, power = 1) {
+    const previousRank = battleRankIndex;
+    const p = clamp(power, 0.8, 3.6);
+    const gaugeCap = BATTLE_RANK_DATA[BATTLE_RANK_DATA.length - 1].threshold + 360;
+    const gain = 6.2 + p * 2.2 + battleRankIndex * 0.58;
+    battleRankGauge = Math.min(gaugeCap, battleRankGauge + gain);
+    updateBattleRankTier();
+    battleRankFlashTimer = Math.max(battleRankFlashTimer, 6);
+
+    if (battleRankIndex > previousRank) {
+      const rank = currentBattleRank();
+      battleRankFlashTimer = Math.max(battleRankFlashTimer, 40);
+      battleRankBreakFlashTimer = 0;
+      playBattleRankUpSfx(battleRankIndex);
+      triggerImpact(0.95 + p * 0.14, x, y, 1.2 + p * 0.16);
+      spawnHitSparks(x, y, "#d7f0ff", "#7ebcff");
+      hudMessage = `RANK UP! ${rank.long}`;
+      hudTimer = Math.max(hudTimer, 34);
+    }
+  }
+
+  function tryRegisterProjectileGraze(projectile, hitBox, power = 1) {
+    if (!projectile || projectile.grazeAwarded) return false;
+    if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return false;
+    if (invincibleTimer > 0 || proteinBurstTimer > 0 || damageInvulnTimer > 0) return false;
+    if (!hitBox) return false;
+    if (overlap(player, hitBox)) return false;
+
+    const nearBox = {
+      x: hitBox.x - 7,
+      y: hitBox.y - 6,
+      w: hitBox.w + 14,
+      h: hitBox.h + 12,
+    };
+    if (!overlap(player, nearBox)) return false;
+
+    projectile.grazeAwarded = true;
+    const gx = hitBox.x + hitBox.w * 0.5;
+    const gy = hitBox.y + hitBox.h * 0.5;
+    registerNearMissRank(gx, gy, power);
+    spawnHitSparks(gx, gy, "#d7f1ff", "#8dc6ff");
+    playParrySfx();
+    return true;
+  }
+
   function playEnemyDefeatSfx(power = 1) {
     if (!audioCtx || audioCtx.state !== "running") return;
     const now = audioCtx.currentTime;
@@ -3769,8 +3814,11 @@
       const hit = bullet.kind === "cannon"
         ? { x: bullet.x + 1.5, y: bullet.y + 1.5, w: Math.max(2, bullet.w - 3), h: Math.max(2, bullet.h - 3) }
         : bullet;
-      if (overlap(player, hit)) {
+      const touchingPlayer = overlap(player, hit);
+      if (touchingPlayer) {
         killPlayer(bullet.reason || "飛び道具に被弾");
+      } else {
+        tryRegisterProjectileGraze(bullet, hit, bullet.kind === "cannon" ? 1.08 : 0.92);
       }
 
       if (bullet.x < -20 || bullet.x > stage.width + 20) {
@@ -5965,8 +6013,12 @@
         shot.ttl -= dt;
       }
 
-      if (overlap(player, shot)) {
+      const touchingPlayer = overlap(player, shot);
+      if (touchingPlayer) {
         killPlayer(shot.reason || "ボス弾に被弾");
+      } else if (shot.kind !== "rain_warn") {
+        const grazePower = shot.kind === "rain" ? 1.14 : shot.kind === "spiral" || shot.kind === "nova" || shot.kind === "nova2" ? 1.22 : 1.02;
+        tryRegisterProjectileGraze(shot, shot, grazePower);
       }
 
       if (shot.ttl <= 0 || shot.x < BOSS_ARENA.minX - 60 || shot.x > BOSS_ARENA.maxX + 60 || shot.y > H + 30) {
@@ -10154,9 +10206,12 @@
     const rankProgress = battleRankProgressRatio();
     const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
     const rankBreak = clamp(battleRankBreakFlashTimer / 30, 0, 1);
+    const rankLabel = rank.long;
+    ctx.font = "6px monospace";
+    const rankLabelW = Math.ceil(ctx.measureText(rankLabel).width);
     const rankBoxX = 6;
     const rankBoxY = 13;
-    const rankBoxW = 92;
+    const rankBoxW = clamp(rankLabelW + 46, 112, bossActive ? 168 : 188);
     const rankBoxH = 9;
     const rankFill = 0.52 + rankFlash * 0.2;
     ctx.fillStyle = `rgba(10, 12, 20, ${rankFill})`;
@@ -10165,12 +10220,12 @@
       ? `rgba(255, 96, 96, ${0.52 + rankBreak * 0.36})`
       : `rgba(176, 204, 226, ${0.26 + rankFlash * 0.38})`;
     ctx.strokeRect(rankBoxX, rankBoxY, rankBoxW, rankBoxH);
-    ctx.font = "8px monospace";
+    ctx.font = "6px monospace";
     ctx.fillStyle = rankBreak > 0.01 ? "#ff9f9f" : rank.color;
-    ctx.fillText(rank.short, rankBoxX + 4, rankBoxY + 1);
-    const gaugeX = rankBoxX + 27;
+    ctx.fillText(rankLabel, rankBoxX + 3, rankBoxY + 2);
+    const gaugeX = rankBoxX + rankLabelW + 7;
     const gaugeY = rankBoxY + 3;
-    const gaugeW = rankBoxW - 30;
+    const gaugeW = Math.max(20, rankBoxW - (gaugeX - rankBoxX) - 3);
     ctx.fillStyle = "rgba(18, 28, 36, 0.95)";
     ctx.fillRect(gaugeX, gaugeY, gaugeW, 4);
     ctx.fillStyle = rankBreak > 0.01
@@ -10181,11 +10236,12 @@
     if (battleRankFlashTimer > 24) {
       const upRatio = clamp((battleRankFlashTimer - 24) / 32, 0, 1);
       const upPulse = 0.5 + Math.sin(player.anim * 0.34) * 0.5;
+      const upBoxX = rankBoxX + rankBoxW - 40;
       ctx.fillStyle = `rgba(255, 130, 108, ${0.24 + upRatio * 0.34})`;
-      ctx.fillRect(rankBoxX + 22, rankBoxY - 9, 36, 8);
+      ctx.fillRect(upBoxX, rankBoxY - 9, 36, 8);
       ctx.fillStyle = `rgba(255, 246, 194, ${0.72 + upPulse * 0.22})`;
       ctx.font = "9px monospace";
-      ctx.fillText("UP!", rankBoxX + 32, rankBoxY - 8);
+      ctx.fillText("UP!", upBoxX + 10, rankBoxY - 8);
     }
 
     if (invincibleTimer > 0) {
