@@ -258,7 +258,7 @@
   const ATTACK2_COOLDOWN_CHARGED = 40;
   const HAMMER_SHARD_LIFE = 48;
   const ATTACK_WAVE_CHARGE_MIN = ATTACK_CHARGE_MAX;
-  const ATTACK_MORNINGSTAR_CHARGE_MIN = ATTACK_CHARGE_MAX * 0.3;
+  const ATTACK_MORNINGSTAR_CHARGE_MIN = ATTACK_CHARGE_MAX * 0.5;
   const ATTACK_MORNINGSTAR_LONG_MIN = ATTACK_CHARGE_MAX * 0.6;
   const ATTACK_COMBO_TAP_MAX = 14;
   const ATTACK_MORNINGSTAR_SPIN_MIN = ATTACK_COMBO_TAP_MAX + 2;
@@ -4519,8 +4519,8 @@
     const crisisMul = pinchAttackMultiplier();
     const dir = player.facing;
     const px = player.x + player.w * 0.5;
-    const spinRadiusX = 17 + Math.floor(chargeRatio * 20);
-    const spinRadiusY = 13 + Math.floor(chargeRatio * 14);
+    const spinRadiusX = 20 + Math.floor(chargeRatio * 22);
+    const spinRadiusY = 15 + Math.floor(chargeRatio * 16);
     const reach = strongWave
       ? 22 + Math.floor(chargeRatio * 40)
       : morningStarStrike
@@ -4819,7 +4819,7 @@
         : morningStarStrike
           ? ATTACK_PUNCH_COOLDOWN + 4
         : ATTACK_PUNCH_COOLDOWN;
-    attackEffectTimer = strongWave ? 16 : comboPunch ? 8 + comboStage * 2 : morningStarSpin ? 18 : morningStarStrike ? 16 : 11;
+    attackEffectTimer = strongWave ? 16 : comboPunch ? 8 + comboStage * 2 : morningStarSpin ? 24 : morningStarStrike ? 16 : 11;
     attackEffectMode = strongWave ? "wave" : comboPunch ? `combo${comboStage}` : morningStarSpin ? "morningstar_spin" : morningStarStrike ? "morningstar" : "punch";
     attackEffectPhase = comboPunch ? comboStage * 0.75 + chargeRatio * 0.8 : morningStarSpin ? 0.8 + chargeRatio * 3.4 : morningStarStrike ? 0.4 + chargeRatio * 1.7 : chargeRatio * 2.6;
     attackEffectPower = comboPunch ? clamp(0.32 + comboStage * 0.24 + chargeRatio * 0.2, 0, 1) : morningStarSpin ? clamp(0.56 + chargeRatio * 0.5, 0, 1) : morningStarStrike ? clamp(0.5 + chargeRatio * 0.55, 0, 1) : chargeRatio;
@@ -9196,7 +9196,7 @@
           : "162, 226, 255";
 
       if (morningStarSpinReady && !waveReady) {
-        const spinR = 12 + Math.floor(chargeRatio * 20);
+        const spinR = 14 + Math.floor(chargeRatio * 22);
         const spinPulse = 0.5 + Math.sin(player.anim * 0.34) * 0.5;
         ctx.strokeStyle = `rgba(${previewTone}, ${edgeAlpha + spinPulse * 0.08})`;
         ctx.beginPath();
