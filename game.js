@@ -111,6 +111,9 @@
   let blackFlashSlowTimer = 0;
   let blackFlashChanceHudTimer = 0;
   let blackFlashChanceHudText = "";
+  let blackFlashSessionHits = 0;
+  let blackFlashResultTimer = 0;
+  let blackFlashResultText = "";
   let battleRankDefeats = 0;
   let battleRankGauge = 0;
   let battleRankIndex = 0;
@@ -218,6 +221,7 @@
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BLACK_FLASH_ENEMY_SLOW_SCALE = 0.84;
   const BLACK_FLASH_HIGHMODE_ENEMY_SLOW_SCALE = 0.92;
+  const BLACK_FLASH_RESULT_DURATION = 120;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
     { short: "Danger", long: "Danger", threshold: 0, chargeMul: 0.7, color: "#8db2d9" },
@@ -441,10 +445,22 @@
       : blackFlashChanceWithRank(stageIndex);
     const triggered = Math.random() < chance;
     if (triggered) {
+      if (!hadHighMode) {
+        blackFlashSessionHits = 0;
+      }
+      blackFlashSessionHits += 1;
+      blackFlashResultTimer = 0;
+      blackFlashResultText = "";
       blackFlashChain = Math.min(blackFlashChain + 1, BLACK_FLASH_CHANCES.length - 1);
     } else {
       // On miss, reset the continuation chain back to the initial chance tier.
       blackFlashChain = 0;
+      if (hadHighMode) {
+        const total = Math.max(1, blackFlashSessionHits);
+        blackFlashResultText = `黒閃合計 ${total}発`;
+        blackFlashResultTimer = BLACK_FLASH_RESULT_DURATION;
+      }
+      blackFlashSessionHits = 0;
       // Also clear any remaining Black Flash benefits so gameplay returns to normal immediately.
       blackFlashTimer = 0;
       blackFlashPower = 0;
@@ -473,6 +489,7 @@
   function resetBlackFlashState(keepChain = false) {
     if (!keepChain) {
       blackFlashChain = 0;
+      blackFlashSessionHits = 0;
     }
     blackFlashTimer = 0;
     blackFlashPower = 0;
@@ -481,6 +498,8 @@
     blackFlashChanceHudText = keepChain && blackFlashChain > 0
       ? formatBlackFlashChanceText(blackFlashChanceWithRank())
       : "";
+    blackFlashResultTimer = 0;
+    blackFlashResultText = "";
   }
 
   function updateBattleRankTier() {
@@ -7182,6 +7201,7 @@
     blackFlashTimer = Math.max(0, blackFlashTimer - dt);
     blackFlashPower = Math.max(0, blackFlashPower - dt * 0.18);
     blackFlashChanceHudTimer = Math.max(0, blackFlashChanceHudTimer - dt);
+    blackFlashResultTimer = Math.max(0, blackFlashResultTimer - dt);
     battleRankFlashTimer = Math.max(0, battleRankFlashTimer - dt);
     battleRankBreakFlashTimer = Math.max(0, battleRankBreakFlashTimer - dt);
     stompChainGuardTimer = Math.max(0, stompChainGuardTimer - dt);
@@ -11240,6 +11260,22 @@
       ctx.fillStyle = `rgba(${blackFlashChanceStyle.barRgb}, ${chanceBarAlpha})`;
       ctx.fillRect(boxX, boxY + 7, boxW - 1, 1);
       ctx.fillStyle = blackFlashChanceStyle.text;
+      ctx.fillText(text, boxX + padX, boxY + 1);
+    }
+    if (blackFlashResultTimer > 0 && blackFlashResultText) {
+      const resultRatio = clamp(blackFlashResultTimer / BLACK_FLASH_RESULT_DURATION, 0, 1);
+      const text = blackFlashResultText;
+      const textW = Math.ceil(ctx.measureText(text).width);
+      const padX = 3;
+      const boxW = textW + padX * 2 + 1;
+      const boxX = W - boxW - 3;
+      const boxY = blackFlashChance >= 0.5 ? 12 : 3;
+      const alpha = 0.62 + resultRatio * 0.32;
+      ctx.fillStyle = `rgba(18, 10, 14, ${alpha})`;
+      ctx.fillRect(boxX, boxY, boxW, 8);
+      ctx.fillStyle = `rgba(255, 210, 150, ${0.72 + resultRatio * 0.26})`;
+      ctx.fillRect(boxX, boxY + 7, boxW - 1, 1);
+      ctx.fillStyle = `rgba(255, 244, 212, ${0.78 + resultRatio * 0.22})`;
       ctx.fillText(text, boxX + padX, boxY + 1);
     }
 
