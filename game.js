@@ -95,6 +95,10 @@
   let blackFlashPower = 0;
   let blackFlashX = 0;
   let blackFlashY = 0;
+  let battleRankDefeats = 0;
+  let battleRankIndex = 0;
+  let battleRankFlashTimer = 0;
+  let battleRankBreakFlashTimer = 0;
   let hammerTimer = 0;
   let gloveTimer = 0;
   let hammerHitCooldown = 0;
@@ -156,6 +160,7 @@
   let waveSeNextAt = 0;
   let waveReadySeNextAt = 0;
   let invincibleExtendSeNextAt = 0;
+  let rankUpSeNextAt = 0;
   let robotVoiceCurve = null;
   let bgmStarted = false;
 
@@ -181,6 +186,14 @@
   const PINCH_BGM_RATE_MAX = 1.18;
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [1 / 32, 1 / 4, 1 / 2, 1 / 1.5];
+  const BATTLE_RANK_DATA = [
+    { short: "Crazy", long: "Crazy", need: 0, chargeMul: 1.0, color: "#8db2d9" },
+    { short: "Badass", long: "Badass", need: 2, chargeMul: 1.1, color: "#79d9ff" },
+    { short: "ApocalypticA", long: "ApocalypticA", need: 4, chargeMul: 1.22, color: "#96f0b2" },
+    { short: "Savege", long: "Savege", need: 7, chargeMul: 1.36, color: "#ffd47d" },
+    { short: "SS", long: "SS sick style", need: 11, chargeMul: 1.54, color: "#ffa27e" },
+    { short: "SSS", long: "SSS special sick style", need: 16, chargeMul: 1.74, color: "#ff5f73" },
+  ];
   const INVINCIBLE_DURATION = 600;
   const INVINCIBLE_KILL_EXTEND_FRAMES = 60;
   const INVINCIBLE_BONUS_POP_LIFE = 44;
@@ -258,6 +271,33 @@
     blackFlashChain = 0;
     blackFlashTimer = 0;
     blackFlashPower = 0;
+  }
+
+  function updateBattleRankTier() {
+    let next = 0;
+    for (let i = 0; i < BATTLE_RANK_DATA.length; i += 1) {
+      if (battleRankDefeats >= BATTLE_RANK_DATA[i].need) {
+        next = i;
+      } else {
+        break;
+      }
+    }
+    battleRankIndex = next;
+  }
+
+  function currentBattleRank() {
+    return BATTLE_RANK_DATA[clamp(battleRankIndex, 0, BATTLE_RANK_DATA.length - 1)];
+  }
+
+  function battleRankChargeMultiplier() {
+    return currentBattleRank().chargeMul;
+  }
+
+  function resetBattleRank(showBreak = false) {
+    battleRankDefeats = 0;
+    battleRankIndex = 0;
+    battleRankFlashTimer = 0;
+    battleRankBreakFlashTimer = showBreak ? 30 : 0;
   }
 
   function clamp(n, min, max) {
@@ -1087,6 +1127,67 @@
     hudTimer = Math.max(hudTimer, 34);
   }
 
+  function playBattleRankUpSfx(rankIndex = 0) {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const now = audioCtx.currentTime;
+    if (now < rankUpSeNextAt) return;
+    rankUpSeNextAt = now + 0.09;
+    const tier = clamp(rankIndex, 0, BATTLE_RANK_DATA.length - 1);
+    const base = 320 + tier * 72;
+
+    for (let i = 0; i < 3; i += 1) {
+      const t = now + i * 0.038;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = i === 2 ? "square" : "triangle";
+      osc.frequency.setValueAtTime(base + i * (86 + tier * 7), t);
+      osc.frequency.exponentialRampToValueAtTime(base * 0.72 + i * 38, t + 0.09);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(seLevel(0.09 + tier * 0.008), t + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.11);
+    }
+
+    if (bgmNoiseBuffer) {
+      const src = audioCtx.createBufferSource();
+      const bp = audioCtx.createBiquadFilter();
+      const ng = audioCtx.createGain();
+      src.buffer = bgmNoiseBuffer;
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(1100 + tier * 180, now);
+      bp.Q.setValueAtTime(0.7, now);
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(seLevel(0.06 + tier * 0.004), now + 0.004);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+      src.connect(bp);
+      bp.connect(ng);
+      ng.connect(audioCtx.destination);
+      src.start(now);
+      src.stop(now + 0.08);
+    }
+  }
+
+  function registerNoDamageDefeat(x, y, power = 1) {
+    const previousRank = battleRankIndex;
+    battleRankDefeats += 1;
+    updateBattleRankTier();
+    battleRankFlashTimer = Math.max(battleRankFlashTimer, 9);
+
+    if (battleRankIndex > previousRank) {
+      const rank = currentBattleRank();
+      battleRankFlashTimer = Math.max(battleRankFlashTimer, 56);
+      battleRankBreakFlashTimer = 0;
+      playBattleRankUpSfx(battleRankIndex);
+      triggerImpact(1.2 + power * 0.18, x, y, 1.9 + power * 0.24);
+      spawnHitSparks(x, y, "#fff4ce", "#ff7f67");
+      hudMessage = `RANK UP! ${rank.long}`;
+      hudTimer = Math.max(hudTimer, 40);
+    }
+  }
+
   function playEnemyDefeatSfx(power = 1) {
     if (!audioCtx || audioCtx.state !== "running") return;
     const now = audioCtx.currentTime;
@@ -1625,6 +1726,7 @@
     attackEffectMode = "none";
     attackEffectPower = 0;
     resetBlackFlashState();
+    resetBattleRank();
     stage.playerWaves = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
@@ -1667,7 +1769,10 @@
 
     let swept = 0;
     for (const enemy of stage.enemies) {
-      if (!enemy.alive) continue;
+      if (!enemy.alive || enemy.kicked) continue;
+      const ex = enemy.x + enemy.w * 0.5;
+      const ey = enemy.y + enemy.h * 0.45;
+      registerNoDamageDefeat(ex, ey, 1.1 + gaugeRatio * 1.2);
       enemy.alive = false;
       enemy.kicked = true;
       enemy.vx = 0;
@@ -2712,6 +2817,7 @@
     spawnEnemyBlood(hitX, hitY, power);
     if (freshDefeat) {
       triggerInvincibleKillBonus(hitX, hitY, power);
+      registerNoDamageDefeat(hitX, hitY, power);
       if (enemy.bossArenaTarget && !enemy.bossArenaCounted) {
         enemy.bossArenaCounted = true;
         registerBossArenaTargetDestroyed("enemy", hitX, hitY);
@@ -2760,6 +2866,7 @@
     if (!instantGameOver) {
       if (damageInvulnTimer > 0) return;
 
+      resetBattleRank(true);
       playerHearts = Math.max(0, playerHearts - 1);
       damageInvulnTimer = 84;
       hurtFlashTimer = 24;
@@ -2778,6 +2885,7 @@
         return;
       }
     } else {
+      resetBattleRank(true);
       playerHearts = 0;
       hurtFlashTimer = 24;
       playDamageSfx();
@@ -2986,6 +3094,7 @@
     attackEffectPhase = 0;
     attackEffectMode = "none";
     attackEffectPower = 0;
+    resetBattleRank();
     stage.playerWaves = [];
     waveFlashTimer = 0;
     waveFlashPower = 0;
@@ -3922,7 +4031,8 @@
 
     if (input.attack) {
       const beforeCharge = attackChargeTimer;
-      attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt);
+      const chargeMul = battleRankChargeMultiplier();
+      attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt * chargeMul);
       if (attackChargeTimer >= ATTACK_CHARGE_MAX - 0.01) {
         attackMaxHoldTimer += dt;
         if (attackMaxHoldTimer >= HYAKURETSU_HOLD_AFTER_MAX) {
@@ -5205,6 +5315,8 @@
     kickFlashPower = Math.max(0, kickFlashPower - dt * 0.24);
     blackFlashTimer = Math.max(0, blackFlashTimer - dt);
     blackFlashPower = Math.max(0, blackFlashPower - dt * 0.18);
+    battleRankFlashTimer = Math.max(0, battleRankFlashTimer - dt);
+    battleRankBreakFlashTimer = Math.max(0, battleRankBreakFlashTimer - dt);
     stompChainGuardTimer = Math.max(0, stompChainGuardTimer - dt);
     hammerTimer = Math.max(0, hammerTimer - dt);
     gloveTimer = Math.max(0, gloveTimer - dt);
@@ -5640,6 +5752,7 @@
     attackEffectPhase = 0;
     attackEffectPower = 0;
     resetBlackFlashState();
+    resetBattleRank();
     stompChainGuardTimer = 0;
     proteinBurstGauge = 0;
     proteinBurstTimer = 0;
@@ -8576,6 +8689,28 @@
     ctx.fillStyle = "rgba(235, 245, 255, 0.9)";
     ctx.font = "8px monospace";
     ctx.fillText(`STAGE ${currentStageNumber}`, W - 56, 6);
+
+    const rank = currentBattleRank();
+    const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
+    const rankBreak = clamp(battleRankBreakFlashTimer / 30, 0, 1);
+    const rankBoxW = 194;
+    const rankBoxH = 10;
+    const rankBoxX = Math.floor((W - rankBoxW) * 0.5);
+    const rankBoxY = hudH + 1;
+    const rankFill = 0.52 + rankFlash * 0.16;
+    ctx.fillStyle = `rgba(10, 12, 20, ${rankFill})`;
+    ctx.fillRect(rankBoxX, rankBoxY, rankBoxW, rankBoxH);
+    ctx.strokeStyle = rankBreak > 0.01
+      ? `rgba(255, 84, 84, ${0.45 + rankBreak * 0.4})`
+      : `rgba(176, 204, 226, ${0.24 + rankFlash * 0.34})`;
+    ctx.strokeRect(rankBoxX, rankBoxY, rankBoxW, rankBoxH);
+    ctx.font = "8px monospace";
+    ctx.fillStyle = rankBreak > 0.01 ? "#ff9f9f" : rank.color;
+    ctx.fillText(`RANK ${rank.long}`, rankBoxX + 4, rankBoxY + 1);
+    const koText = `KO ${battleRankDefeats}`;
+    const koW = Math.ceil(ctx.measureText(koText).width);
+    ctx.fillStyle = "#e8f4ff";
+    ctx.fillText(koText, rankBoxX + rankBoxW - koW - 4, rankBoxY + 1);
 
     if (invincibleTimer > 0) {
       const sec = Math.max(0, invincibleTimer / 60);
