@@ -11666,27 +11666,67 @@
     drawPs1Overlay();
   }
 
+  const holdButtonBindings = new Map();
+
+  function releaseHoldButtonByKey(key) {
+    const binding = holdButtonBindings.get(key);
+    if (!binding) return;
+    binding.releaseAll();
+  }
+
+  function releaseAllHoldButtons() {
+    for (const binding of holdButtonBindings.values()) {
+      binding.releaseAll();
+    }
+  }
+
   function bindHoldButton(id, key) {
     const el = document.getElementById(id);
     if (!el) return;
 
     const pointers = new Set();
 
-    const down = (e) => {
-      e.preventDefault();
-      unlockAudio();
-      pointers.add(e.pointerId);
-      input[key] = true;
-      el.classList.add("is-down");
-      el.setPointerCapture(e.pointerId);
-    };
-
-    const up = (e) => {
-      if (!pointers.has(e.pointerId)) return;
-      pointers.delete(e.pointerId);
+    const releasePointer = (pointerId) => {
+      if (!pointers.has(pointerId)) return false;
+      pointers.delete(pointerId);
+      try {
+        if (el.hasPointerCapture && el.hasPointerCapture(pointerId)) {
+          el.releasePointerCapture(pointerId);
+        }
+      } catch (_e) {
+        // Ignore capture errors; release fallback still works.
+      }
       if (pointers.size === 0) {
         input[key] = false;
         el.classList.remove("is-down");
+      }
+      return true;
+    };
+
+    const releaseAll = () => {
+      if (pointers.size === 0 && !input[key]) return;
+      pointers.clear();
+      input[key] = false;
+      el.classList.remove("is-down");
+    };
+
+    const down = (e) => {
+      e.preventDefault();
+      unlockAudio();
+      if (pointers.has(e.pointerId)) return;
+      pointers.add(e.pointerId);
+      input[key] = true;
+      el.classList.add("is-down");
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch (_e) {
+        // Ignore capture errors and keep hold handling active.
+      }
+    };
+
+    const up = (e) => {
+      if (releasePointer(e.pointerId)) {
+        e.preventDefault();
       }
     };
 
@@ -11694,6 +11734,13 @@
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
     el.addEventListener("pointerleave", up);
+    el.addEventListener("lostpointercapture", up);
+    holdButtonBindings.set(key, {
+      id,
+      key,
+      releaseAll,
+      releasePointer,
+    });
   }
 
   let burstButton = document.getElementById("btn-special");
@@ -11734,8 +11781,7 @@
     burstButton.classList.toggle("full", full);
     burstButton.textContent = full ? "BURST!" : "BURST";
     if (!ready) {
-      input.special = false;
-      burstButton.classList.remove("is-down");
+      releaseHoldButtonByKey("special");
     }
   }
 
@@ -11817,6 +11863,7 @@
   });
 
   window.addEventListener("blur", () => {
+    releaseAllHoldButtons();
     input.left = false;
     input.right = false;
     input.jump = false;
@@ -11824,6 +11871,16 @@
     input.attack2 = false;
     input.special = false;
     input.start = false;
+  });
+  window.addEventListener("pagehide", () => {
+    releaseAllHoldButtons();
+    input.start = false;
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      releaseAllHoldButtons();
+      input.start = false;
+    }
   });
 
   const blockGesture = (e) => e.preventDefault();
@@ -11845,11 +11902,17 @@
   }, { passive: false });
   let lastTouchEndAt = 0;
   window.addEventListener("touchend", (e) => {
+    if (!e.touches || e.touches.length === 0) {
+      releaseAllHoldButtons();
+    }
     const now = performance.now();
     if (now - lastTouchEndAt < 320) {
       e.preventDefault();
     }
     lastTouchEndAt = now;
+  }, { passive: false });
+  window.addEventListener("touchcancel", () => {
+    releaseAllHoldButtons();
   }, { passive: false });
 
   let last = performance.now();
