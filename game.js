@@ -2555,7 +2555,7 @@
       const baseX = minX + (maxX - minX) * t;
       const jitter = (Math.random() * 2 - 1) * (20 + gaugeRatio * 30);
       const x = clamp(baseX + jitter, 10, stage.width - 10);
-      const power = 0.84 + gaugeRatio * 0.56 + Math.random() * 0.16;
+      const power = 0.9 + gaugeRatio * 0.6 + Math.random() * 0.16;
       stage.burstMeteors.push({
         state: "warn",
         x,
@@ -2564,7 +2564,7 @@
         vy: 4.1 + gaugeRatio * 1.15 + Math.random() * 0.9,
         delay: 7 + i * delayStep + Math.random() * 5,
         pulse: Math.random() * Math.PI * 2,
-        radius: 22 + power * 11,
+        radius: 23 + power * 11.6,
         power,
         life: 0,
       });
@@ -2588,7 +2588,7 @@
     const mx = meteor.x;
     const my = stage.groundY - 1;
     const radius = meteor.radius;
-    const enemyPower = (0.88 + meteor.power * 0.56 + gaugeRatio * 0.34) * crisisMul * 0.92;
+    const enemyPower = (0.9 + meteor.power * 0.6 + gaugeRatio * 0.36) * crisisMul * 0.98;
 
     let hits = 0;
     for (const enemy of stage.enemies) {
@@ -2602,8 +2602,8 @@
         flyLifetime: 36,
         rankStyle: "burst_meteor",
       });
-      enemy.vx = dir * (4.2 + meteor.power * 1.25);
-      enemy.vy = -(3.0 + meteor.power * 0.75);
+      enemy.vx = dir * (4.4 + meteor.power * 1.3);
+      enemy.vy = -(3.1 + meteor.power * 0.78);
       enemy.flash = 12;
       hits += 1;
     }
@@ -2632,13 +2632,13 @@
       const hy = boss.y + boss.h * 0.42;
       if (Math.abs(hx - mx) > radius * 1.34 || Math.abs(hy - my) > radius * 1.05) continue;
       const bf = rollBlackFlashHit(hx, hy, 0.92 + meteor.power * 0.58);
-      const damageBase = 0.86 + gaugeRatio * 0.76 + bossDamageBonus() * 0.3;
+      const damageBase = 0.92 + gaugeRatio * 0.82 + bossDamageBonus() * 0.32;
       const damage = Math.max(1, Math.round(damageBase * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
       boss.hp = Math.max(0, boss.hp - damage);
       boss.invuln = BOSS_HIT_INVULN_FRAMES;
       const dir = hx < mx ? -1 : 1;
-      boss.vx += dir * (0.34 + meteor.power * 0.24 + (bf ? 0.12 : 0));
-      boss.vy = Math.min(boss.vy, -(1.2 + meteor.power * 0.34 + (bf ? 0.16 : 0)));
+      boss.vx += dir * (0.38 + meteor.power * 0.26 + (bf ? 0.12 : 0));
+      boss.vy = Math.min(boss.vy, -(1.3 + meteor.power * 0.36 + (bf ? 0.16 : 0)));
       handleBossHpZero();
       hits += 1;
     }
