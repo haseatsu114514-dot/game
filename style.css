@@ -267,7 +267,22 @@ body {
   .cluster-right {
     width: 100%;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "special special"
+      "jump attack";
     gap: 12px;
+  }
+
+  .cluster-right #btn-special {
+    grid-area: special;
+  }
+
+  .cluster-right #btn-jump {
+    grid-area: jump;
+  }
+
+  .cluster-right #btn-attack {
+    grid-area: attack;
   }
 
   .title-bar p {
