@@ -202,6 +202,7 @@
   const PINCH_ATTACK_BONUS_MAX = 0.7;
   const BLACK_FLASH_CHANCES = [0.08, 0.5, 0.6, 0.7, 0.8, 0.9];
   const BLACK_FLASH_DAMAGE_MUL = 1.3;
+  const BLACK_FLASH_RANK_GAIN_MUL = 1.3;
   const BLACK_FLASH_SLOW_DURATION = 20;
   const BLACK_FLASH_SLOW_SCALE = 0.28;
   const BLACK_FLASH_ENEMY_SLOW_SCALE = 0.84;
@@ -349,6 +350,10 @@
     return clamp(baseChance, 0.01, 0.98);
   }
 
+  function blackFlashRankGainMultiplier() {
+    return blackFlashTimer > 0 ? BLACK_FLASH_RANK_GAIN_MUL : 1;
+  }
+
   function formatBlackFlashChanceText(chance) {
     return `黒閃発生率 ${(chance * 100).toFixed(1)}%`;
   }
@@ -494,6 +499,7 @@
     const highRankDamp = 1 - battleRankIndex * 0.03;
     gain *= Math.max(0.8, highRankDamp);
     gain *= BATTLE_RANK_GAIN_MULT;
+    gain *= blackFlashRankGainMultiplier();
     return Math.max(8, gain);
   }
 
@@ -1493,7 +1499,7 @@
     const previousRank = battleRankIndex;
     const p = clamp(power, 0.8, 3.6);
     const gaugeCap = BATTLE_RANK_DATA[BATTLE_RANK_DATA.length - 1].threshold + 360;
-    const gain = 6.2 + p * 2.2 + battleRankIndex * 0.58;
+    const gain = (6.2 + p * 2.2 + battleRankIndex * 0.58) * blackFlashRankGainMultiplier();
     battleRankGauge = Math.min(gaugeCap, battleRankGauge + gain);
     updateBattleRankTier();
     battleRankFlashTimer = Math.max(battleRankFlashTimer, 6);
@@ -1514,7 +1520,7 @@
     const previousRank = battleRankIndex;
     const gaugeCap = BATTLE_RANK_DATA[BATTLE_RANK_DATA.length - 1].threshold + 360;
     const rankDamp = Math.max(0.72, 1 - battleRankIndex * 0.05);
-    const gain = 1.8 * rankDamp;
+    const gain = 1.8 * rankDamp * blackFlashRankGainMultiplier();
     battleRankGauge = Math.min(gaugeCap, battleRankGauge + gain);
     updateBattleRankTier();
     battleRankFlashTimer = Math.max(battleRankFlashTimer, 4);
@@ -1536,7 +1542,7 @@
     const g = clamp(gaugeRatio, 0, 1);
     const gaugeCap = BATTLE_RANK_DATA[BATTLE_RANK_DATA.length - 1].threshold + 360;
     const rankDamp = Math.max(0.76, 1 - battleRankIndex * 0.045);
-    const gain = (8 + g * 4) * rankDamp;
+    const gain = (8 + g * 4) * rankDamp * blackFlashRankGainMultiplier();
     battleRankGauge = Math.min(gaugeCap, battleRankGauge + gain);
     updateBattleRankTier();
     battleRankFlashTimer = Math.max(battleRankFlashTimer, 10);
