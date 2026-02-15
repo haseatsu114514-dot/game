@@ -436,6 +436,25 @@
     battleRankBreakFlashTimer = showBreak ? 30 : 0;
   }
 
+  function dropBattleRankOnDamage(showBreak = true) {
+    const maxIndex = BATTLE_RANK_DATA.length - 1;
+    const currIndex = clamp(battleRankIndex, 0, maxIndex);
+    const sTierIndex = Math.min(3, maxIndex);
+    const dropSteps = currIndex >= sTierIndex ? 2 : 1;
+    const nextIndex = Math.max(0, currIndex - dropSteps);
+
+    battleRankIndex = nextIndex;
+    battleRankGauge = BATTLE_RANK_DATA[nextIndex].threshold;
+    battleRankDefeats = Math.max(0, battleRankDefeats - dropSteps);
+    battleRankLastStyle = "";
+    battleRankStyleStreak = 0;
+    battleRankRecentStyles = [];
+    battleRankFlashTimer = 0;
+    if (showBreak) {
+      battleRankBreakFlashTimer = Math.max(battleRankBreakFlashTimer, 30);
+    }
+  }
+
   function clamp(n, min, max) {
     return Math.max(min, Math.min(max, n));
   }
@@ -3157,7 +3176,7 @@
     if (!instantGameOver) {
       if (damageInvulnTimer > 0) return;
 
-      resetBattleRank(true);
+      dropBattleRankOnDamage(true);
       playerHearts = Math.max(0, playerHearts - 1);
       damageInvulnTimer = 84;
       hurtFlashTimer = 24;
