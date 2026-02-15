@@ -201,6 +201,7 @@
   const BLACK_FLASH_CHANCES = [1 / 16, 1 / 4, 1 / 2, 1 / 1.5];
   const BLACK_FLASH_SLOW_DURATION = 20;
   const BLACK_FLASH_SLOW_SCALE = 0.28;
+  const BLACK_FLASH_ENEMY_SLOW_SCALE = 0.84;
   const BATTLE_RANK_GAIN_MULT = 1.8;
   const BATTLE_RANK_DATA = [
     { short: "Crazy", long: "Crazy", threshold: 0, chargeMul: 0.7, color: "#8db2d9" },
@@ -3838,21 +3839,31 @@
   }
 
   function updateEnemies(dt, solids) {
+    const blackSlowRatio = clamp(
+      Math.max(
+        blackFlashTimer > 0 ? blackFlashTimer / 52 : 0,
+        blackFlashSlowTimer > 0 ? blackFlashSlowTimer / BLACK_FLASH_SLOW_DURATION : 0
+      ),
+      0,
+      1
+    );
+    const enemyDt = dt * (1 - blackSlowRatio * (1 - BLACK_FLASH_ENEMY_SLOW_SCALE));
+
     for (const enemy of stage.enemies) {
       if (!enemy.alive) continue;
-      enemy.flash = Math.max(0, (enemy.flash || 0) - dt);
+      enemy.flash = Math.max(0, (enemy.flash || 0) - enemyDt);
 
       if (enemy.kicked) {
         if ((enemy.kickDespawn || 0) > 0) {
-          enemy.kickDespawn -= dt;
+          enemy.kickDespawn -= enemyDt;
           if (enemy.kickDespawn <= 0) {
             enemy.alive = false;
             continue;
           }
         }
-        enemy.vy = Math.min(enemy.vy + GRAVITY * dt, MAX_FALL);
-        enemy.vx *= Math.pow(0.97, dt);
-        moveWithCollisions(enemy, solids, dt);
+        enemy.vy = Math.min(enemy.vy + GRAVITY * enemyDt, MAX_FALL);
+        enemy.vx *= Math.pow(0.97, enemyDt);
+        moveWithCollisions(enemy, solids, enemyDt);
 
         if (enemy.y > H + 90 || enemy.x < -90 || enemy.x > stage.width + 90) {
           enemy.alive = false;
@@ -3861,10 +3872,10 @@
       }
 
       if (enemy.kind === "peacock") {
-        enemy.chargeCooldown = Math.max(0, (enemy.chargeCooldown || 0) - dt);
-        enemy.windupTimer = Math.max(0, (enemy.windupTimer || 0) - dt);
-        enemy.chargeTimer = Math.max(0, (enemy.chargeTimer || 0) - dt);
-        enemy.recoverTimer = Math.max(0, (enemy.recoverTimer || 0) - dt);
+        enemy.chargeCooldown = Math.max(0, (enemy.chargeCooldown || 0) - enemyDt);
+        enemy.windupTimer = Math.max(0, (enemy.windupTimer || 0) - enemyDt);
+        enemy.chargeTimer = Math.max(0, (enemy.chargeTimer || 0) - enemyDt);
+        enemy.recoverTimer = Math.max(0, (enemy.recoverTimer || 0) - enemyDt);
 
         const px = player.x + player.w * 0.5;
         const ex = enemy.x + enemy.w * 0.5;
@@ -3872,7 +3883,7 @@
         const towardPlayer = (px - ex) * enemy.dir > 0;
 
         if (enemy.mode === "windup") {
-          enemy.vx *= Math.pow(0.72, dt);
+          enemy.vx *= Math.pow(0.72, enemyDt);
           if (enemy.windupTimer <= 0) {
             enemy.mode = "charge";
             enemy.chargeTimer = 26;
@@ -3886,7 +3897,7 @@
             enemy.chargeCooldown = 98;
           }
         } else if (enemy.mode === "recover") {
-          enemy.vx *= Math.pow(0.78, dt);
+          enemy.vx *= Math.pow(0.78, enemyDt);
           if (enemy.recoverTimer <= 0) {
             enemy.mode = "patrol";
           }
@@ -3906,8 +3917,8 @@
           }
         }
 
-        enemy.vy = Math.min(enemy.vy + GRAVITY * dt, MAX_FALL);
-        moveWithCollisions(enemy, solids, dt);
+        enemy.vy = Math.min(enemy.vy + GRAVITY * enemyDt, MAX_FALL);
+        moveWithCollisions(enemy, solids, enemyDt);
 
         if (enemy.x <= enemy.minX) {
           enemy.x = enemy.minX;
@@ -3943,17 +3954,17 @@
       }
 
       enemy.vx = enemy.speed * enemy.dir;
-      enemy.vy = Math.min(enemy.vy + GRAVITY * dt, MAX_FALL);
+      enemy.vy = Math.min(enemy.vy + GRAVITY * enemyDt, MAX_FALL);
 
       if (enemy.hop && enemy.onGround) {
-        enemy.hopTimer -= dt;
+        enemy.hopTimer -= enemyDt;
         if (enemy.hopTimer <= 0) {
           enemy.vy = -5.0;
           enemy.hopTimer = enemy.hopInterval;
         }
       }
 
-      moveWithCollisions(enemy, solids, dt);
+      moveWithCollisions(enemy, solids, enemyDt);
 
       if (enemy.x <= enemy.minX) {
         enemy.x = enemy.minX;
@@ -3972,7 +3983,7 @@
       }
 
       if (enemy.shooter) {
-        enemy.shootCooldown -= dt;
+        enemy.shootCooldown -= enemyDt;
         const dx = (player.x + player.w * 0.5) - (enemy.x + enemy.w * 0.5);
         const inRange = Math.abs(dx) < 178 && Math.abs(player.y - enemy.y) < 52;
         const facingTarget = dx * enemy.dir > 0;
@@ -7502,6 +7513,59 @@
     ctx.restore();
   }
 
+  function drawHeroAfterimageTrail() {
+    const speed = Math.abs(player.vx || 0);
+    const blackRatio = clamp(
+      Math.max(
+        blackFlashTimer > 0 ? blackFlashTimer / 52 : 0,
+        blackFlashSlowTimer > 0 ? blackFlashSlowTimer / BLACK_FLASH_SLOW_DURATION : 0
+      ),
+      0,
+      1
+    );
+    const invRatio = clamp(invincibleTimer / INVINCIBLE_DURATION, 0, 1);
+    const rushRatio = clamp(proteinRushTimer / 90, 0, 1);
+    const attackRatio = clamp(
+      (attackEffectTimer > 0 ? 0.56 : 0) +
+      (hyakuretsuTimer > 0 ? 0.34 : 0) +
+      clamp(attackChargeTimer / ATTACK_CHARGE_MAX, 0, 1) * 0.28,
+      0,
+      1
+    );
+    const airRatio = player.onGround ? 0 : clamp(Math.abs(player.vy) / 6, 0, 1);
+    const trailPower = clamp(
+      (speed - 0.8) * 0.26 +
+      airRatio * 0.18 +
+      attackRatio * 0.34 +
+      rushRatio * 0.22 +
+      blackRatio * 0.46 +
+      invRatio * 0.34,
+      0,
+      1
+    );
+    if (trailPower <= 0.02) return;
+
+    const count = 2 + Math.floor(trailPower * 3);
+    const dir = player.facing || 1;
+    const sway = Math.sin(player.anim * 0.2) * 0.55;
+    for (let i = 0; i < count; i += 1) {
+      const t = (i + 1) / (count + 1);
+      const offsetX = dir * (1.6 + t * (4 + speed * 2.2 + trailPower * 3.4));
+      const offsetY = (player.onGround ? 0 : sway) * t;
+      const alpha = (0.07 + trailPower * 0.17 + blackRatio * 0.08) * (1 - i / (count + 1));
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(-offsetX, offsetY);
+      if (invincibleTimer > 0) {
+        ctx.globalCompositeOperation = "screen";
+        drawInvincibleBikeRide();
+      } else {
+        drawHero(player.x - cameraX, player.y, player.facing, player.anim - t * 2.4, 1);
+      }
+      ctx.restore();
+    }
+  }
+
   function drawBoyfriend(x, y) {
     const px = Math.floor(x - cameraX);
     const py = Math.floor(y);
@@ -9476,6 +9540,7 @@
     drawRushAura();
     const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (!hurtBlink) {
+      drawHeroAfterimageTrail();
       if (invincibleTimer > 0) {
         drawInvincibleBikeRide();
       } else {
