@@ -121,6 +121,7 @@
   let attackMashTimer = 0;
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
+  let hyakuretsuAutoTimer = 0;
   let hyakuretsuLaneTick = 0;
   let attackEffectTimer = 0;
   let attackEffectMode = "none";
@@ -244,6 +245,7 @@
   const ATTACK_MASH_WINDOW = 42;
   const ATTACK_MASH_TRIGGER = 4;
   const HYAKURETSU_DURATION = 40;
+  const HYAKURETSU_COMBO_AUTO_DURATION = 180;
   const HYAKURETSU_HIT_INTERVAL = 2;
   const HYAKURETSU_POST_COOLDOWN = 10;
   const HYAKURETSU_HOLD_AFTER_MAX = 18;
@@ -1802,6 +1804,7 @@
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -3123,6 +3126,7 @@
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -3202,6 +3206,7 @@
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -3280,6 +3285,7 @@
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -4246,10 +4252,12 @@
     player.vx *= chargedBreak ? 0.6 : 0.72;
   }
 
-  function startHyakuretsuMode() {
+  function startHyakuretsuMode(duration = HYAKURETSU_DURATION, autoMode = false) {
     if (hyakuretsuTimer > 0) return;
-    hyakuretsuTimer = HYAKURETSU_DURATION;
+    const activeDuration = Math.max(HYAKURETSU_HIT_INTERVAL * 2, duration || HYAKURETSU_DURATION);
+    hyakuretsuTimer = activeDuration;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = autoMode ? activeDuration : 0;
     hyakuretsuLaneTick = 0;
     attackMaxHoldTimer = 0;
     attackMashCount = 0;
@@ -4263,7 +4271,7 @@
     attackEffectMode = "hyakuretsu";
     attackEffectPhase = 0;
     attackEffectPower = 0.72;
-    hudMessage = "百裂拳!";
+    hudMessage = autoMode ? "4段: 3秒オート百裂拳!" : "百裂拳!";
     hudTimer = 24;
     playKickSfx(1.78);
     playRilaRobotVoice("attack");
@@ -4408,6 +4416,7 @@
       attackMashTimer = 0;
       hyakuretsuTimer = 0;
       hyakuretsuHitTimer = 0;
+      hyakuretsuAutoTimer = 0;
       return;
     }
 
@@ -4420,6 +4429,7 @@
       if (hyakuretsuTimer > 0) {
         hyakuretsuTimer = 0;
         hyakuretsuHitTimer = 0;
+        hyakuretsuAutoTimer = 0;
         attackCooldown = Math.max(attackCooldown, HYAKURETSU_POST_COOLDOWN);
       }
     }
@@ -4430,13 +4440,26 @@
       attackChargeReadyPlayed = false;
       attack2ChargeTimer = 0;
       attack2ChargeReadyPlayed = false;
-      if (!input.attack) {
+      const autoMode = hyakuretsuAutoTimer > 0;
+      if (!autoMode && !input.attack) {
         hyakuretsuTimer = 0;
         hyakuretsuHitTimer = 0;
+        hyakuretsuAutoTimer = 0;
         attackCooldown = Math.max(attackCooldown, HYAKURETSU_POST_COOLDOWN);
         return;
       }
-      hyakuretsuTimer = HYAKURETSU_DURATION;
+      if (autoMode) {
+        hyakuretsuAutoTimer = Math.max(0, hyakuretsuAutoTimer - dt);
+        hyakuretsuTimer = hyakuretsuAutoTimer;
+        if (hyakuretsuTimer <= 0) {
+          hyakuretsuHitTimer = 0;
+          hyakuretsuAutoTimer = 0;
+          attackCooldown = Math.max(attackCooldown, HYAKURETSU_POST_COOLDOWN);
+          return;
+        }
+      } else {
+        hyakuretsuTimer = HYAKURETSU_DURATION;
+      }
       hyakuretsuHitTimer = Math.max(0, hyakuretsuHitTimer - dt);
       if (hyakuretsuHitTimer <= 0) {
         performHyakuretsuStrike();
@@ -4506,9 +4529,13 @@
     if (actions.attackReleased && attackChargeTimer > 0) {
       const quickTapCombo = attackChargeTimer <= ATTACK_COMBO_TAP_MAX;
       if (quickTapCombo) {
-        attackMashCount = attackMashTimer > 0 ? Math.min(ATTACK_MASH_TRIGGER - 1, attackMashCount + 1) : 1;
+        attackMashCount = attackMashTimer > 0 ? Math.min(ATTACK_MASH_TRIGGER, attackMashCount + 1) : 1;
         attackMashTimer = ATTACK_MASH_WINDOW;
-        releaseChargeAttack(attackChargeTimer, { forcePunch: true, comboStage: attackMashCount });
+        if (attackMashCount >= ATTACK_MASH_TRIGGER) {
+          startHyakuretsuMode(HYAKURETSU_COMBO_AUTO_DURATION, true);
+        } else {
+          releaseChargeAttack(attackChargeTimer, { forcePunch: true, comboStage: attackMashCount });
+        }
       } else {
         attackMashCount = 0;
         attackMashTimer = 0;
@@ -5188,6 +5215,7 @@
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
     attackEffectTimer = 0;
     attackEffectMode = "none";
     attackEffectPhase = 0;
@@ -5240,6 +5268,7 @@
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
     attackEffectTimer = 0;
     attackEffectMode = "none";
     attackEffectPhase = 0;
@@ -6106,6 +6135,7 @@
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
     const entryStartX = stage.goal.x - player.w - 16;
     player.x = Math.min(player.x, entryStartX);
     player.y = stage.groundY - player.h;
@@ -6402,6 +6432,7 @@
     attackMashTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
+    hyakuretsuAutoTimer = 0;
     attackEffectTimer = 0;
     attackEffectMode = "none";
     attackEffectPhase = 0;
