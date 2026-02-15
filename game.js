@@ -225,6 +225,9 @@
   const PRE_BOSS_MOVIE_START_AT = 230;
   const GOD_PHASE_CUTSCENE_DURATION = 210;
   const GOD_PHASE_CUTSCENE_SKIP_MIN = 24;
+  const GOD_BOSS_PHASE1_HP = 13;
+  const GOD_BOSS_PHASE2_HP = 17;
+  const GOD_BOSS_SHOT_DENSITY_MUL = 1.28;
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
   const CANNON_EXTRA_COOLDOWN = 26;
@@ -5049,7 +5052,7 @@
     b.phaseTransitionTimer = 0;
     b.mode = "phase_shift";
     b.modeTimer = GOD_PHASE_CUTSCENE_DURATION;
-    b.phase2MaxHp = b.phase2MaxHp || 13;
+    b.phase2MaxHp = b.phase2MaxHp || GOD_BOSS_PHASE2_HP;
     b.maxHp = b.phase2MaxHp;
     b.hp = b.maxHp;
     b.invuln = GOD_PHASE_CUTSCENE_DURATION + 42;
@@ -5223,7 +5226,7 @@
 
     stage.boss.started = true;
     stage.boss.active = true;
-    stage.boss.maxHp = bossKind === "peacock" ? 8 : 11;
+    stage.boss.maxHp = bossKind === "peacock" ? 8 : GOD_BOSS_PHASE1_HP;
     stage.boss.hp = stage.boss.maxHp;
     stage.boss.x = bossKind === "peacock"
       ? BOSS_ARENA.minX + Math.floor((BOSS_ARENA.maxX - BOSS_ARENA.minX) * 0.48)
@@ -5242,7 +5245,7 @@
     stage.boss.phaseTransitionTimer = 0;
     stage.boss.stunTimer = 0;
     stage.boss.gimmickAdvantageTimer = 0;
-    stage.boss.phase2MaxHp = bossKind === "god" ? 13 : stage.boss.maxHp;
+    stage.boss.phase2MaxHp = bossKind === "god" ? GOD_BOSS_PHASE2_HP : stage.boss.maxHp;
     stage.bossShots = [];
     stage.bossTwins = [];
     stage.godGimmicks = [];
@@ -5581,7 +5584,7 @@
     const control = bossArenaControlRatio();
     const cx = boss.x + boss.w * 0.5 - 2;
     const cy = boss.y + 12;
-    const baseCount = rage ? 7 : 5;
+    const baseCount = rage ? 9 : 7;
     const count = Math.max(3, Math.round(baseCount * (1 - control * 0.35)));
     for (let i = 0; i < count; i += 1) {
       const rad = (Math.PI * 2 * i) / count;
@@ -5611,8 +5614,11 @@
     const targetA = clamp(playerCenter + offset, minX, maxX);
     const targetB = clamp(boss.x + boss.w * 0.5 - offset * 0.46, minX, maxX);
     const targetC = clamp((targetA + targetB) * 0.5 + (Math.random() * 2 - 1) * 18, minX, maxX);
-    const targets = rage ? [targetA, targetC] : [targetA, targetB];
-    const limitedTargets = control >= 0.42 ? [targets[0]] : targets;
+    const targetD = clamp(playerCenter - offset * 0.34 + (Math.random() * 2 - 1) * (rage ? 44 : 32), minX, maxX);
+    const targets = rage ? [targetA, targetC, targetB, targetD] : [targetA, targetB, targetD];
+    const limitedTargets = control >= 0.78
+      ? [targets[0]]
+      : (control >= 0.42 ? targets.slice(0, 2) : targets);
     for (const tx of limitedTargets) {
       stage.bossShots.push({
         kind: "rain_warn",
@@ -5634,7 +5640,7 @@
     const control = bossArenaControlRatio();
     const cx = boss.x + boss.w * 0.5 - 2;
     const cy = boss.y + 10;
-    const count = Math.max(3, Math.round((rage ? 6 : 4) * (1 - control * 0.3)));
+    const count = Math.max(3, Math.round((rage ? 9 : 7) * (1 - control * 0.3)));
     const speed = (rage ? 1.88 : 1.58) * (1 - control * 0.14);
     const base = ((boss.spiralAngle || 0) * Math.PI) / 180;
     for (let i = 0; i < count; i += 1) {
@@ -5659,7 +5665,7 @@
     const control = bossArenaControlRatio();
     const cx = boss.x + boss.w * 0.5 - 2;
     const cy = boss.y + 12;
-    const baseCount = phase2 ? (rage ? 8 : 7) : (rage ? 7 : 5);
+    const baseCount = phase2 ? (rage ? 11 : 10) : (rage ? 9 : 7);
     const count = Math.max(3, Math.round(baseCount * (1 - control * 0.34)));
     const speed = (phase2 ? (rage ? 2.08 : 1.86) : (rage ? 1.92 : 1.72)) * (1 - control * 0.16);
     for (let i = 0; i < count; i += 1) {
@@ -5784,7 +5790,7 @@
       return;
     }
     const arenaControl = bossArenaControlRatio();
-    const shotDrain = 1 - arenaControl * 0.45;
+    const shotDrain = (1 - arenaControl * 0.45) * (boss.kind === "god" ? GOD_BOSS_SHOT_DENSITY_MUL : 1);
     const cooldownMul = 1 + arenaControl * 0.34;
     const moveSlow = 1 - arenaControl * 0.18;
     const phase = boss.phase || 1;
@@ -5856,7 +5862,7 @@
         } else if (pattern === 1) {
           boss.mode = "shoot";
           boss.modeTimer = phase2 ? (rage ? 76 : 88) : (rage ? 78 : 66);
-          boss.shotCooldown = (phase2 ? (rage ? 10 : 13) : (rage ? 11 : 15)) * cooldownMul;
+          boss.shotCooldown = (phase2 ? (rage ? 8 : 11) : (rage ? 9 : 13)) * cooldownMul;
           boss.shootVolleyCount = 0;
         } else if (pattern === 2) {
           boss.mode = "leap_prep";
@@ -5865,26 +5871,26 @@
         } else if (pattern === 3) {
           boss.mode = "ring";
           boss.modeTimer = phase2 ? (rage ? 78 : 90) : (rage ? 82 : 68);
-          boss.shotCooldown = (phase2 ? (rage ? 13 : 17) : (rage ? 14 : 18)) * cooldownMul;
+          boss.shotCooldown = (phase2 ? (rage ? 10 : 14) : (rage ? 11 : 15)) * cooldownMul;
           boss.ringVolleyCount = 0;
           boss.vx *= 0.42;
         } else if (pattern === 4) {
           boss.mode = "rain";
           boss.modeTimer = phase2 ? (rage ? 84 : 98) : (rage ? 94 : 80);
-          boss.shotCooldown = (phase2 ? (rage ? 12 : 16) : (rage ? 13 : 17)) * cooldownMul;
+          boss.shotCooldown = (phase2 ? (rage ? 9 : 13) : (rage ? 10 : 14)) * cooldownMul;
           boss.rainVolleyCount = 0;
           boss.vx *= 0.4;
         } else if (pattern === 5) {
           boss.mode = "spiral";
           boss.modeTimer = phase2 ? (rage ? 74 : 86) : (rage ? 88 : 74);
-          boss.shotCooldown = (phase2 ? (rage ? 11 : 14) : (rage ? 12 : 16)) * cooldownMul;
+          boss.shotCooldown = (phase2 ? (rage ? 8 : 11) : (rage ? 9 : 13)) * cooldownMul;
           boss.spiralVolleyCount = 0;
           boss.spiralAngle = (boss.spiralAngle + (rage ? 22 : 16)) % 360;
           boss.vx *= 0.35;
         } else if (pattern === 6) {
           boss.mode = "nova";
           boss.modeTimer = rage ? 74 : 88;
-          boss.shotCooldown = (rage ? 11 : 15) * cooldownMul;
+          boss.shotCooldown = (rage ? 8 : 12) * cooldownMul;
           boss.novaVolleyCount = 0;
           boss.vx *= 0.32;
         } else {
@@ -5925,8 +5931,8 @@
         const aim = player.x + player.w * 0.5 < boss.x + boss.w * 0.5 ? -1 : 1;
         const spread = ((boss.shootVolleyCount || 0) % 3) - 1;
         let volleyOffsets = phase2
-          ? (rage ? [-0.46, -0.28, -0.1, 0.1, 0.28, 0.46] : [-0.32, -0.12, 0.12, 0.32])
-          : (rage ? [-0.38, -0.19, 0, 0.19, 0.38] : [-0.22, 0, 0.22]);
+          ? (rage ? [-0.56, -0.4, -0.24, -0.08, 0.08, 0.24, 0.4, 0.56] : [-0.44, -0.26, -0.1, 0.1, 0.26, 0.44])
+          : (rage ? [-0.5, -0.32, -0.16, 0, 0.16, 0.32, 0.5] : [-0.32, -0.16, 0, 0.16, 0.32]);
         if (arenaControl >= 0.42) {
           volleyOffsets = volleyOffsets.filter((_v, i) => i % 2 === 0);
         }
@@ -5949,7 +5955,7 @@
         if (phase2 && boss.shootVolleyCount % 2 === 0) {
           emitBossNovaShots(boss, rage, false);
         }
-        boss.shotCooldown = (phase2 ? (rage ? 10 : 13) : (rage ? 12 : 17)) * cooldownMul;
+        boss.shotCooldown = (phase2 ? (rage ? 8 : 11) : (rage ? 10 : 14)) * cooldownMul;
       }
 
       if (boss.modeTimer <= 0) {
@@ -5993,7 +5999,7 @@
         if (phase2 && boss.ringVolleyCount % 2 === 0) {
           emitBossNovaShots(boss, rage, false);
         }
-        boss.shotCooldown = (phase2 ? (rage ? 13 : 17) : (rage ? 17 : 23)) * cooldownMul;
+        boss.shotCooldown = (phase2 ? (rage ? 10 : 14) : (rage ? 14 : 19)) * cooldownMul;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -6010,7 +6016,7 @@
         if (phase2 && boss.rainVolleyCount % 3 === 0) {
           emitBossRingShots(boss, true);
         }
-        boss.shotCooldown = (phase2 ? (rage ? 11 : 15) : (rage ? 16 : 22)) * cooldownMul;
+        boss.shotCooldown = (phase2 ? (rage ? 8 : 12) : (rage ? 12 : 18)) * cooldownMul;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -6028,7 +6034,7 @@
         if (phase2 && boss.spiralVolleyCount % 2 === 0) {
           emitBossNovaShots(boss, rage, true);
         }
-        boss.shotCooldown = (phase2 ? (rage ? 9 : 12) : (rage ? 11 : 15)) * cooldownMul;
+        boss.shotCooldown = (phase2 ? (rage ? 7 : 10) : (rage ? 9 : 13)) * cooldownMul;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
@@ -6045,7 +6051,7 @@
         if (boss.novaVolleyCount % 2 === 0) {
           emitBossRingShots(boss, true);
         }
-        boss.shotCooldown = (rage ? 11 : 14) * cooldownMul;
+        boss.shotCooldown = (rage ? 8 : 11) * cooldownMul;
       }
       if (boss.modeTimer <= 0) {
         boss.mode = "idle";
