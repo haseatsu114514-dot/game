@@ -2529,9 +2529,9 @@
   function triggerTimeBurst() {
     if (isTimeBurstActive()) return false;
     if (proteinBurstTimer > 0) return false;
-    if (proteinBurstGauge2 < PROTEIN_BURST_MIN) return false;
+    if (proteinBurstGauge1 < PROTEIN_BURST_MIN) return false;
 
-    const spentGauge = proteinBurstGauge2;
+    const spentGauge = proteinBurstGauge1;
     const fullStop = spentGauge >= PROTEIN_BURST_REQUIRE - 0.001;
     const gaugeRatio = clamp(spentGauge / PROTEIN_BURST_REQUIRE, 0, 1);
     const slowRatio = clamp(
@@ -2553,7 +2553,7 @@
     timeBurstStopDeadlineMs = fullStop ? performance.now() + (TIME_BURST_STOP_DURATION / 60) * 1000 : 0;
 
     registerBurstActivationRankGain(player.x + player.w * 0.5, player.y + player.h * 0.52, gaugeRatio);
-    proteinBurstGauge2 = 0;
+    proteinBurstGauge1 = 0;
 
     triggerImpact(
       fullStop ? 3.4 : 2.7 + slowRatio * 0.9,
@@ -2990,20 +2990,20 @@
   function consumeBurstIfPressed(actions) {
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
 
-    if (actions.special2Pressed) {
-      if (!triggerTimeBurst()) {
-        if (isTimeBurstActive() || proteinBurstTimer > 0) return;
-        hudMessage = `BURST2 ${Math.floor(proteinBurstGauge2)}/${PROTEIN_BURST_MIN}+`;
-        hudTimer = 28;
+    if (actions.burstPressed) {
+      if (playerStyle === "berserker") {
+        if (!triggerProteinBurst()) {
+          if (isTimeBurstActive() || proteinBurstTimer > 0) return;
+          hudMessage = `BURST: ATTACK ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
+          hudTimer = 28;
+        }
+      } else {
+        if (!triggerTimeBurst()) {
+          if (isTimeBurstActive() || proteinBurstTimer > 0) return;
+          hudMessage = `BURST: TIME ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
+          hudTimer = 28;
+        }
       }
-      return;
-    }
-
-    if (!actions.specialPressed) return;
-    if (!triggerProteinBurst()) {
-      if (isTimeBurstActive() || proteinBurstTimer > 0) return;
-      hudMessage = `BURST1 ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
-      hudTimer = 28;
     }
   }
 
@@ -8418,6 +8418,7 @@
       special2Pressed: input.special2 && !prevInput.special2,
       startPressed: input.start && !prevInput.start,
       styleChangePressed: input.styleChange && !prevInput.styleChange,
+      burstPressed: input.burst && !prevInput.burst,
     };
 
     prevInput.jump = input.jump;
@@ -8429,6 +8430,7 @@
     prevInput.special2 = input.special2;
     prevInput.start = input.start;
     prevInput.styleChange = input.styleChange;
+    prevInput.burst = input.burst;
 
     return actions;
   }
@@ -11110,53 +11112,53 @@
             : "#89e4ff";
       ctx.fillRect(barX + 1, barY + 1, Math.max(1, Math.floor((barW - 2) * chargeRatio)), 2);
 
-      // Thin, translucent reach preview while charging.
-      const previewReach = waveReady
-        ? 22 + Math.floor(chargeRatio * 40)
-        : morningStarReady
-          ? 20 + Math.floor(chargeRatio * 18) + (morningStarLongReady ? 10 : 0)
-          : 12 + Math.floor(chargeRatio * 50);
-      const previewY = player.y + (morningStarReady ? 3 : waveReady ? 4 : 6);
-      const previewH = morningStarReady
-        ? 22 + Math.floor(chargeRatio * 2)
-        : 13 + Math.floor(chargeRatio * 8);
-      const previewX = dir > 0
-        ? player.x + player.w - 1
-        : player.x - previewReach + 1;
-      const px = Math.floor(previewX - cameraX);
-      const py = Math.floor(previewY);
-      const pw = Math.max(2, Math.floor(previewReach));
-      const ph = Math.max(3, Math.floor(previewH));
-      const previewPulse = 0.5 + Math.sin(player.anim * 0.24) * 0.5;
-      const fillAlpha = 0.035 + chargeRatio * 0.055 + previewPulse * 0.01;
-      const edgeAlpha = 0.1 + chargeRatio * 0.09;
-      const midAlpha = 0.08 + chargeRatio * 0.06;
-      const previewTone = waveReady
-        ? "255, 214, 135"
-        : morningStarReady
-          ? (morningStarLongReady ? "232, 228, 214" : "212, 206, 196")
-          : morningStarSpinReady
-            ? "255, 215, 170"
-            : "162, 226, 255";
+      // Enhanced Morning Star Visual Indicator (Tip & Range)
+      if (attackChargeTimer > 0) {
+        const rankBoost = battleRankAttackBoost();
+        const rankRangeMul = rankBoost.rangeMul;
 
-      if (morningStarSpinReady && !waveReady) {
-        const spinR = 14 + Math.floor(chargeRatio * 22);
-        const spinPulse = 0.5 + Math.sin(player.anim * 0.34) * 0.5;
-        ctx.strokeStyle = `rgba(${previewTone}, ${edgeAlpha + spinPulse * 0.08})`;
+        // Calculate Reach (Replicated from releaseChargeAttack)
+        let baseReach = 0;
+        if (attackChargeTimer >= ATTACK_CHARGE_MAX - 1) baseReach = 45 + Math.floor(chargeRatio * 10);
+        else if (morningStarReady) {
+          baseReach = 20 + Math.floor(chargeRatio * 18) + (morningStarLongReady ? 10 : 0);
+        } else if (morningStarSpinReady) {
+          baseReach = 12 + Math.floor(chargeRatio * 12);
+        } else {
+          baseReach = 12 + Math.floor(chargeRatio * 50);
+        }
+
+        const reach = Math.max(10, Math.floor(baseReach * rankRangeMul));
+        const tipX = cx + dir * reach;
+        const tipY = cy + 4; // Waist/Hand height
+
+        // Draw Range Line
         ctx.beginPath();
-        ctx.arc(cx, cy - 1, spinR, 0, Math.PI * 2);
+        ctx.moveTo(cx, tipY);
+        ctx.lineTo(tipX, tipY);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.45)"; // visible but not distraction
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
         ctx.stroke();
-        ctx.strokeStyle = `rgba(255, 245, 214, ${0.16 + chargeRatio * 0.12})`;
+        ctx.setLineDash([]);
+
+        // Draw Tip Circle
+        const tipRadius = maxChargeMorningStar ? 6 : 4;
         ctx.beginPath();
-        ctx.arc(cx, cy - 1, Math.max(3, spinR - 3), 0, Math.PI * 2);
+        ctx.arc(tipX, tipY, tipRadius, 0, Math.PI * 2);
+        ctx.fillStyle = maxChargeMorningStar ? "rgba(255, 50, 50, 0.7)" : morningStarLongReady ? "rgba(255, 170, 0, 0.6)" : "rgba(255, 255, 100, 0.6)";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1;
         ctx.stroke();
-      } else {
-        ctx.fillStyle = `rgba(${previewTone}, ${fillAlpha})`;
-        ctx.fillRect(px, py, pw, ph);
-        ctx.strokeStyle = `rgba(${previewTone}, ${edgeAlpha})`;
-        ctx.strokeRect(px, py, pw, ph);
-        ctx.fillStyle = `rgba(255, 255, 255, ${midAlpha})`;
-        ctx.fillRect(px + 1, py + Math.floor(ph * 0.5), Math.max(1, pw - 2), 1);
+
+        // If spinning, draw a faint circle path
+        if (morningStarSpinReady && !morningStarReady) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, reach, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+          ctx.stroke();
+        }
       }
 
       if (chargeRatio >= 0.98) {
@@ -12984,12 +12986,13 @@
     const burstReady1 = proteinBurstGauge1 >= PROTEIN_BURST_MIN;
     const burstReady2 = proteinBurstGauge2 >= PROTEIN_BURST_MIN;
     const burstTone1 = burstChargeTone(burstRatio1);
-    const burstTone2Base = burstChargeTone(burstRatio2);
     const burstTone2 = {
-      hue: (burstTone2Base.hue + 84) % 360,
-      sat: clamp(burstTone2Base.sat + 6, 28, 98),
-      light: clamp(burstTone2Base.light + 2, 38, 86),
+      hue: (burstTone1.hue + 84) % 360,
+      sat: clamp(burstTone1.sat + 6, 28, 98),
+      light: clamp(burstTone1.light + 2, 38, 86),
     };
+    const isBerserker = playerStyle === "berserker";
+    const activeTone = isBerserker ? burstTone1 : burstTone2;
 
     const drawBurstSegment = (x, w, ratio, tone, ready, active) => {
       const fillLight = clamp(tone.light + (ready ? 8 : 2), 44, 86);
@@ -13013,9 +13016,10 @@
     };
 
     ctx.fillStyle = "rgba(27, 34, 50, 0.96)";
+    // Use full width for single bar
+    const fullBurstW = burstSegW1 + burstGap + burstSegW2;
     ctx.fillRect(burstBarX, burstBarY, burstBarW, 6);
-    drawBurstSegment(burstSegX1, burstSegW1, burstRatio1, burstTone1, burstReady1, proteinBurstTimer > 0);
-    drawBurstSegment(burstSegX2, burstSegW2, burstRatio2, burstTone2, burstReady2, isTimeBurstActive());
+    drawBurstSegment(burstBarX + 1, fullBurstW, burstRatio1, activeTone, burstReady1, proteinBurstTimer > 0 || isTimeBurstActive());
 
     if (bossActive) {
       const barX = 176;
@@ -14138,28 +14142,29 @@
   }
 
   function refreshBurstButtonUi() {
-    if (!burstButton1 && !burstButton2) return;
+    if (!burstButton1) return;
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
     const chargeRatio1 = clamp(proteinBurstGauge1 / PROTEIN_BURST_REQUIRE, 0, 1);
-    const chargeRatio2 = clamp(proteinBurstGauge2 / PROTEIN_BURST_REQUIRE, 0, 1);
+
+    // Tone based on current style (Red for Berserker, Blue for Gunner)
+    // Actually, let's keep it simple or check playerStyle
+    const isBerserker = playerStyle === "berserker";
     const tone1 = burstChargeTone(chargeRatio1);
-    const tone2Base = burstChargeTone(chargeRatio2);
     const tone2 = {
-      hue: (tone2Base.hue + 84) % 360,
-      sat: clamp(tone2Base.sat + 6, 28, 98),
-      light: clamp(tone2Base.light + 2, 38, 86),
+      hue: (tone1.hue + 84) % 360,
+      sat: clamp(tone1.sat + 6, 28, 98),
+      light: clamp(tone1.light + 2, 38, 86),
     };
+    const activeTone = isBerserker ? tone1 : tone2;
+
     const busy = proteinBurstTimer > 0 || isTimeBurstActive();
     const ready1 = playable && proteinBurstGauge1 >= PROTEIN_BURST_MIN && !busy;
-    const ready2 = playable && proteinBurstGauge2 >= PROTEIN_BURST_MIN && !busy;
     const full1 = proteinBurstGauge1 >= PROTEIN_BURST_REQUIRE;
-    const full2 = proteinBurstGauge2 >= PROTEIN_BURST_REQUIRE;
-    applyBurstButtonTone(burstButton1, chargeRatio1, tone1, ready1, full1, playable);
-    applyBurstButtonTone(burstButton2, chargeRatio2, tone2, ready2, full2, playable);
-    if (burstButton1) burstButton1.textContent = full1 ? "burst1!" : "burst1";
-    if (burstButton2) burstButton2.textContent = full2 ? "burst2!" : "burst2";
-    if (!ready1) releaseHoldButtonByKey("special");
-    if (!ready2) releaseHoldButtonByKey("special2");
+
+    applyBurstButtonTone(burstButton1, chargeRatio1, activeTone, ready1, full1, playable);
+
+    if (burstButton1) burstButton1.textContent = full1 ? "BURST!" : "BURST";
+    if (!ready1) releaseHoldButtonByKey("burst");
   }
 
   bindHoldButton("btn-left", "left");
@@ -14167,7 +14172,7 @@
   bindHoldButton("btn-jump", "jump");
   bindHoldButton("btn-attack", "attack");
   bindHoldButton("btn-style", "styleChange");
-  bindHoldButton("btn-special", "special");
+  bindHoldButton("btn-special", "burst");
   bindHoldButton("btn-special2", "special2");
   refreshBurstButtonUi();
 
@@ -14225,8 +14230,8 @@
     KeyJ: "attack",
     KeyF: "attack",
     KeyS: "styleChange",
-    KeyK: "special",
-    KeyL: "special2",
+    KeyK: "burst",
+    KeyL: "burst",
     Enter: "start",
   };
 
@@ -14236,8 +14241,7 @@
     if (!mapped) return;
 
     if (mapped === "styleChange" && !input.styleChange) {
-      playerStyle = playerStyle === "berserker" ? "gunner" : "berserker";
-      // Optional: Play style change sound here
+      // Logic moved to main loop to prevent double-toggling
     }
 
     input[mapped] = true;
@@ -14337,6 +14341,8 @@
 
     if (actions.styleChangePressed) {
       playerStyle = playerStyle === "berserker" ? "gunner" : "berserker";
+      hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE" : "GUNNER STYLE";
+      hudTimer = 60;
       // Optional: Sound
     }
 
