@@ -4648,6 +4648,9 @@
     attack2ChargeReadyPlayed = false;
     attackMashCount = 0;
     attackMashTimer = 0;
+    shotChargeTimer = 0;
+    shotMachineGunCount = 0;
+    shotMachineGunFrame = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
     hyakuretsuAutoTimer = 0;
@@ -14035,8 +14038,10 @@
   bindHoldButton("btn-right", "right");
   bindHoldButton("btn-jump", "jump");
   bindHoldButton("btn-attack", "attack");
+  bindHoldButton("btn-attack2", "attack2");
   bindHoldButton("btn-special", "special");
   bindHoldButton("btn-special2", "special2");
+  bindHoldButton("btn-shot", "shot");
   refreshBurstButtonUi();
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -14092,7 +14097,7 @@
     Space: "jump",
     KeyJ: "attack",
     KeyF: "attack",
-    KeyD: "attack2",
+    KeyS: "attack2",
     KeyH: "shot",
     KeyI: "shot",
     KeyK: "special",
