@@ -4748,6 +4748,7 @@
   }
 
   function updatePopSpikes(dt) {
+    if (isTimeBurstStopActive()) return;
     for (const trap of stage.popSpikes) {
       if (trap.destroyed) {
         trap.debrisTimer = Math.max(0, (trap.debrisTimer || 0) - dt);
@@ -4800,6 +4801,7 @@
   }
 
   function updateFallBlocks(dt) {
+    if (isTimeBurstStopActive()) return;
     for (const block of stage.fallBlocks) {
       if (block.destroyed) {
         block.debrisTimer = Math.max(0, (block.debrisTimer || 0) - dt);
@@ -4834,6 +4836,7 @@
   }
 
   function updateCannons(dt) {
+    if (isTimeBurstStopActive()) return;
     const routeBoost = gameState === STATE.PLAY;
     const cannonRateMul = routeBoost ? ROUTE_CANNON_RATE_MUL : 1;
     const projectileSpeedMul = routeBoost ? ROUTE_PROJECTILE_SPEED_MUL : 1;
@@ -5010,6 +5013,7 @@
   }
 
   function updateHazardBullets(dt, solids) {
+    if (isTimeBurstStopActive()) return;
     for (const bullet of stage.hazardBullets) {
       if (bullet.dead) continue;
       bullet.x += bullet.vx * dt;
@@ -5041,6 +5045,7 @@
   }
 
   function updateEnemies(dt, solids) {
+    if (isTimeBurstStopActive()) return;
     const routeBoost = gameState === STATE.PLAY;
     const routeEnemyDtMul = routeBoost ? ROUTE_ENEMY_DT_MUL : 1;
     const routeProjectileMul = routeBoost ? ROUTE_PROJECTILE_SPEED_MUL : 1;
@@ -6444,6 +6449,7 @@
   }
 
   function resolveEnemyContactDamage() {
+    if (isTimeBurstStopActive()) return;
     const crisisMul = pinchAttackMultiplier();
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
@@ -6551,6 +6557,7 @@
   }
 
   function resolveBossContactDamage() {
+    if (isTimeBurstStopActive()) return;
     if (!stage.boss.active) return;
     const bosses = getBossEntities();
     for (const b of bosses) {
@@ -6728,6 +6735,7 @@
   }
 
   function updateGodGimmicks(dt) {
+    if (isTimeBurstStopActive()) return;
     if (gameState !== STATE.BOSS || !stage || !stage.boss || !stage.boss.active) return;
     const b = stage.boss;
     if (b.kind !== "god") return;
@@ -7508,6 +7516,7 @@
   }
 
   function updateBossShots(dt, solids) {
+    if (isTimeBurstStopActive()) return;
     const spawned = [];
     const godAdvantageActive = stage && stage.boss && stage.boss.kind === "god" && (stage.boss.gimmickAdvantageTimer || 0) > 0;
     const control = bossArenaControlRatio();
@@ -7588,6 +7597,7 @@
   }
 
   function updateBoss(dt, solids) {
+    if (isTimeBurstStopActive()) return;
     if (!stage.boss.active) return;
 
     const boss = stage.boss;
@@ -8012,6 +8022,8 @@
       killPlayer("奈落に落下", { ignoreInvincible: true, instantGameOver: true });
       return;
     }
+
+    if (isTimeBurstStopActive()) return;
 
     for (const block of stage.fallBlocks) {
       if (block.state !== "fall") continue;
