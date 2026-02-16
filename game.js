@@ -6351,41 +6351,49 @@
     attack2ChargeTimer = 0;
     attack2ChargeReadyPlayed = false;
 
-    if (input.attack) {
-      const beforeCharge = attackChargeTimer;
-      const chargeMul = battleRankChargeMultiplier();
-      attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt * chargeMul);
-      attackMaxHoldTimer = 0;
-      if (
-        !attackChargeReadyPlayed &&
-        attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN &&
-        beforeCharge < ATTACK_WAVE_CHARGE_MIN
-      ) {
-        attackChargeReadyPlayed = true;
-        playChargeReadySfx();
-      }
-      return;
-    }
 
-    if (actions.attackReleased && attackChargeTimer > 0) {
-      const quickTapCombo = attackChargeTimer <= ATTACK_COMBO_TAP_MAX;
-      if (quickTapCombo) {
-        attackMashCount = attackMashTimer > 0 ? Math.min(ATTACK_MASH_TRIGGER, attackMashCount + 1) : 1;
-        attackMashTimer = ATTACK_MASH_WINDOW;
-        if (attackMashCount >= ATTACK_MASH_TRIGGER) {
-          startHyakuretsuMode(HYAKURETSU_COMBO_AUTO_DURATION, true);
-        } else {
-          releaseChargeAttack(attackChargeTimer, { forcePunch: true, comboStage: attackMashCount });
+    if (playerStyle === "berserker") {
+      if (input.attack) {
+        const beforeCharge = attackChargeTimer;
+        const chargeMul = battleRankChargeMultiplier();
+        attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt * chargeMul);
+        attackMaxHoldTimer = 0;
+        if (
+          !attackChargeReadyPlayed &&
+          attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN &&
+          beforeCharge < ATTACK_WAVE_CHARGE_MIN
+        ) {
+          attackChargeReadyPlayed = true;
+          playChargeReadySfx();
         }
-      } else {
-        attackMashCount = 0;
-        attackMashTimer = 0;
-        releaseChargeAttack(attackChargeTimer);
+        return;
       }
+
+      if (actions.attackReleased && attackChargeTimer > 0) {
+        const quickTapCombo = attackChargeTimer <= ATTACK_COMBO_TAP_MAX;
+        if (quickTapCombo) {
+          attackMashCount = attackMashTimer > 0 ? Math.min(ATTACK_MASH_TRIGGER, attackMashCount + 1) : 1;
+          attackMashTimer = ATTACK_MASH_WINDOW;
+          if (attackMashCount >= ATTACK_MASH_TRIGGER) {
+            startHyakuretsuMode(HYAKURETSU_COMBO_AUTO_DURATION, true);
+          } else {
+            releaseChargeAttack(attackChargeTimer, { forcePunch: true, comboStage: attackMashCount });
+          }
+        } else {
+          attackMashCount = 0;
+          attackMashTimer = 0;
+          releaseChargeAttack(attackChargeTimer);
+        }
+      }
+      attackChargeTimer = 0;
+      attackMaxHoldTimer = 0;
+      attackChargeReadyPlayed = false;
+    } else {
+      // Reset melee charge if not in berserker mode
+      attackChargeTimer = 0;
+      attackMaxHoldTimer = 0;
+      attackChargeReadyPlayed = false;
     }
-    attackChargeTimer = 0;
-    attackMaxHoldTimer = 0;
-    attackChargeReadyPlayed = false;
 
     updateShot(dt);
   }
@@ -6427,7 +6435,11 @@
     // Machine Gun Burst Handling
     if (shotMachineGunCount > 0) {
       shotMachineGunFrame += dt;
-      if (shotMachineGunFrame >= 4) { // Fire every 4 frames
+      // Rank scaling for fire rate
+      // Danger(0): 6, Badass(1): 5, Apoc(2): 4, Savege(3): 3, SS(4): 3, SSS(5): 2, EX(6): 1
+      const rankIdx = battleRankIndex;
+      const delay = Math.max(1, 6 - Math.floor(rankIdx * 0.8));
+      if (shotMachineGunFrame >= delay) {
         shotMachineGunFrame = 0;
         shotMachineGunCount--;
         fireRangedProjectile(1); // Machinegun Tier 1
@@ -6490,12 +6502,18 @@
         });
       }
     } else if (tier === 1) { // Machine Gun (Tier 1 now)
+      // Rank scaling for speed: 9.0 -> 20.0
+      const rankIdx = battleRankIndex;
+      const speed = 9.0 + rankIdx * 1.6;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * 9, vy: (Math.random() - 0.5) * 1.5, ttl: 50, power: 0.4
+        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 50, power: 0.4
       });
     } else { // Handgun
+      // Rank scaling for speed: 8.5 -> 18.0
+      const rankIdx = battleRankIndex;
+      const speed = 8.5 + rankIdx * 1.5;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * 8.5, vy: 0, ttl: 60, power: 0.5
+        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 60, power: 0.5
       });
     }
   }
