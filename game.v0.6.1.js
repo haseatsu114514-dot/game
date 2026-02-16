@@ -11263,6 +11263,34 @@
       }
     }
 
+    // --- New: Gunner Charge Visuals ---
+    if (playerStyle === "gunner" && shotChargeTimer > 0) {
+      const chargeRatio = clamp(shotChargeTimer / SHOT_CHARGE_MAX, 0, 1);
+      const auraA = 0.1 + chargeRatio * 0.15;
+      const pulse = 0.5 + Math.sin(player.anim * 0.4) * 0.5;
+      const auraW = 22 + Math.floor(chargeRatio * 10);
+      const auraH = 20 + Math.floor(chargeRatio * 6);
+
+      // Blue Aura for Gunner
+      ctx.fillStyle = `rgba(80, 200, 255, ${auraA + pulse * 0.08})`;
+      ctx.fillRect(cx - Math.floor(auraW * 0.5), cy - Math.floor(auraH * 0.6), auraW, auraH);
+
+      // Charge Bar
+      const barW = 28;
+      const barX = cx - Math.floor(barW * 0.5);
+      const barY = Math.floor(player.y - 8);
+      ctx.fillStyle = "rgba(4, 8, 20, 0.88)";
+      ctx.fillRect(barX, barY, barW, 4);
+
+      // Color by Tier
+      let barColor = "#00ffaa"; // Tier 1: Machinegun
+      if (shotChargeTimer >= SHOT_CHARGE_MAX) barColor = "#ff77ff"; // Tier 3: Bazooka
+      else if (shotChargeTimer >= SHOT_TIER2_THRESHOLD) barColor = "#ffd040"; // Tier 2: Shotgun
+
+      ctx.fillStyle = barColor;
+      ctx.fillRect(barX + 1, barY + 1, Math.max(1, Math.floor((barW - 2) * chargeRatio)), 2);
+    }
+
     const showingHammerCharge = input.attack2 && attackCooldown <= 0 && attack2ChargeTimer > 2;
     if (showingHammerCharge) {
       const chargeRatio2 = clamp(attack2ChargeTimer / ATTACK2_CHARGE_MAX, 0, 1);
