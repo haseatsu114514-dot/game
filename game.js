@@ -14034,7 +14034,7 @@
       drawClearOverlay();
     }
     ctx.restore();
-    drawVersion();
+    // drawVersion(); // Removed to prevent potential freeze
     drawPs1Overlay();
   }
 
@@ -14402,14 +14402,6 @@
   // Version Indicator (Fix for missing definition)
   const GAME_VERSION = "v0.6.1 (GunnerFix)";
 
-  function drawVersion() {
-    ctx.save();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-    ctx.font = "10px sans-serif";
-    ctx.textAlign = "right";
-    ctx.fillText(GAME_VERSION, W - 4, H - 4);
-    ctx.restore();
-  }
-
+  console.log("Game Version:", GAME_VERSION);
   requestAnimationFrame(loop);
 })();
