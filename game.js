@@ -14367,16 +14367,18 @@
       // Reset gunner reload timer to prevent jams
       shotReloadTimer = 0;
 
-      // Update Attack Button Color
+      // Update Attack Button Color (Disabled due to reported freeze)
+      /*
       const btnAttack = document.getElementById("btn-attack");
       if (btnAttack) {
-        btnAttack.style.background = playerStyle === "berserker"
-          ? "linear-gradient(to bottom, #ff5555, #cc0000)"
+        btnAttack.style.background = playerStyle === "berserker" 
+          ? "linear-gradient(to bottom, #ff5555, #cc0000)" 
           : "linear-gradient(to bottom, #5555ff, #0000cc)";
         btnAttack.style.boxShadow = playerStyle === "berserker"
           ? "0 4px 0 #990000"
           : "0 4px 0 #000099";
       }
+      */
 
       // Optional: Sound
     }
