@@ -14368,17 +14368,8 @@
       shotReloadTimer = 0;
 
       // Update Attack Button Color (Disabled due to reported freeze)
-      /*
-      const btnAttack = document.getElementById("btn-attack");
-      if (btnAttack) {
-        btnAttack.style.background = playerStyle === "berserker" 
-          ? "linear-gradient(to bottom, #ff5555, #cc0000)" 
-          : "linear-gradient(to bottom, #5555ff, #0000cc)";
-        btnAttack.style.boxShadow = playerStyle === "berserker"
-          ? "0 4px 0 #990000"
-          : "0 4px 0 #000099";
-      }
-      */
+      // Update Attack Button Color
+      updateStyleUI();
 
       // Optional: Sound
     }
@@ -14402,6 +14393,7 @@
   // Version Indicator (Fix for missing definition)
   const GAME_VERSION = "v0.6.1 (GunnerFix)";
 
+  updateStyleUI();
   console.log("Game Version:", GAME_VERSION);
   requestAnimationFrame(loop);
 })();
