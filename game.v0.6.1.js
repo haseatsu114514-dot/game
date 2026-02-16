@@ -146,7 +146,7 @@
   let shotReloadTimer = 0;
 
   // Gunner Ammo System
-  let gunnerAmmo = 6;
+  let gunnerAmmo = 32; // Initial ammo = D-rank max
   let gunnerMaxAmmo = 6;
   let lastAttackPressTime = 0;
   const RELOAD_DOUBLE_TAP_TIME = 300; // ms
@@ -6448,8 +6448,11 @@
 
     // Charging - in Gunner mode, use attack button OR shot button
     // Rank Scaling for Max Ammo
-    // Set max ammo to 50
-    gunnerMaxAmmo = 50;
+    // Rank Scaling for Max Ammo
+    const rankIdx = battleRankIndex;
+    const baseMax = 32;
+    const rankBonus = Math.min(18, rankIdx * 3); // C=0, B=3, A=6, S=9, SS=12, SSS=15, EX=18
+    gunnerMaxAmmo = baseMax + rankBonus;
 
     const shotInput = playerStyle === "gunner" ? input.attack : input.shot;
 
