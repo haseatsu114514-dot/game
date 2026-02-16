@@ -13109,6 +13109,9 @@
     ctx.fillRect(burstBarX, burstBarY, burstBarW, 6);
     drawBurstSegment(burstBarX + 1, fullBurstW, burstRatio1, activeTone, burstReady1, proteinBurstTimer > 0 || isTimeBurstActive());
 
+    // Update DOM HUD Layer
+    updateStyleUI();
+
     if (bossActive) {
       const barX = 176;
       const barY = 7;
@@ -14475,7 +14478,10 @@
   const GAME_VERSION = "v0.6.1 (GunnerFix)";
 
   // --- Gunner UI & Helper Functions ---
+  // --- Gunner UI & Helper Functions ---
   const btnAttack = document.getElementById("btn-attack");
+  const hudAmmo = document.getElementById("hud-ammo");
+  const hudChargeFill = document.getElementById("hud-charge-fill");
 
   try { updateStyleUI(); } catch (_e) { console.error("[init] updateStyleUI", _e); }
   console.log("Game Version:", GAME_VERSION);
@@ -14490,6 +14496,42 @@
       btnAttack.style.boxShadow = isBerserker
         ? "0 4px 0 #990000"
         : "0 4px 0 #000099";
+    }
+
+    if (hudAmmo && hudChargeFill) {
+      // 1. Ammo Display
+      if (playerStyle === "gunner") {
+        hudAmmo.style.display = "block";
+        const rankIdx = battleRankIndex;
+        const baseMax = 12;
+        const rankBonus = Math.min(18, rankIdx * 3);
+        const maxAmmo = baseMax + rankBonus;
+        hudAmmo.textContent = `Ammo: ${gunnerAmmo} / ${maxAmmo}`;
+      } else {
+        hudAmmo.style.display = "none";
+      }
+
+      // 2. Charge Bar Display
+      let chargeRatio = 0;
+
+      if (playerStyle === "berserker") {
+        chargeRatio = attackChargeTimer / ATTACK_CHARGE_MAX;
+      } else if (playerStyle === "gunner") {
+        chargeRatio = shotChargeTimer / SHOT_CHARGE_MAX;
+      }
+
+      const chargeRatio2 = attack2ChargeTimer / ATTACK2_CHARGE_MAX;
+
+      chargeRatio = Math.max(chargeRatio, chargeRatio2);
+      chargeRatio = Math.min(1, Math.max(0, chargeRatio));
+
+      hudChargeFill.style.width = `${chargeRatio * 100}%`;
+
+      if (chargeRatio >= 1) {
+        hudChargeFill.style.background = "#ffff00";
+      } else {
+        hudChargeFill.style.background = "#00ff00";
+      }
     }
   }
 

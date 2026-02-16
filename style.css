@@ -377,3 +377,47 @@ body {
     min-height: 50px;
   }
 }
+
+/* HUD Layer */
+#hud-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 4px;
+  box-sizing: border-box;
+  z-index: 10;
+}
+
+#hud-ammo {
+  color: #fff;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 10px;
+  text-shadow: 1px 1px 0 #000;
+  margin-bottom: 2px;
+  display: none;
+}
+
+#hud-charge-container {
+  width: 60px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+#hud-charge-fill {
+  width: 0%;
+  height: 100%;
+  background: #00ff00;
+  transition: width 0.05s linear;
+}
