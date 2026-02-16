@@ -297,9 +297,14 @@
   const SE_EVASION_PATH = "assets/パンチの風切り音（スローモーション）1.mp3";
   const SE_EVASION_FAIL_PATH = "assets/ガラスが割れる1.mp3";
   const SE_MORNING_STAR_TIP_PATH = "assets/ロボットを殴る1.mp3";
-  const SE_SHOTGUN_PATH = "assets/ショットガン発射.mp3"; // Missing file
+  const SE_SHOTGUN_PATH = "assets/ショットガン発射.mp3";
   const SE_STAGE_CLEAR_PATH = "assets/「先を急ぎましょう」.mp3";
   const SE_WHIP_SWING_PATH = "assets/鞭を振り回す2.mp3";
+  // Ranged Weapon Audio
+  const SE_HANDGUN_PATH = "assets/拳銃を撃つ.mp3";
+  const SE_MACHINEGUN_PATH = "assets/サブマシンガン発射1.mp3";
+  const SE_BAZOOKA_PATH = "assets/大砲2.mp3";
+  const SE_STRONG_HIT_PATH = "assets/ロボットを強く殴る3.mp3";
 
   const VOICE_VOL = 0.7;
 
@@ -1008,6 +1013,10 @@
       seShotgun = new Audio(SE_SHOTGUN_PATH);
       seStageClear = new Audio(SE_STAGE_CLEAR_PATH);
       seWhipSwing = new Audio(SE_WHIP_SWING_PATH);
+      seHandgun = new Audio(SE_HANDGUN_PATH);
+      seMachineGun = new Audio(SE_MACHINEGUN_PATH);
+      seBazooka = new Audio(SE_BAZOOKA_PATH);
+      seStrongHit = new Audio(SE_STRONG_HIT_PATH);
       voiceDeath.volume = VOICE_VOL;
       voiceDeath.preload = "auto";
     }
@@ -5394,8 +5403,9 @@
     const hyakuretsuFinisher = options.hyakuretsuFinisher === true;
     const shoryuFinisher = hyakuretsuFinisher;
     const chargeRatio = clamp(chargeFrames / ATTACK_CHARGE_MAX, 0, 1);
-    const strongWave = !forcePunch && chargeFrames >= ATTACK_WAVE_CHARGE_MIN - 0.01;
-    const morningStarSpin = !forcePunch && !comboPunch && !strongWave
+    const maxChargeMorningStar = !forcePunch && chargeFrames >= ATTACK_CHARGE_MAX - 1;
+    const strongWave = false;
+    const morningStarSpin = !forcePunch && !comboPunch && !maxChargeMorningStar
       && chargeFrames >= ATTACK_MORNINGSTAR_SPIN_MIN
       && chargeFrames < ATTACK_MORNINGSTAR_CHARGE_MIN;
 
@@ -5403,14 +5413,14 @@
       playSound(seWhipSwing, 1.0);
     }
 
-    const morningStarStrike = !forcePunch && !comboPunch && !strongWave
+    const morningStarStrike = !forcePunch && !comboPunch && !maxChargeMorningStar
       && !morningStarSpin
       && chargeFrames >= ATTACK_MORNINGSTAR_CHARGE_MIN;
     const morningStarLong = morningStarStrike && chargeFrames >= ATTACK_MORNINGSTAR_LONG_MIN;
     const comboYOffset = comboType === "kick" ? 5 : comboType === "upper" ? 1 : 2;
     const comboBaseY = comboType === "kick" ? 11 : comboType === "upper" ? 7 : 6;
-    const strikeYOffset = strongWave ? 0 : morningStarStrike ? 0 : comboPunch ? comboYOffset : 2;
-    const strikeBaseY = morningStarStrike ? 12 : comboPunch ? comboBaseY : strongWave ? 4 : 6;
+    const strikeYOffset = maxChargeMorningStar ? -8 : morningStarStrike ? 0 : comboPunch ? comboYOffset : 2;
+    const strikeBaseY = morningStarStrike ? 12 : comboPunch ? comboBaseY : maxChargeMorningStar ? 4 : 6;
     const comboHitH = comboType === "kick" ? 10 + Math.floor(chargeRatio * 2) : comboType === "upper" ? 13 + Math.floor(chargeRatio * 2) : 10 + Math.floor(chargeRatio * 2);
     const comboReachBonus = comboType === "kick" ? 3 : comboType === "upper" ? 1 : 0;
     const comboPowerBonus = comboType === "kick" ? 0.16 : comboType === "upper" ? 0.22 : comboType === "punch" ? 0.08 : 0;
@@ -5430,8 +5440,8 @@
     const baseSpinRadiusY = 15 + Math.floor(chargeRatio * 16);
     const spinRadiusX = Math.max(12, Math.floor(baseSpinRadiusX * (1 + (rankRangeMul - 1) * 0.9)));
     const spinRadiusY = Math.max(10, Math.floor(baseSpinRadiusY * (1 + (rankRangeMul - 1) * 0.85)));
-    const baseReach = strongWave
-      ? 22 + Math.floor(chargeRatio * 40)
+    const baseReach = maxChargeMorningStar
+      ? 55 + Math.floor(chargeRatio * 10)
       : morningStarStrike
         ? 20 + Math.floor(chargeRatio * 18) + (morningStarLong ? 10 : 0)
         : morningStarSpin
@@ -5523,8 +5533,14 @@
         x: dir > 0 ? hitBox.x + hitBox.w - tipW : hitBox.x,
         y: hitBox.y - 2,
         w: tipW,
+        w: tipW,
         h: hitBox.h + 4,
       });
+    } else if (maxChargeMorningStar) {
+      const tipW = 20; const tipH = 20;
+      const tx = dir > 0 ? hitBox.x + hitBox.w - tipW + 4 : hitBox.x - 4;
+      const ty = hitBox.y + hitBox.h * 0.5 - tipH * 0.5;
+      tipBoxes.push({ x: tx, y: ty, w: tipW, h: tipH });
     } else if (morningStarSpin) {
       const spinBox = hitBoxes[0];
       if (spinBox) {
@@ -5760,7 +5776,14 @@
       registerNearMissRank(parryX, parryY, 0.9 + rewardHits * 0.18);
     }
 
-    if (strongWave) {
+    if (maxChargeMorningStar) {
+      if (seStrongHit) playSound(seStrongHit, 1.0);
+      triggerImpact(2.0, hitX, hitY, 4.0);
+      spawnWaveBurst(hitX, hitY, 2.5);
+      hitStopTimer = 12;
+      impactShakePower = 6;
+      impactShakeTimer = 15;
+    } else if (strongWave) {
       const waveW = Math.max(16, Math.floor((18 + Math.floor(chargeRatio * 8)) * (1 + (rankRangeMul - 1) * 0.86)));
       const waveH = Math.max(10, Math.floor((12 + Math.floor(chargeRatio * 8)) * (1 + (rankRangeMul - 1) * 0.72)));
       const waveSpeed = (2.8 + chargeRatio * 1.5) * rankKnockMul * dir;
@@ -6316,6 +6339,89 @@
     attackChargeTimer = 0;
     attackMaxHoldTimer = 0;
     attackChargeReadyPlayed = false;
+
+    updateShot(dt);
+  }
+
+  // Ranged Weapon Logic
+  let shotMachineGunCount = 0;
+  let shotMachineGunFrame = 0;
+
+  function updateShot(dt) {
+    if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
+    if (deathAnimActive || player.hp <= 0) return;
+    if (hitStopTimer > 0) return;
+
+    // Charging
+    if (input.shot) {
+      if (typeof shotChargeTimer === "undefined") shotChargeTimer = 0;
+      shotChargeTimer = Math.min(SHOT_CHARGE_MAX, shotChargeTimer + dt);
+      return;
+    }
+
+    // Release
+    if (shotChargeTimer > 0) {
+      let tier = 0; // Handgun
+      if (shotChargeTimer >= SHOT_CHARGE_MAX - 1) tier = 3; // Bazooka
+      else if (shotChargeTimer >= SHOT_MACHINEGUN_THRESHOLD) tier = 2; // Machinegun
+      else if (shotChargeTimer >= SHOT_SHOTGUN_THRESHOLD) tier = 1; // Shotgun
+
+      fireRangedWeapon(tier);
+      shotChargeTimer = 0;
+    }
+
+    // Machine Gun Burst Handling
+    if (shotMachineGunCount > 0) {
+      shotMachineGunFrame += dt;
+      if (shotMachineGunFrame >= 4) { // Fire every 4 frames
+        shotMachineGunFrame = 0;
+        shotMachineGunCount--;
+        fireRangedProjectile(2); // Tier 2 projectile
+        if (seMachineGun) playSound(seMachineGun, 0.4);
+      }
+    }
+  }
+
+  function fireRangedWeapon(tier) {
+    if (tier === 3) { // Bazooka
+      fireRangedProjectile(3);
+      if (seBazooka) playSound(seBazooka, 0.8);
+    } else if (tier === 2) { // Machine Gun (Start Burst)
+      shotMachineGunCount = 5;
+      shotMachineGunFrame = 4; // Immediate first shot
+    } else if (tier === 1) { // Shotgun
+      fireRangedProjectile(1);
+      if (seShotgun) playSound(seShotgun, 0.7);
+    } else { // Handgun
+      fireRangedProjectile(0);
+      if (seHandgun) playSound(seHandgun, 0.5);
+    }
+  }
+
+  function fireRangedProjectile(tier) {
+    const dir = player.facing;
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.45;
+
+    if (tier === 3) { // Bazooka
+      stage.playerWaves.push({
+        kind: "bazooka", x: px + dir * 20, y: py - 4, w: 16, h: 8, vx: dir * 4.5, vy: 0, ttl: 120, power: 1.8, spin: 0
+      });
+    } else if (tier === 2) { // Machine Gun Bullet
+      stage.playerWaves.push({
+        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * 9, vy: (Math.random() - 0.5) * 1.5, ttl: 50, power: 0.4
+      });
+    } else if (tier === 1) { // Shotgun (Spread)
+      for (let i = -2; i <= 2; i++) {
+        stage.playerWaves.push({
+          kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: i * 1.2, ttl: 25, power: 0.6
+        });
+      }
+    } else { // Handgun
+      stage.playerWaves.push({
+        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * 8.5, vy: 0, ttl: 60, power: 0.5
+      });
+    }
   }
 
   function updatePlayerWaves(dt, solids) {
@@ -6331,10 +6437,20 @@
       let parryHits = 0;
       let parryX = wave.x + wave.w * 0.5;
       let parryY = wave.y + wave.h * 0.5;
-      wave.phase += dt;
-      wave.spin = (wave.spin || 0) + dt * (0.24 + (wave.power || 0) * 0.18);
-      wave.x += wave.vx * dt;
-      wave.y += Math.sin(wave.phase * 0.2) * 0.22;
+      if (wave.kind === "bazooka") {
+        wave.x += wave.vx * dt;
+        wave.y += wave.vy * dt;
+        wave.spin = (wave.spin || 0) + dt * 0.35;
+      } else if (wave.kind === "bullet" || wave.kind === "shotgun") {
+        wave.x += wave.vx * dt;
+        wave.y += wave.vy * dt;
+      } else {
+        // Original Wave
+        wave.phase += dt;
+        wave.spin = (wave.spin || 0) + dt * (0.24 + (wave.power || 0) * 0.18);
+        wave.x += wave.vx * dt;
+        wave.y += Math.sin(wave.phase * 0.2) * 0.22;
+      }
       wave.ttl -= dt;
       const hitLeft = Math.max(wave.x, screenLeft);
       const hitRight = Math.min(wave.x + wave.w, screenRight);
@@ -10611,6 +10727,36 @@
   function drawPlayerWave(wave) {
     const x = Math.floor(wave.x - cameraX);
     const y = Math.floor(wave.y);
+
+    if (wave.kind === "bullet") {
+      ctx.fillStyle = "#ffeea8"; // Pale yellow
+      ctx.fillRect(x, y, wave.w, wave.h);
+      ctx.fillStyle = "#ff8800"; // Orange core
+      ctx.fillRect(x + 2, y + 1, wave.w - 4, wave.h - 2);
+      return;
+    }
+    if (wave.kind === "shotgun") {
+      ctx.fillStyle = "#fffacd"; // Lemon Chiffon
+      ctx.fillRect(x, y, wave.w, wave.h);
+      return;
+    }
+    if (wave.kind === "bazooka") {
+      ctx.save();
+      ctx.translate(x + wave.w * 0.5, y + wave.h * 0.5);
+      ctx.rotate(wave.spin || 0);
+      // Missile Body
+      ctx.fillStyle = "#888888";
+      ctx.fillRect(-6, -4, 12, 8);
+      // Warhead
+      ctx.fillStyle = "#ff4444";
+      ctx.fillRect(6, -4, 4, 8);
+      // Fins
+      ctx.fillStyle = "#555555";
+      ctx.fillRect(-6, -7, 4, 3);
+      ctx.fillRect(-6, 4, 4, 3);
+      ctx.restore();
+      return;
+    }
     const power = clamp(wave.power || 0, 0, 1.8);
     const flareBoost = clamp((power - 1) / 0.8, 0, 1);
     const shift = Math.floor(wave.phase * 0.95) % 6;
@@ -13929,6 +14075,8 @@
     Space: "jump",
     KeyJ: "attack",
     KeyF: "attack",
+    KeyH: "shot",
+    KeyI: "shot",
     KeyK: "special",
     KeyL: "special2",
     Enter: "start",
