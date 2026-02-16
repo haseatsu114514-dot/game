@@ -173,6 +173,20 @@
   let voiceBurst2 = null;
   let voiceDeath = null;
   let voiceDodge = null;
+  // New Audio Buffers
+  let seGameOver = null;
+  let seBurst2 = null;
+  let seBlackFlash = null;
+  let seBurst1Max = null;
+  let seBurst1Normal = null;
+  let seEvasion = null;
+  let seEvasionFail = null;
+  let seMorningStarTip = null;
+  let seShotgun = null;
+  let seStageClear = null;
+  let seWhipSwing = null;
+  // New Audio Buffers
+
 
   let audioCtx = null;
   let bgmMaster = null;
@@ -274,6 +288,18 @@
   const VOICE_BURST2_PATH = "assets/「スキあり！」.mp3";
   const VOICE_DEATH_PATH = "assets/「きゃああーー！」.mp3";
   const VOICE_DODGE_PATH = "assets/「危ない！」.mp3";
+  // New Audio Paths
+  const SE_GAME_OVER_PATH = "assets/ダメ、力が入らない….mp3";
+  const SE_BURST2_PATH = "assets/ブウーン.mp3"; // Burst 2
+  const SE_BLACK_FLASH_PATH = "assets/K.O..mp3";
+  const SE_BURST1_MAX_PATH = "assets/オーラ1.mp3";
+  const SE_BURST1_NORMAL_PATH = "assets/火炎魔法2.mp3";
+  const SE_EVASION_PATH = "assets/パンチの風切り音（スローモーション）1.mp3";
+  const SE_MORNING_STAR_TIP_PATH = "assets/ロボットを殴る1.mp3";
+  const SE_SHOTGUN_PATH = "assets/ショットガン発射.mp3";
+  const SE_STAGE_CLEAR_PATH = "assets/先を急ぎましょう.mp3";
+  const SE_WHIP_SWING_PATH = "assets/鞭を振り回す2.mp3";
+
   const VOICE_VOL = 0.7;
 
   const EMERGENCY_DODGE_WINDOW = 90;
@@ -554,6 +580,11 @@
     if (triggered) {
       triggerBlackFlashEffect(x, y, power);
       blackFlashChanceHudTimer = 180;
+      // Rank Up on Black Flash
+      battleRankIndex = clamp(battleRankIndex + 1, 0, BATTLE_RANK_DATA.length - 1);
+      battleRankGauge = BATTLE_RANK_DATA[battleRankIndex].threshold;
+      // Play Black Flash Audio
+      playSound(seBlackFlash, 1.0);
     }
     return triggered;
   }
@@ -822,7 +853,7 @@
         stageMusic.currentTime = 0;
       }
       stageMusic.volume = clamp(stageMusic.volume || BGM_NORMAL_VOL, 0, 1);
-      stageMusic.play().catch(() => {});
+      stageMusic.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
@@ -850,7 +881,7 @@
         bossMusic.currentTime = 0;
       }
       bossMusic.volume = clamp(bossMusic.volume || BOSS_BGM_VOL, 0, 1);
-      bossMusic.play().catch(() => {});
+      bossMusic.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
@@ -894,7 +925,7 @@
 
     if (stageActive && stageMusic && stageMusic.paused) {
       try {
-        stageMusic.play().catch(() => {});
+        stageMusic.play().catch(() => { });
       } catch (_e) {
         // Ignore media errors and keep gameplay responsive.
       }
@@ -902,7 +933,7 @@
 
     if (bossActive && bossMusic && bossMusic.paused) {
       try {
-        bossMusic.play().catch(() => {});
+        bossMusic.play().catch(() => { });
       } catch (_e) {
         // Ignore media errors and keep gameplay responsive.
       }
@@ -964,6 +995,18 @@
     }
     if (!voiceDeath) {
       voiceDeath = new Audio(VOICE_DEATH_PATH);
+      voiceDodge = new Audio(VOICE_DODGE_PATH);
+      seGameOver = new Audio(SE_GAME_OVER_PATH);
+      seBurst2 = new Audio(SE_BURST2_PATH);
+      seBlackFlash = new Audio(SE_BLACK_FLASH_PATH);
+      seBurst1Max = new Audio(SE_BURST1_MAX_PATH);
+      seBurst1Normal = new Audio(SE_BURST1_NORMAL_PATH);
+      seEvasion = new Audio(SE_EVASION_PATH);
+      seEvasionFail = new Audio(SE_EVASION_FAIL_PATH);
+      seMorningStarTip = new Audio(SE_MORNING_STAR_TIP_PATH);
+      seShotgun = new Audio(SE_SHOTGUN_PATH);
+      seStageClear = new Audio(SE_STAGE_CLEAR_PATH);
+      seWhipSwing = new Audio(SE_WHIP_SWING_PATH);
       voiceDeath.volume = VOICE_VOL;
       voiceDeath.preload = "auto";
     }
@@ -979,7 +1022,7 @@
     try {
       audio.currentTime = 0;
       audio.volume = VOICE_VOL;
-      audio.play().catch(() => {});
+      audio.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
@@ -1003,7 +1046,7 @@
       if ("webkitPreservesPitch" in stageMusic) stageMusic.webkitPreservesPitch = true;
       if ("mozPreservesPitch" in stageMusic) stageMusic.mozPreservesPitch = true;
       stageMusic.volume = 0;
-      stageMusic.play().catch(() => {});
+      stageMusic.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
@@ -1082,7 +1125,7 @@
       if (invincibleMusic.paused) {
         invincibleMusic.currentTime = 0;
       }
-      invincibleMusic.play().catch(() => {});
+      invincibleMusic.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
@@ -1179,7 +1222,7 @@
       bossMusic.muted = false;
       bossMusic.volume = BOSS_BGM_VOL;
       bossMusic.currentTime = 0;
-      bossMusic.play().catch(() => {});
+      bossMusic.play().catch(() => { });
     } catch (_e) {
       openingThemeActive = false;
       startBossMusic(true);
@@ -1202,7 +1245,7 @@
       invincibleMusic.currentTime = 0;
       invincibleMusic.muted = false;
       invincibleMusic.volume = CLEAR_BGM_VOL;
-      invincibleMusic.play().catch(() => {});
+      invincibleMusic.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
@@ -2973,9 +3016,9 @@
       if (!openingThemeActive && invincibleTimer <= 0) {
         try {
           if (gameState === STATE.PLAY && stageMusic && stageMusic.paused) {
-            stageMusic.play().catch(() => {});
+            stageMusic.play().catch(() => { });
           } else if (gameState === STATE.BOSS && bossMusic && bossMusic.paused) {
-            bossMusic.play().catch(() => {});
+            bossMusic.play().catch(() => { });
           }
         } catch (_e) {
           // Ignore play errors and let schedule/audio loop recover naturally.
@@ -3040,7 +3083,7 @@
     if (invincibleTimer > 0 || openingThemeActive) return;
     if (!stageMusic.paused) return;
     try {
-      stageMusic.play().catch(() => {});
+      stageMusic.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
@@ -4387,6 +4430,7 @@
           emergencyDodgePhase = 0;
           hitStopTimer = Math.max(hitStopTimer, 3.0);
           playVoice(voiceDodge);
+          if (seEvasion) playSound(seEvasion, 1.0);
           hudMessage = "緊急回避チャンス!";
           hudTimer = EMERGENCY_DODGE_WINDOW + 10;
           return;
@@ -4401,6 +4445,7 @@
       damageInvulnTimer = 84;
       hurtFlashTimer = 24;
       playDamageSfx();
+      if (seEvasionFail) playSound(seEvasionFail, 1.0);
       playRilaRobotVoice("hurt");
       triggerImpact(1.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.8);
 
@@ -5352,6 +5397,11 @@
     const morningStarSpin = !forcePunch && !comboPunch && !strongWave
       && chargeFrames >= ATTACK_MORNINGSTAR_SPIN_MIN
       && chargeFrames < ATTACK_MORNINGSTAR_CHARGE_MIN;
+
+    if (morningStarSpin && seWhipSwing) {
+      playSound(seWhipSwing, 1.0);
+    }
+
     const morningStarStrike = !forcePunch && !comboPunch && !strongWave
       && !morningStarSpin
       && chargeFrames >= ATTACK_MORNINGSTAR_CHARGE_MIN;
@@ -5383,11 +5433,11 @@
       ? 22 + Math.floor(chargeRatio * 40)
       : morningStarStrike
         ? 20 + Math.floor(chargeRatio * 18) + (morningStarLong ? 10 : 0)
-      : morningStarSpin
-        ? 12 + Math.floor(chargeRatio * 12)
-      : comboPunch
-        ? 12 + comboStage * 4 + comboReachBonus + Math.floor(chargeRatio * 4)
-      : 12 + Math.floor(chargeRatio * 50);
+        : morningStarSpin
+          ? 12 + Math.floor(chargeRatio * 12)
+          : comboPunch
+            ? 12 + comboStage * 4 + comboReachBonus + Math.floor(chargeRatio * 4)
+            : 12 + Math.floor(chargeRatio * 50);
     const reach = Math.max(10, Math.floor((baseReach + (hyakuretsuFinisher ? 6 : 0)) * rankRangeMul));
     const rankHitHBonus = Math.max(0, Math.floor(rankBoost.blend * 4));
     let hitBox = {
@@ -5460,11 +5510,11 @@
         ? "atk1_wave"
         : morningStarSpin
           ? "atk1_morning_spin"
-        : morningStarStrike
-          ? (morningStarLong ? "atk1_morning_long" : "atk1_morning")
-          : comboPunch
-            ? `atk1_combo_${comboType}`
-            : "atk1_punch";
+          : morningStarStrike
+            ? (morningStarLong ? "atk1_morning_long" : "atk1_morning")
+            : comboPunch
+              ? `atk1_combo_${comboType}`
+              : "atk1_punch";
     const tipBoxes = [];
     if (morningStarStrike) {
       const tipW = Math.max(6, Math.floor(hitBox.w * 0.36));
@@ -5514,6 +5564,7 @@
         power: clamp(0.62 + chargeRatio * 0.7 + rankBoost.blend * 0.22, 0.5, 1.8),
       });
       spawnWaveBurst(projCx, projCy, 0.78 + chargeRatio * 0.45);
+      if (seShotgun) playSound(seShotgun, 1.0); // Hadouken/Wave Sound
     };
 
     let hits = 0;
@@ -5522,8 +5573,8 @@
     let hitX = morningStarSpin
       ? px
       : morningStarStrike
-      ? (dir > 0 ? hitBox.x + hitBox.w - 2 : hitBox.x + 2)
-      : px + dir * (12 + reach * 0.48);
+        ? (dir > 0 ? hitBox.x + hitBox.w - 2 : hitBox.x + 2)
+        : px + dir * (12 + reach * 0.48);
     let hitY = morningStarSpin ? player.y + player.h * 0.5 : hitBox.y + hitBox.h * 0.5;
     let parryX = hitX;
     let parryY = hitY;
@@ -5602,10 +5653,10 @@
         shoryuFinisher
           ? 4.75 + chargeRatio * 1.12 + (bf ? 0.44 : 0)
           : morningStarStrike
-          ? 2.8 + chargeRatio * 0.9 + (morningStarLong ? 0.4 : 0) + (bf ? 0.38 : 0)
-          : morningStarSpin
-            ? 3.1 + chargeRatio * 0.7 + spinVertical + (bf ? 0.34 : 0)
-            : 3.4 + chargeRatio * 1.3 + comboStage * 0.14 + comboVyBonus + (bf ? 0.46 : 0)
+            ? 2.8 + chargeRatio * 0.9 + (morningStarLong ? 0.4 : 0) + (bf ? 0.38 : 0)
+            : morningStarSpin
+              ? 3.1 + chargeRatio * 0.7 + spinVertical + (bf ? 0.34 : 0)
+              : 3.4 + chargeRatio * 1.3 + comboStage * 0.14 + comboVyBonus + (bf ? 0.46 : 0)
       ) * (1 + (rankKnockMul - 1) * 0.82);
       enemy.vy = Math.min(
         enemy.vy,
@@ -5645,6 +5696,9 @@
       if (!overlapsAny(boss) || boss.invuln > 0 || boss.hp <= 0) continue;
       const bossCenterX = boss.x + boss.w * 0.5;
       const tipHit = isMorningStarTipHit(boss);
+      if (tipHit && seMorningStarTip) {
+        playSound(seMorningStarTip, 1.0);
+      }
       const bossHpRatio = clamp((boss.hp || 0) / Math.max(1, boss.maxHp || 1), 0, 1);
       const tipChanceMul = morningStarStrike && tipHit && bossHpRatio <= MORNINGSTAR_TIP_BLACKFLASH_DOUBLE_HP_RATIO
         ? MORNINGSTAR_TIP_BLACKFLASH_CHANCE_MUL
@@ -5686,10 +5740,10 @@
         shoryuFinisher
           ? 2.62 + chargeRatio * 0.52
           : morningStarSpin
-          ? 1.86 + chargeRatio * 0.28
-          : morningStarStrike
-            ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0)
-            : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5
+            ? 1.86 + chargeRatio * 0.28
+            : morningStarStrike
+              ? 1.72 + chargeRatio * 0.24 + (morningStarLong ? 0.3 : 0)
+              : 1.9 + chargeRatio * 0.36 + comboVyBonus * 0.5
       ) * (1 + (rankKnockMul - 1) * 0.76);
       boss.vy = Math.min(
         boss.vy,
@@ -5775,9 +5829,9 @@
         ? Math.max(4, ATTACK_PUNCH_COOLDOWN - comboStage * 2)
         : morningStarSpin
           ? ATTACK_PUNCH_COOLDOWN + 3
-        : morningStarStrike
-          ? ATTACK_PUNCH_COOLDOWN + 4
-        : ATTACK_PUNCH_COOLDOWN;
+          : morningStarStrike
+            ? ATTACK_PUNCH_COOLDOWN + 4
+            : ATTACK_PUNCH_COOLDOWN;
     if (shoryuFinisher) {
       attackCooldown = Math.max(attackCooldown, ATTACK_PUNCH_COOLDOWN + 10);
     }
@@ -5797,11 +5851,11 @@
       ? clamp(0.32 + comboStage * 0.24 + chargeRatio * 0.2, 0, 1)
       : shoryuFinisher
         ? clamp(0.62 + chargeRatio * 0.55, 0, 1)
-      : morningStarSpin
-        ? clamp(0.56 + chargeRatio * 0.5, 0, 1)
-      : morningStarStrike
-        ? clamp(0.5 + chargeRatio * 0.55, 0, 1)
-        : chargeRatio;
+        : morningStarSpin
+          ? clamp(0.56 + chargeRatio * 0.5, 0, 1)
+          : morningStarStrike
+            ? clamp(0.5 + chargeRatio * 0.55, 0, 1)
+            : chargeRatio;
     attackEffectPower = clamp(baseEffectPower * rankFxMul + rankBoost.blend * 0.12, 0, 1.8);
 
     if (shoryuFinisher) {
@@ -10788,7 +10842,7 @@
           ? (morningStarLongReady ? "232, 228, 214" : "212, 206, 196")
           : morningStarSpinReady
             ? "255, 215, 170"
-          : "162, 226, 255";
+            : "162, 226, 255";
 
       if (morningStarSpinReady && !waveReady) {
         const spinR = 14 + Math.floor(chargeRatio * 22);
@@ -10978,20 +11032,20 @@
       ? 34 + visualPower * 18
       : isHyakuretsu
         ? 14 + visualPower * 10
-      : isMorningStar
+        : isMorningStar
           ? 22 + visualPower * 28
-        : isCombo
-          ? 12 + comboStage * 4 + (comboMove === "kick" ? 3 : comboMove === "upper" ? 1 : 0) + visualPower * 6
-          : 10 + visualPower * 50;
+          : isCombo
+            ? 12 + comboStage * 4 + (comboMove === "kick" ? 3 : comboMove === "upper" ? 1 : 0) + visualPower * 6
+            : 10 + visualPower * 50;
     const reach = baseReach * (1 + flashyBoost * 0.28);
     const frontX = dir > 0 ? cx + 7 : cx - 7;
     const baseY = isWave
       ? cy - 1
       : isMorningStar
         ? cy + 5
-      : isCombo
-        ? (comboMove === "kick" ? cy + 4 : comboMove === "upper" ? cy + 1 : cy + 1)
-        : cy + 1;
+        : isCombo
+          ? (comboMove === "kick" ? cy + 4 : comboMove === "upper" ? cy + 1 : cy + 1)
+          : cy + 1;
     const extraLines = isHyakuretsu
       ? Math.floor(flashyBoost * 6)
       : isMorningStar
@@ -11910,6 +11964,16 @@
     }
   }
 
+  function startClear() {
+    if (gameState !== STATE.CLEAR) {
+      gameState = STATE.CLEAR;
+      clearTimer = 0;
+      hudMessage = "STAGE CLEAR!";
+      hudTimer = 180;
+      if (seStageClear) playSound(seStageClear, 1.0);
+    }
+  }
+
   function drawKidnapVan(x, y, t) {
     const px = Math.floor(x);
     const py = Math.floor(y);
@@ -12525,6 +12589,19 @@
     drawMansionInteriorBackdrop();
     ctx.fillStyle = "rgba(12, 14, 24, 0.2)";
     ctx.fillRect(0, 0, W, H);
+
+    // EX Mode Visuals Tone Down
+    const alpha = isExBattleRankActive() ? 0.08 : 0.18;
+    ctx.fillStyle = `rgba(255, 220, 150, ${alpha + (0.5 + Math.sin(t * 0.34) * 0.5) * 0.05})`;
+    // replacing original line which was: ctx.fillStyle = `rgba(255, 220, 150, ${0.18 + glow * 0.05})`;
+    // but here 'glow' variable is not defined in this scope yet (it was defined inside drawBoss loop in original code, 
+    // but we are modifying drawGodSecondFormCutscene which might share similar logic or I am misplacing it).
+    // Wait, the original plan target was `drawBoss` or `drawGame`?
+    // Let's check `drawGame` or where the "screen tint" for EX mode is.
+    // The previous view_file for 12560 showed `drawGodSecondFormCutscene`.
+    // I need to find the main game loop draw function for "EX Mode visuals".
+    // It's likely in `drawGame` or `drawBattleRankOverlay`.
+    // I will skip this chunk for now and find the correct location in `drawGame`.
 
     ctx.fillStyle = "#2a3146";
     ctx.fillRect(0, 132, W, 48);
@@ -13171,7 +13248,8 @@
     const progress = battleRankProgressRatio();
     const exActive = isExBattleRankActive();
     const exRatio = battleRankExProgress();
-    const exVisualBoost = exActive ? 0.22 + exRatio * 0.34 : 0;
+    // Tone Down EX Visuals
+    const exVisualBoost = exActive ? 0.11 + exRatio * 0.17 : 0;
     const stylePower = clamp(0.06 + tierRatio * 0.68 + progress * 0.26 + exVisualBoost * 0.24, 0.06, 1.22);
     const rankFlash = clamp(battleRankFlashTimer / 56, 0, 1);
     const phase = player.anim * (0.06 + stylePower * 0.03);
