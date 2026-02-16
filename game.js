@@ -47,6 +47,8 @@
     jump: false,
     attack: false,
     attack2: false,
+    shot: false,
+    styleChange: false,
     special: false,
     special2: false,
     start: false,
@@ -140,6 +142,8 @@
   let attackMashCount = 0;
   let attackMashTimer = 0;
   let shotChargeTimer = 0;
+  let playerStyle = "berserker"; // "berserker" or "gunner"
+  let shotReloadTimer = 0;
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
   let hyakuretsuAutoTimer = 0;
@@ -318,8 +322,8 @@
   const EMERGENCY_DODGE_INVULN_DURATION = 60;
   const EMERGENCY_DODGE_CHANCE = [0, 0.08, 0.15, 0.22, 0.30, 0.40, 0.50];
   const SHOT_CHARGE_MAX = 120;
-  const SHOT_MACHINEGUN_THRESHOLD = 60;
-  const SHOT_SHOTGUN_THRESHOLD = 20;
+  const SHOT_TIER2_THRESHOLD = 60; // Medium charge (Shotgun)
+  const SHOT_TIER1_THRESHOLD = 20; // Small charge (Machinegun)
   const WEAPON_DURATION = 600;
   const PROTEIN_BURST_REQUIRE = 18;
   const PROTEIN_BURST_MIN = Math.ceil(PROTEIN_BURST_REQUIRE * 0.5);
@@ -4651,6 +4655,7 @@
     shotChargeTimer = 0;
     shotMachineGunCount = 0;
     shotMachineGunFrame = 0;
+    shotReloadTimer = 0;
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
     hyakuretsuAutoTimer = 0;
@@ -6304,6 +6309,16 @@
       return;
     }
 
+    if (shotReloadTimer > 0) shotReloadTimer -= dt;
+
+    // In Gunner mode, the attack button is used for shooting, so skip melee logic
+    if (playerStyle === "gunner") {
+      // Reset melee charge if switching modes while charging
+      attackChargeTimer = 0;
+      attackChargeReadyPlayed = false;
+      return;
+    }
+
     if (input.attack2) {
       const beforeCharge2 = attack2ChargeTimer;
       const chargeMul2 = battleRankChargeMultiplier();
@@ -6373,21 +6388,29 @@
     if (deathAnimActive || player.hp <= 0) return;
     if (hitStopTimer > 0) return;
 
-    // Charging
-    if (input.shot) {
+    // Charging - in Gunner mode, use attack button; otherwise use shot button
+    const shotInput = playerStyle === "gunner" ? input.attack : input.shot;
+    if (shotInput && shotReloadTimer <= 0) {
       shotChargeTimer = Math.min(SHOT_CHARGE_MAX, shotChargeTimer + dt);
       return;
     }
 
     // Release
-    if (shotChargeTimer > 0) {
+    const shotReleased = playerStyle === "gunner" ? !input.attack : !input.shot;
+    if (shotChargeTimer > 0 && shotReleased) {
       let tier = 0; // Handgun
       if (shotChargeTimer >= SHOT_CHARGE_MAX - 1) tier = 3; // Bazooka
-      else if (shotChargeTimer >= SHOT_MACHINEGUN_THRESHOLD) tier = 2; // Machinegun
-      else if (shotChargeTimer >= SHOT_SHOTGUN_THRESHOLD) tier = 1; // Shotgun
+      else if (shotChargeTimer >= SHOT_TIER2_THRESHOLD) tier = 2; // Shotgun (Medium charge)
+      else if (shotChargeTimer >= SHOT_TIER1_THRESHOLD) tier = 1; // Machinegun (Small charge)
 
       fireRangedWeapon(tier);
       shotChargeTimer = 0;
+      // Set reload timer for handgun (tier 0)
+      if (tier === 0) {
+        const rankIdx = battleRankIndex;
+        const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
+        shotReloadTimer = reloadBase;
+      }
     }
 
     // Machine Gun Burst Handling
@@ -6396,7 +6419,7 @@
       if (shotMachineGunFrame >= 4) { // Fire every 4 frames
         shotMachineGunFrame = 0;
         shotMachineGunCount--;
-        fireRangedProjectile(2); // Tier 2 projectile
+        fireRangedProjectile(1); // Machinegun Tier 1
         if (seMachineGun) playSound(seMachineGun, 0.4);
       }
     }
@@ -6406,12 +6429,12 @@
     if (tier === 3) { // Bazooka
       fireRangedProjectile(3);
       if (seBazooka) playSound(seBazooka, 0.8);
-    } else if (tier === 2) { // Machine Gun (Start Burst)
+    } else if (tier === 2) { // Shotgun (Tier 2 now)
+      fireRangedProjectile(2);
+      if (seShotgun) playSound(seShotgun, 0.7);
+    } else if (tier === 1) { // Machine Gun (Tier 1 now)
       shotMachineGunCount = 5;
       shotMachineGunFrame = 4; // Immediate first shot
-    } else if (tier === 1) { // Shotgun
-      fireRangedProjectile(1);
-      if (seShotgun) playSound(seShotgun, 0.7);
     } else { // Handgun
       fireRangedProjectile(0);
       if (seHandgun) playSound(seHandgun, 0.5);
@@ -6427,16 +6450,16 @@
       stage.playerWaves.push({
         kind: "bazooka", x: px + dir * 20, y: py - 4, w: 16, h: 8, vx: dir * 4.5, vy: 0, ttl: 120, power: 1.8, spin: 0
       });
-    } else if (tier === 2) { // Machine Gun Bullet
-      stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * 9, vy: (Math.random() - 0.5) * 1.5, ttl: 50, power: 0.4
-      });
-    } else if (tier === 1) { // Shotgun (Spread)
+    } else if (tier === 2) { // Shotgun (Tier 2 now)
       for (let i = -2; i <= 2; i++) {
         stage.playerWaves.push({
           kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: i * 1.2, ttl: 25, power: 0.6
         });
       }
+    } else if (tier === 1) { // Machine Gun (Tier 1 now)
+      stage.playerWaves.push({
+        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * 9, vy: (Math.random() - 0.5) * 1.5, ttl: 50, power: 0.4
+      });
     } else { // Handgun
       stage.playerWaves.push({
         kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * 8.5, vy: 0, ttl: 60, power: 0.5
@@ -8307,14 +8330,18 @@
       specialPressed: input.special && !prevInput.special,
       special2Pressed: input.special2 && !prevInput.special2,
       startPressed: input.start && !prevInput.start,
+      styleChangePressed: input.styleChange && !prevInput.styleChange,
     };
 
     prevInput.jump = input.jump;
+    prevInput.left = input.left;
+    prevInput.right = input.right;
     prevInput.attack = input.attack;
     prevInput.attack2 = false;
     prevInput.special = input.special;
     prevInput.special2 = input.special2;
     prevInput.start = input.start;
+    prevInput.styleChange = input.styleChange;
 
     return actions;
   }
@@ -14038,10 +14065,9 @@
   bindHoldButton("btn-right", "right");
   bindHoldButton("btn-jump", "jump");
   bindHoldButton("btn-attack", "attack");
-  bindHoldButton("btn-attack2", "attack2");
+  bindHoldButton("btn-style", "styleChange");
   bindHoldButton("btn-special", "special");
   bindHoldButton("btn-special2", "special2");
-  bindHoldButton("btn-shot", "shot");
   refreshBurstButtonUi();
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -14097,9 +14123,7 @@
     Space: "jump",
     KeyJ: "attack",
     KeyF: "attack",
-    KeyS: "attack2",
-    KeyH: "shot",
-    KeyI: "shot",
+    KeyS: "styleChange",
     KeyK: "special",
     KeyL: "special2",
     Enter: "start",
@@ -14109,6 +14133,11 @@
     unlockAudio();
     const mapped = keyToInput[e.code];
     if (!mapped) return;
+
+    if (mapped === "styleChange" && !input.styleChange) {
+      playerStyle = playerStyle === "berserker" ? "gunner" : "berserker";
+      // Optional: Play style change sound here
+    }
 
     input[mapped] = true;
 
@@ -14131,6 +14160,7 @@
     input.attack = false;
     input.attack2 = false;
     input.shot = false;
+    input.styleChange = false;
     input.special = false;
     input.special2 = false;
     input.start = false;
@@ -14203,6 +14233,12 @@
 
     scheduleBGM();
     const actions = sampleActions();
+
+    if (actions.styleChangePressed) {
+      playerStyle = playerStyle === "berserker" ? "gunner" : "berserker";
+      // Optional: Sound
+    }
+
 
     if (inCombat) {
       const dodgeFrozen = updateEmergencyDodge(rawDt, actions);
