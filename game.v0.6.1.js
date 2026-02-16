@@ -200,6 +200,7 @@
   let seMachineGun = null;
   let seBazooka = null;
   let seStrongHit = null;
+  let seReload = null;
   // New Audio Buffers
 
 
@@ -6340,7 +6341,7 @@
 
     // In Gunner mode, the attack button is used for shooting, so skip melee logic
     if (playerStyle === "gunner") {
-      updateShot(dt);
+      updateShot(dt, actions);
       // Reset melee charge if switching modes while charging
       attackChargeTimer = 0;
       attackChargeReadyPlayed = false;
@@ -6412,14 +6413,14 @@
       attackChargeReadyPlayed = false;
     }
 
-    updateShot(dt);
+    updateShot(dt, actions);
   }
 
   // Ranged Weapon Logic
   let shotMachineGunCount = 0;
   let shotMachineGunFrame = 0;
 
-  function updateShot(dt) {
+  function updateShot(dt, actions) {
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
     if (deathAnimActive || player.hp <= 0) return;
     if (hitStopTimer > 0) return;
@@ -6438,16 +6439,18 @@
     if (isNaN(shotReloadTimer)) shotReloadTimer = 0;
 
     // Double Tap Reload
-    if (playerStyle === "gunner" && input.attack && !prevInput.attack) {
+    if (playerStyle === "gunner" && actions && actions.attackPressed) {
       const now = performance.now();
       if (now - lastAttackPressTime < RELOAD_DOUBLE_TAP_TIME) {
         if (gunnerAmmo < gunnerMaxAmmo) {
           gunnerAmmo = gunnerMaxAmmo;
           playSound(seReload || seHandgun);
           shotReloadTimer = 30;
-          stage.damageTexts.push({
-            x: player.x, y: player.y - 20, text: "RELOAD", life: 40, color: "#00ff00", vy: -1
-          });
+          if (stage.damageTexts) {
+            stage.damageTexts.push({
+              x: player.x, y: player.y - 20, text: "RELOAD", life: 40, color: "#00ff00", vy: -1
+            });
+          }
           lastAttackPressTime = 0;
           return;
         }
@@ -14454,11 +14457,15 @@
       update(dt, actions);
       refreshBurstButtonUi();
       render();
+      _loopErrorCount = 0;
     } catch (e) {
-      if (_loopErrorCount < 3) {
+      if (_loopErrorCount < 10) {
         console.error("[game loop error]", e);
-        _loopErrorCount++;
       }
+      _loopErrorCount++;
+      // Emergency reset to prevent stuck state after errors
+      shotChargeTimer = 0;
+      shotMachineGunCount = 0;
     }
     requestAnimationFrame(loop);
   }
