@@ -160,6 +160,20 @@
   let deathPauseTimer = 0;
   let deathAnimActive = false;
   let deadReason = "";
+  let emergencyDodgeActive = false;
+  let emergencyDodgeTimer = 0;
+  let emergencyDodgeReason = "";
+  let emergencyDodgeOptions = {};
+  let emergencyDodgeInvulnTimer = 0;
+  let emergencyDodgeFlashTimer = 0;
+  let emergencyDodgePhase = 0;
+  let emergencyDodgeSkipNext = false;
+
+  let voiceBurst1 = null;
+  let voiceBurst2 = null;
+  let voiceDeath = null;
+  let voiceDodge = null;
+
   let audioCtx = null;
   let bgmMaster = null;
   let bgmNoiseBuffer = null;
@@ -256,6 +270,16 @@
   const STAGE_BGM_PATH = "assets/stage_bgm.mp3";
   const BOSS_BGM_PATH = "assets/boss_bgm.mp3";
   const INVINCIBLE_BGM_PATH = "assets/invincible_bgm.mp3";
+  const VOICE_BURST1_PATH = "assets/「覚悟しなさい！」.mp3";
+  const VOICE_BURST2_PATH = "assets/「スキあり！」.mp3";
+  const VOICE_DEATH_PATH = "assets/「きゃああーー！」.mp3";
+  const VOICE_DODGE_PATH = "assets/「危ない！」.mp3";
+  const VOICE_VOL = 0.7;
+
+  const EMERGENCY_DODGE_WINDOW = 90;
+  const EMERGENCY_DODGE_SLOWMO_SCALE = 0.12;
+  const EMERGENCY_DODGE_INVULN_DURATION = 60;
+  const EMERGENCY_DODGE_CHANCE = [0, 0.08, 0.15, 0.22, 0.30, 0.40, 0.50];
   const WEAPON_DURATION = 600;
   const PROTEIN_BURST_REQUIRE = 18;
   const PROTEIN_BURST_MIN = Math.ceil(PROTEIN_BURST_REQUIRE * 0.5);
@@ -927,6 +951,40 @@
     invincibleMusic.preload = "auto";
   }
 
+  function ensureVoiceFiles() {
+    if (!voiceBurst1) {
+      voiceBurst1 = new Audio(VOICE_BURST1_PATH);
+      voiceBurst1.volume = VOICE_VOL;
+      voiceBurst1.preload = "auto";
+    }
+    if (!voiceBurst2) {
+      voiceBurst2 = new Audio(VOICE_BURST2_PATH);
+      voiceBurst2.volume = VOICE_VOL;
+      voiceBurst2.preload = "auto";
+    }
+    if (!voiceDeath) {
+      voiceDeath = new Audio(VOICE_DEATH_PATH);
+      voiceDeath.volume = VOICE_VOL;
+      voiceDeath.preload = "auto";
+    }
+    if (!voiceDodge) {
+      voiceDodge = new Audio(VOICE_DODGE_PATH);
+      voiceDodge.volume = VOICE_VOL;
+      voiceDodge.preload = "auto";
+    }
+  }
+
+  function playVoice(audio) {
+    if (!audio) return;
+    try {
+      audio.currentTime = 0;
+      audio.volume = VOICE_VOL;
+      audio.play().catch(() => {});
+    } catch (_e) {
+      // Ignore media errors and keep gameplay responsive.
+    }
+  }
+
   function resumeStageMusicAfterInvincible() {
     if (gameState !== STATE.PLAY) return;
 
@@ -1294,6 +1352,8 @@
         // Ignore media errors and keep gameplay responsive.
       }
     }
+
+    ensureVoiceFiles();
 
     if (gameState === STATE.TITLE || gameState === STATE.CUTSCENE || gameState === STATE.STAGE_INTRO || gameState === STATE.PRE_BOSS) {
       startOpeningTheme();
@@ -2443,6 +2503,7 @@
       hudMessage = `BURST2: NEGATIVE SLOW ${sec}s`;
       hudTimer = 62;
     }
+    playVoice(voiceBurst2);
     return true;
   }
 
@@ -2520,6 +2581,7 @@
     waveFlashPower = Math.max(waveFlashPower, 2.0 + gaugeRatio * 1.5);
     hudMessage = fullBurst ? "PROTEIN BURST MAX!" : "METEOR BURST!";
     hudTimer = 58;
+    playVoice(voiceBurst1);
     return true;
   }
 
@@ -4311,6 +4373,26 @@
 
     if (!instantGameOver) {
       if (damageInvulnTimer > 0) return;
+      if (emergencyDodgeInvulnTimer > 0) return;
+      if (emergencyDodgeActive) return;
+
+      if (!emergencyDodgeSkipNext) {
+        const dodgeChance = EMERGENCY_DODGE_CHANCE[clamp(battleRankIndex, 0, EMERGENCY_DODGE_CHANCE.length - 1)] || 0;
+        if (dodgeChance > 0 && Math.random() < dodgeChance) {
+          emergencyDodgeActive = true;
+          emergencyDodgeTimer = EMERGENCY_DODGE_WINDOW;
+          emergencyDodgeReason = reason;
+          emergencyDodgeOptions = options;
+          emergencyDodgeFlashTimer = 18;
+          emergencyDodgePhase = 0;
+          hitStopTimer = Math.max(hitStopTimer, 3.0);
+          playVoice(voiceDodge);
+          hudMessage = "緊急回避チャンス!";
+          hudTimer = EMERGENCY_DODGE_WINDOW + 10;
+          return;
+        }
+      }
+      emergencyDodgeSkipNext = false;
 
       if (!burstRankGuard) {
         dropBattleRankOnDamage(true);
@@ -4344,6 +4426,7 @@
     playerLives = Math.max(0, playerLives - 1);
     deathContinueMode = fromBossBattle ? "boss" : "checkpoint";
     gameState = STATE.DEAD;
+    playVoice(voiceDeath);
     deadTimer = playerLives > 0 ? 134 : 182;
     deadTimerMax = deadTimer;
     deathFlashTimer = 34;
@@ -4374,6 +4457,12 @@
     stompChainGuardTimer = 0;
     damageInvulnTimer = 0;
     hurtFlashTimer = 0;
+    emergencyDodgeActive = false;
+    emergencyDodgeTimer = 0;
+    emergencyDodgeInvulnTimer = 0;
+    emergencyDodgeFlashTimer = 0;
+    emergencyDodgePhase = 0;
+    emergencyDodgeSkipNext = false;
     kickFlashTimer = 0;
     kickFlashPower = 0;
     hammerTimer = 0;
@@ -4458,6 +4547,12 @@
     playerLives = keepLives ? Math.max(1, previousLives) : START_LIVES;
     damageInvulnTimer = 0;
     hurtFlashTimer = 0;
+    emergencyDodgeActive = false;
+    emergencyDodgeTimer = 0;
+    emergencyDodgeInvulnTimer = 0;
+    emergencyDodgeFlashTimer = 0;
+    emergencyDodgePhase = 0;
+    emergencyDodgeSkipNext = false;
     impactShakeTimer = 0;
     impactShakePower = 0;
     hitStopTimer = 0;
@@ -4542,6 +4637,12 @@
     playerHearts = MAX_HEARTS;
     damageInvulnTimer = 0;
     hurtFlashTimer = 0;
+    emergencyDodgeActive = false;
+    emergencyDodgeTimer = 0;
+    emergencyDodgeInvulnTimer = 0;
+    emergencyDodgeFlashTimer = 0;
+    emergencyDodgePhase = 0;
+    emergencyDodgeSkipNext = false;
     impactShakeTimer = 0;
     impactShakePower = 0;
     hitStopTimer = 0;
@@ -8013,6 +8114,42 @@
     prevInput.start = input.start;
 
     return actions;
+  }
+
+  function updateEmergencyDodge(rawDt, actions) {
+    if (emergencyDodgeInvulnTimer > 0) {
+      emergencyDodgeInvulnTimer = Math.max(0, emergencyDodgeInvulnTimer - rawDt);
+    }
+    if (!emergencyDodgeActive) return false;
+
+    emergencyDodgeTimer = Math.max(0, emergencyDodgeTimer - rawDt);
+    emergencyDodgePhase += rawDt;
+    emergencyDodgeFlashTimer = Math.max(0, emergencyDodgeFlashTimer - rawDt);
+
+    const anyButton = actions.jumpPressed || actions.attackPressed ||
+      actions.specialPressed || actions.special2Pressed || actions.startPressed;
+
+    if (anyButton) {
+      emergencyDodgeActive = false;
+      emergencyDodgeTimer = 0;
+      emergencyDodgeInvulnTimer = EMERGENCY_DODGE_INVULN_DURATION;
+      emergencyDodgeFlashTimer = 12;
+      damageInvulnTimer = Math.max(damageInvulnTimer, 30);
+      triggerImpact(2.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 3.0);
+      hudMessage = "緊急回避成功!";
+      hudTimer = 60;
+      playPowerupSfx();
+      return false;
+    }
+
+    if (emergencyDodgeTimer <= 0) {
+      emergencyDodgeActive = false;
+      emergencyDodgeSkipNext = true;
+      killPlayer(emergencyDodgeReason, emergencyDodgeOptions);
+      return false;
+    }
+
+    return true;
   }
 
   function updatePlay(dt, actions) {
@@ -13260,6 +13397,55 @@
     ctx.fillRect(0, waveY - 3, W, 6);
   }
 
+  function drawEmergencyDodgeOverlay() {
+    if (!emergencyDodgeActive && emergencyDodgeFlashTimer <= 0) return;
+
+    if (emergencyDodgeActive) {
+      const ratio = clamp(emergencyDodgeTimer / EMERGENCY_DODGE_WINDOW, 0, 1);
+      const pulse = 0.5 + Math.sin(emergencyDodgePhase * 1.2) * 0.5;
+
+      ctx.save();
+      ctx.globalCompositeOperation = "difference";
+      const invAlpha = clamp(0.92 + pulse * 0.08, 0.85, 1);
+      ctx.fillStyle = `rgba(255, 255, 255, ${invAlpha})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+
+      ctx.fillStyle = `rgba(255, 40, 60, ${0.06 + ratio * 0.1})`;
+      ctx.fillRect(0, 0, W, H);
+
+      for (let i = 0; i < 7; i += 1) {
+        const gy = ((Math.floor(emergencyDodgePhase * 4) + i * 11) % H);
+        ctx.fillStyle = `rgba(255, 200, 80, ${0.06 + ratio * 0.06})`;
+        ctx.fillRect(0, gy, W, 1);
+      }
+
+      const barY = H - 14;
+      const barW = Math.floor((W - 20) * ratio);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(8, barY - 1, W - 16, 8);
+      const barHue = ratio > 0.3 ? 120 : 0;
+      ctx.fillStyle = `hsl(${barHue}, 90%, ${55 + pulse * 15}%)`;
+      ctx.fillRect(10, barY, barW, 5);
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 10px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const promptPulse = Math.floor(emergencyDodgePhase * 4) % 2 === 0;
+      if (promptPulse) {
+        ctx.fillText("▶ ボタンを押して回避! ◀", W * 0.5, barY - 10);
+      }
+      ctx.textAlign = "left";
+    }
+
+    if (emergencyDodgeFlashTimer > 0 && !emergencyDodgeActive) {
+      const flashRatio = clamp(emergencyDodgeFlashTimer / 12, 0, 1);
+      ctx.fillStyle = `rgba(180, 255, 220, ${0.35 * flashRatio})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
   function drawTimeBurstOverlay() {
     if (!isTimeBurstActive()) return;
     const duration = Math.max(1, timeBurstDuration || (timeBurstMode === TIME_BURST_MODE_STOP ? TIME_BURST_STOP_DURATION : TIME_BURST_SLOW_MAX_DURATION));
@@ -13425,8 +13611,9 @@
       ctx.filter = "none";
     }
     drawTimeBurstOverlay();
-    if (isTimeBurstActive()) {
-      // Keep protagonist colors stable during time-burst post effects.
+    drawEmergencyDodgeOverlay();
+    if (isTimeBurstActive() || emergencyDodgeActive) {
+      // Keep protagonist colors stable during time-burst/dodge post effects.
       drawPlayerTrueColorPass();
     }
     drawHUD();
@@ -13751,6 +13938,14 @@
 
     scheduleBGM();
     const actions = sampleActions();
+
+    if (inCombat) {
+      const dodgeFrozen = updateEmergencyDodge(rawDt, actions);
+      if (dodgeFrozen) {
+        dt *= EMERGENCY_DODGE_SLOWMO_SCALE;
+      }
+    }
+
     update(dt, actions);
     refreshBurstButtonUi();
     render();
