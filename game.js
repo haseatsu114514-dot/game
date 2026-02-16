@@ -5479,7 +5479,7 @@
     const spinRadiusX = Math.max(12, Math.floor(baseSpinRadiusX * (1 + (rankRangeMul - 1) * 0.9)));
     const spinRadiusY = Math.max(10, Math.floor(baseSpinRadiusY * (1 + (rankRangeMul - 1) * 0.85)));
     const baseReach = maxChargeMorningStar
-      ? 55 + Math.floor(chargeRatio * 10)
+      ? 45 + Math.floor(chargeRatio * 10) // Reduced from 55
       : morningStarStrike
         ? 20 + Math.floor(chargeRatio * 18) + (morningStarLong ? 10 : 0)
         : morningStarSpin
