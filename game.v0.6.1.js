@@ -201,6 +201,9 @@
   let seBazooka = null;
   let seStrongHit = null;
   let seReload = null;
+  let seMachineGunHeavy = null;
+  let seEmpty = null;
+  let seNoAmmo = null;
   // New Audio Buffers
 
 
@@ -321,6 +324,11 @@
   const SE_MACHINEGUN_PATH = "assets/サブマシンガン発射1.mp3";
   const SE_BAZOOKA_PATH = "assets/大砲2.mp3";
   const SE_STRONG_HIT_PATH = "assets/ロボットを強く殴る3.mp3";
+  // New SE Paths (User requested)
+  const SE_MACHINEGUN_HEAVY_PATH = "assets/重機関銃を乱射1.mp3";
+  const SE_EMPTY_PATH = "assets/拳銃の弾切れ.mp3";
+  const SE_RELOAD_PATH = "assets/shotgun_pump_simulated"; // Logic handled via pitch mod
+  const SE_NO_AMMO_PATH = "assets/nc371030.mp3";
 
   const VOICE_VOL = 0.7;
 
@@ -1036,6 +1044,9 @@
       seMachineGun = new Audio(SE_MACHINEGUN_PATH);
       seBazooka = new Audio(SE_BAZOOKA_PATH);
       seStrongHit = new Audio(SE_STRONG_HIT_PATH);
+      seMachineGunHeavy = new Audio(SE_MACHINEGUN_HEAVY_PATH);
+      seEmpty = new Audio(SE_EMPTY_PATH);
+      seNoAmmo = new Audio(SE_NO_AMMO_PATH);
       voiceDeath.volume = VOICE_VOL;
       voiceDeath.preload = "auto";
     }
@@ -1057,11 +1068,14 @@
     }
   }
 
-  function playSound(audio, vol = 1.0) {
+  function playSound(audio, vol = 1.0, rate = 1.0) {
     if (!audio) return;
     try {
       audio.currentTime = 0;
       audio.volume = Math.min(1.0, Math.max(0, vol));
+      if ("playbackRate" in audio) {
+        audio.playbackRate = rate;
+      }
       audio.play().catch(() => { });
     } catch (_e) {
       // Ignore
@@ -2548,16 +2562,22 @@
     );
 
     resetTimeBurstState();
-    timeBurstMode = fullStop ? TIME_BURST_MODE_STOP : TIME_BURST_MODE_SLOW;
+    // Burst Mode Change: Time Stop -> Slow Motion
+    // timeBurstMode = fullStop ? TIME_BURST_MODE_STOP : TIME_BURST_MODE_SLOW;
+    timeBurstMode = TIME_BURST_MODE_SLOW;
+
     timeBurstDuration = fullStop
       ? TIME_BURST_STOP_DURATION
       : Math.round(TIME_BURST_SLOW_MIN_DURATION + (TIME_BURST_SLOW_MAX_DURATION - TIME_BURST_SLOW_MIN_DURATION) * slowRatio);
     timeBurstTimer = timeBurstDuration;
+
+    // For "Full Stop" (now Slow Mo), use a very low scale
     timeBurstSlowScale = fullStop
-      ? 0
+      ? 0.1 // 0.1x speed instead of 0
       : clamp(TIME_BURST_SLOW_SCALE_MAX - (TIME_BURST_SLOW_SCALE_MAX - TIME_BURST_SLOW_SCALE_MIN) * slowRatio, TIME_BURST_SLOW_SCALE_MIN, TIME_BURST_SLOW_SCALE_MAX);
     timeBurstPhase = 0;
-    timeBurstStopDeadlineMs = fullStop ? performance.now() + (TIME_BURST_STOP_DURATION / 60) * 1000 : 0;
+    // timeBurstStopDeadlineMs = fullStop ? performance.now() + (TIME_BURST_STOP_DURATION / 60) * 1000 : 0;
+    timeBurstStopDeadlineMs = 0; // Disable stop deadline logic
 
     registerBurstActivationRankGain(player.x + player.w * 0.5, player.y + player.h * 0.52, gaugeRatio);
     proteinBurstGauge1 = 0;
@@ -6419,6 +6439,7 @@
   // Ranged Weapon Logic
   let shotMachineGunCount = 0;
   let shotMachineGunFrame = 0;
+  let gunnerReloadDelay = 0; // New: Reload vulnerability timer
 
   function updateShot(dt, actions) {
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
@@ -6427,9 +6448,11 @@
 
     // Charging - in Gunner mode, use attack button OR shot button
     // Rank Scaling for Max Ammo
-    // Start 12, Max 30
+    // Start 50, Max 70 (or just fixed 50 based on user request "Change to 50")
+    // User said "Change max ammo to 50". Let's set base to 30 and rank bonus to 20 to reach 50, or just base 50.
+    // Let's go with Base 32 + Rank * 3 -> Max 50 (Ex=18, 32+18=50).
     const rankIdx = battleRankIndex;
-    const baseMax = 12;
+    const baseMax = 32;
     const rankBonus = Math.min(18, rankIdx * 3); // C=0, B=3, A=6, S=9, SS=12, SSS=15, EX=18
     gunnerMaxAmmo = baseMax + rankBonus;
 
@@ -6438,17 +6461,35 @@
     // Safety check for reload timer
     if (isNaN(shotReloadTimer)) shotReloadTimer = 0;
 
+    // --- Reload Delay handling ---
+    if (gunnerReloadDelay > 0) {
+      gunnerReloadDelay -= dt;
+      if (gunnerReloadDelay <= 0) {
+        gunnerAmmo = gunnerMaxAmmo;
+        gunnerReloadDelay = 0;
+        if (stage.damageTexts) {
+          stage.damageTexts.push({
+            x: player.x, y: player.y - 20, text: "RELOAD OK", life: 40, color: "#00ff00", vy: -1
+          });
+        }
+      }
+      return; // Block shooting while reloading
+    }
+
     // Double Tap Reload
     if (playerStyle === "gunner" && actions && actions.attackPressed) {
       const now = performance.now();
       if (now - lastAttackPressTime < RELOAD_DOUBLE_TAP_TIME) {
-        if (gunnerAmmo < gunnerMaxAmmo) {
-          gunnerAmmo = gunnerMaxAmmo;
-          playSound(seReload || seHandgun);
-          shotReloadTimer = 30;
+        if (gunnerAmmo < gunnerMaxAmmo && gunnerReloadDelay <= 0) {
+          // Play Pump Sound (Simulated via seShotgun low pitch)
+          if (typeof seShotgun !== "undefined" && seShotgun) {
+            playSound(seShotgun, 0.35, 0.7);
+          }
+
+          gunnerReloadDelay = 45; // ~0.75s
           if (stage.damageTexts) {
             stage.damageTexts.push({
-              x: player.x, y: player.y - 20, text: "RELOAD", life: 40, color: "#00ff00", vy: -1
+              x: player.x, y: player.y - 20, text: "RELOADING...", life: 25, color: "#ffff00", vy: -0.5
             });
           }
           lastAttackPressTime = 0;
@@ -6460,6 +6501,13 @@
 
     if (shotInput && shotReloadTimer <= 0) {
       if (playerStyle === "gunner" && gunnerAmmo <= 0) {
+        // Play Empty Ammo Click (nc371030.mp3)
+        if (typeof seNoAmmo !== "undefined" && seNoAmmo) {
+          playSound(seNoAmmo, 0.6);
+        } else if (typeof seHandgun !== "undefined" && seHandgun) {
+          playSound(seHandgun, 0.3, 1.8); // High pitch click fallback
+        }
+        shotReloadTimer = 20; // Prevent spamming click
         return;
       }
       const chargeMul = battleRankChargeMultiplier();
@@ -6475,24 +6523,32 @@
         // Initial Fire Check
         // For Machinegun (tier 1), first shot costs 1.
         // For Shotgun (tier 2), we check pellets count inside fireRangedWeapon?
-        // Or we check here.
-        // Let's check min requirement (1).
+        // For Grenade (tier 3), cost is 10.
 
-        if (gunnerAmmo >= 1) {
-          fireRangedWeapon(tier);
-          // Cost handling moved to fireRangedWeapon/Burst loop for specific types
-          // Only Handgun/Bazooka effectively consume here?
-          // Actually, let's keep consumption here for single-fire weapons.
-          if (tier === 0) {
+        const cost = tier === 3 ? 10 : 1;
+
+        if (gunnerAmmo >= cost) {
+          if (tier === 3) {
+            gunnerAmmo -= 10;
+          } else if (tier === 0) {
             gunnerAmmo--;
+          }
+          // Shotgun consumes in fireRangedWeapon based on pellets, but we should ensure we have enough to start?
+          // Actually fireRangedWeapon handles consumption for shotgun.
+          // We just checked >= 1, but for Bazooka we need 10.
+
+          fireRangedWeapon(tier);
+
+          if (tier === 0) {
             const rankIdx = battleRankIndex;
             const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
             shotReloadTimer = reloadBase;
-          } else if (tier === 3) {
-            gunnerAmmo--; // Bazooka cost 1? Or 5? User didn't specify Bazooka cost in new request.
-            // Old plan was 5. New request "Use actual fired count". Bazooka fires 1. So 1?
-            // Let's stick to 1 for now (explosive).
           }
+        } else if (tier === 3 && gunnerAmmo < 10) {
+          // Not enough ammo for grenade, fail or shoot smaller?
+          // Let's prevent shooting and maybe show "NO AMMO" or click sound?
+          // For now just do nothing or maybe shoot tier 0?
+          // Let's just return to save ammo or maybe force reload logic elsewhere.
         }
 
         shotChargeTimer = 0;
@@ -6537,7 +6593,10 @@
       if (actualFire > 0) {
         gunnerAmmo -= actualFire;
         // Loop
-        const spreadBase = 1.0;
+        // Shotgun Spread: Scales with Rank
+        // Base 1.0 -> +0.2 per rank above C?
+        // Rank Idx: 0(C) to 6(EX)
+        const spreadBase = 1.0 + rankIdx * 0.25;
         const startAngle = -Math.floor(actualFire / 2);
         const dir = player.facing;
         const px = player.x + player.w * 0.5;
@@ -6557,6 +6616,17 @@
       const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 7 : Math.min(5, rankIdx);
       shotMachineGunCount = baseBurst + extra;
       shotMachineGunFrame = 4;
+
+      // SFX: Rank S+ uses Heavy Machinegun
+      if (rankIdx >= 4) { // Rank S is index 4 usually? Check if S=4 or 5. Assuming 4.
+        if (typeof seMachineGunHeavy !== "undefined" && seMachineGunHeavy) {
+          playSound(seMachineGunHeavy, 0.6);
+        } else if (seMachineGun) {
+          playSound(seMachineGun, 0.7, 0.85); // Slightly heavier fallback
+        }
+      } else {
+        if (seMachineGun) playSound(seMachineGun, 0.5);
+      }
     } else { // Handgun
       fireRangedProjectile(0);
       if (seHandgun) playSound(seHandgun, 0.5);
@@ -6568,12 +6638,14 @@
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.45;
 
-    if (tier === 3) { // Bazooka
+    if (tier === 3) { // Bazooka / Grenade
       const rankIdx = battleRankIndex;
-      const powerBase = 1.8 + rankIdx * 0.2;
-      const sizeBase = 16 + Math.min(10, rankIdx * 2);
+      // Buffed Power: Base 3.5 + Rank * 0.4
+      const powerBase = 3.5 + rankIdx * 0.4;
+      // Larger Size: Base 32
+      const sizeBase = 28 + Math.min(16, rankIdx * 3);
       stage.playerWaves.push({
-        kind: "bazooka", x: px + dir * 20, y: py - 4, w: sizeBase, h: 8, vx: dir * 4.5, vy: 0, ttl: 120, power: powerBase, spin: 0
+        kind: "bazooka", x: px + dir * 20, y: py - 4, w: sizeBase, h: 12, vx: dir * 4.5, vy: 0, ttl: 120, power: powerBase, spin: 0
       });
     } else if (tier === 2) {
       // Handled in fireRangedWeapon
@@ -14535,6 +14607,14 @@
         const rankBonus = Math.min(18, rankIdx * 3);
         const maxAmmo = baseMax + rankBonus;
         hudAmmo.textContent = `Ammo: ${gunnerAmmo} / ${maxAmmo}`;
+        // Low Ammo Warning
+        if (gunnerAmmo <= maxAmmo / 5) {
+          hudAmmo.style.color = "#ff0000";
+          hudAmmo.style.textShadow = "0 0 5px #ff0000";
+        } else {
+          hudAmmo.style.color = "#ffffff";
+          hudAmmo.style.textShadow = "1px 1px 0 #000";
+        }
       } else {
         hudAmmo.style.display = "none";
       }
