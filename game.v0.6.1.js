@@ -14257,14 +14257,16 @@
     if (!ready1) releaseHoldButtonByKey("burst");
   }
 
-  bindHoldButton("btn-left", "left");
-  bindHoldButton("btn-right", "right");
-  bindHoldButton("btn-jump", "jump");
-  bindHoldButton("btn-attack", "attack");
-  bindHoldButton("btn-style", "styleChange");
-  bindHoldButton("btn-special", "burst");
-  bindHoldButton("btn-special2", "special2");
-  refreshBurstButtonUi();
+  try {
+    bindHoldButton("btn-left", "left");
+    bindHoldButton("btn-right", "right");
+    bindHoldButton("btn-jump", "jump");
+    bindHoldButton("btn-attack", "attack");
+    bindHoldButton("btn-style", "styleChange");
+    bindHoldButton("btn-special", "burst");
+    bindHoldButton("btn-special2", "special2");
+    refreshBurstButtonUi();
+  } catch (_e) { console.error("[init] button setup", _e); }
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -14408,54 +14410,56 @@
   }, { passive: false });
 
   let last = performance.now();
+  let _loopErrorCount = 0;
   function loop(now) {
-    const rawDt = Math.min(2.4, (now - last) / 16.6667);
-    last = now;
-    updateTimeBurstState(rawDt);
-    updateTimeStopClockSfx(rawDt);
-    applyTimeStopSilence();
+    try {
+      const rawDt = Math.min(2.4, (now - last) / 16.6667);
+      last = now;
+      updateTimeBurstState(rawDt);
+      updateTimeStopClockSfx(rawDt);
+      applyTimeStopSilence();
 
-    let dt = rawDt;
-    const inCombat = gameState === STATE.PLAY || gameState === STATE.BOSS;
-    if (inCombat && blackFlashSlowTimer > 0) {
-      const slowRatio = clamp(blackFlashSlowTimer / BLACK_FLASH_SLOW_DURATION, 0, 1);
-      const dtScale = 1 - slowRatio * (1 - BLACK_FLASH_SLOW_SCALE);
-      dt *= dtScale;
-      blackFlashSlowTimer = Math.max(0, blackFlashSlowTimer - rawDt);
-    } else if (blackFlashSlowTimer > 0) {
-      blackFlashSlowTimer = Math.max(0, blackFlashSlowTimer - rawDt);
-    }
+      let dt = rawDt;
+      const inCombat = gameState === STATE.PLAY || gameState === STATE.BOSS;
+      if (inCombat && blackFlashSlowTimer > 0) {
+        const slowRatio = clamp(blackFlashSlowTimer / BLACK_FLASH_SLOW_DURATION, 0, 1);
+        const dtScale = 1 - slowRatio * (1 - BLACK_FLASH_SLOW_SCALE);
+        dt *= dtScale;
+        blackFlashSlowTimer = Math.max(0, blackFlashSlowTimer - rawDt);
+      } else if (blackFlashSlowTimer > 0) {
+        blackFlashSlowTimer = Math.max(0, blackFlashSlowTimer - rawDt);
+      }
 
-    scheduleBGM();
-    const actions = sampleActions();
+      scheduleBGM();
+      const actions = sampleActions();
 
-    if (actions.styleChangePressed) {
-      playerStyle = playerStyle === "berserker" ? "gunner" : "berserker";
-      hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE" : "GUNNER STYLE";
-      hudTimer = 60;
+      if (actions.styleChangePressed) {
+        playerStyle = playerStyle === "berserker" ? "gunner" : "berserker";
+        hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE" : "GUNNER STYLE";
+        hudTimer = 60;
 
-      // Reset gunner reload timer to prevent jams
-      shotReloadTimer = 0;
+        // Reset gunner reload timer to prevent jams
+        shotReloadTimer = 0;
 
-      // Update Attack Button Color (Disabled due to reported freeze)
-      // Update Attack Button Color
-      updateStyleUI();
+        updateStyleUI();
+      }
 
-      // Optional: Sound
-    }
+      if (inCombat) {
+        const dodgeFrozen = updateEmergencyDodge(rawDt, actions);
+        if (dodgeFrozen) {
+          dt *= EMERGENCY_DODGE_SLOWMO_SCALE;
+        }
+      }
 
-
-    if (inCombat) {
-      const dodgeFrozen = updateEmergencyDodge(rawDt, actions);
-      if (dodgeFrozen) {
-        dt *= EMERGENCY_DODGE_SLOWMO_SCALE;
+      update(dt, actions);
+      refreshBurstButtonUi();
+      render();
+    } catch (e) {
+      if (_loopErrorCount < 3) {
+        console.error("[game loop error]", e);
+        _loopErrorCount++;
       }
     }
-
-    update(dt, actions);
-    refreshBurstButtonUi();
-    render();
-
     requestAnimationFrame(loop);
   }
 
@@ -14464,10 +14468,9 @@
   const GAME_VERSION = "v0.6.1 (GunnerFix)";
 
   // --- Gunner UI & Helper Functions ---
-  // btnAttack must be declared before updateStyleUI() is called to avoid TDZ error.
   const btnAttack = document.getElementById("btn-attack");
 
-  updateStyleUI();
+  try { updateStyleUI(); } catch (_e) { console.error("[init] updateStyleUI", _e); }
   console.log("Game Version:", GAME_VERSION);
   requestAnimationFrame(loop);
 
