@@ -4516,6 +4516,11 @@
     player.vy = 0;
     player.onGround = false;
     deadReason = reason;
+    stopStageMusic(true);
+    emergencyDodgeActive = false;
+    emergencyDodgeTimer = 0;
+    emergencyDodgeInvulnTimer = 0;
+    emergencyDodgeFlashTimer = 0;
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
     stopInvincibleMusic();
@@ -4617,7 +4622,13 @@
     proteinBurstLaserPhase = 0;
     proteinBurstUsedGauge = 0;
     proteinBurstPower = 1;
+    proteinBurstUsedGauge = 0;
+    proteinBurstPower = 1;
     proteinBurstMode = PROTEIN_BURST_MODE_LASER;
+    emergencyDodgeActive = false;
+    emergencyDodgeTimer = 0;
+    emergencyDodgeInvulnTimer = 0;
+    emergencyDodgeFlashTimer = 0;
     resetTimeBurstState();
     invincibleTimer = 0;
     invincibleHitCooldown = 0;
