@@ -6421,6 +6421,9 @@
     // Charging - in Gunner mode, use attack button OR shot button
     const isShooting = (playerStyle === "gunner" && input.attack) || input.shot;
 
+    // Safety check for reload timer
+    if (isNaN(shotReloadTimer)) shotReloadTimer = 0;
+
     // Debug Log for Gunner issue (throttled)
     if (playerStyle === "gunner" && (input.attack || shotChargeTimer > 0) && Math.random() < 0.05) {
       console.log(`Gunner Shot Debug: Input=${input.attack}, Timer=${shotChargeTimer.toFixed(2)}, Reload=${shotReloadTimer.toFixed(2)}`);
@@ -14359,6 +14362,21 @@
       playerStyle = playerStyle === "berserker" ? "gunner" : "berserker";
       hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE" : "GUNNER STYLE";
       hudTimer = 60;
+
+      // Reset gunner reload timer to prevent jams
+      shotReloadTimer = 0;
+
+      // Update Attack Button Color
+      const btnAttack = document.getElementById("btn-attack");
+      if (btnAttack) {
+        btnAttack.style.background = playerStyle === "berserker"
+          ? "linear-gradient(to bottom, #ff5555, #cc0000)"
+          : "linear-gradient(to bottom, #5555ff, #0000cc)";
+        btnAttack.style.boxShadow = playerStyle === "berserker"
+          ? "0 4px 0 #990000"
+          : "0 4px 0 #000099";
+      }
+
       // Optional: Sound
     }
 
