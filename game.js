@@ -289,15 +289,16 @@
   const VOICE_DEATH_PATH = "assets/「きゃああーー！」.mp3";
   const VOICE_DODGE_PATH = "assets/「危ない！」.mp3";
   // New Audio Paths
-  const SE_GAME_OVER_PATH = "assets/ダメ、力が入らない….mp3";
-  const SE_BURST2_PATH = "assets/ブウーン.mp3"; // Burst 2
+  const SE_GAME_OVER_PATH = "assets/「ダメ、力が入らない…」.mp3";
+  const SE_BURST2_PATH = "assets/ブウーン.mp3"; // Burst 2
   const SE_BLACK_FLASH_PATH = "assets/K.O..mp3";
   const SE_BURST1_MAX_PATH = "assets/オーラ1.mp3";
   const SE_BURST1_NORMAL_PATH = "assets/火炎魔法2.mp3";
-  const SE_EVASION_PATH = "assets/パンチの風切り音（スローモーション）1.mp3";
-  const SE_MORNING_STAR_TIP_PATH = "assets/ロボットを殴る1.mp3";
-  const SE_SHOTGUN_PATH = "assets/ショットガン発射.mp3";
-  const SE_STAGE_CLEAR_PATH = "assets/先を急ぎましょう.mp3";
+  const SE_EVASION_PATH = "assets/パンチの風切り音（スローモーション）1.mp3";
+  const SE_EVASION_FAIL_PATH = "assets/ガラスが割れる1.mp3";
+  const SE_MORNING_STAR_TIP_PATH = "assets/ロボットを殴る1.mp3";
+  const SE_SHOTGUN_PATH = "assets/ショットガン発射.mp3"; // Missing file
+  const SE_STAGE_CLEAR_PATH = "assets/「先を急ぎましょう」.mp3";
   const SE_WHIP_SWING_PATH = "assets/鞭を振り回す2.mp3";
 
   const VOICE_VOL = 0.7;
