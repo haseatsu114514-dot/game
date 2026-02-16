@@ -14463,12 +14463,13 @@
   // Version Indicator (Fix for missing definition)
   const GAME_VERSION = "v0.6.1 (GunnerFix)";
 
+  // --- Gunner UI & Helper Functions ---
+  // btnAttack must be declared before updateStyleUI() is called to avoid TDZ error.
+  const btnAttack = document.getElementById("btn-attack");
+
   updateStyleUI();
   console.log("Game Version:", GAME_VERSION);
   requestAnimationFrame(loop);
-
-  // --- Gunner UI & Helper Functions ---
-  const btnAttack = document.getElementById("btn-attack");
 
   function updateStyleUI() {
     if (btnAttack) {
