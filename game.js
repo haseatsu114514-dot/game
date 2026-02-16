@@ -11128,7 +11128,7 @@
       ctx.fillRect(barX + 1, barY + 1, Math.max(1, Math.floor((barW - 2) * chargeRatio)), 2);
 
       // Enhanced Morning Star Visual Indicator (Tip & Range)
-      if (attackChargeTimer > 0) {
+      if (false && attackChargeTimer > 0) {
         const rankBoost = battleRankAttackBoost();
         const rankRangeMul = rankBoost.rangeMul;
 
