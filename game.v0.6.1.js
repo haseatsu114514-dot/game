@@ -144,6 +144,12 @@
   let shotChargeTimer = 0;
   let playerStyle = "berserker"; // "berserker" or "gunner"
   let shotReloadTimer = 0;
+
+  // Gunner Ammo System
+  let gunnerAmmo = 6;
+  let gunnerMaxAmmo = 6;
+  let lastAttackPressTime = 0;
+  const RELOAD_DOUBLE_TAP_TIME = 300; // ms
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
   let hyakuretsuAutoTimer = 0;
@@ -6419,50 +6425,94 @@
     if (hitStopTimer > 0) return;
 
     // Charging - in Gunner mode, use attack button OR shot button
-    const isShooting = (playerStyle === "gunner" && input.attack) || input.shot;
+    // Rank Scaling for Max Ammo
+    // Start 12, Max 30
+    const rankIdx = battleRankIndex;
+    const baseMax = 12;
+    const rankBonus = Math.min(18, rankIdx * 3); // C=0, B=3, A=6, S=9, SS=12, SSS=15, EX=18
+    gunnerMaxAmmo = baseMax + rankBonus;
+
+    const shotInput = playerStyle === "gunner" ? input.attack : input.shot;
 
     // Safety check for reload timer
     if (isNaN(shotReloadTimer)) shotReloadTimer = 0;
 
-    // Debug Log for Gunner issue (throttled)
-    if (playerStyle === "gunner" && (input.attack || shotChargeTimer > 0) && Math.random() < 0.05) {
-      console.log(`Gunner Shot Debug: Input=${input.attack}, Timer=${shotChargeTimer.toFixed(2)}, Reload=${shotReloadTimer.toFixed(2)}`);
+    // Double Tap Reload
+    if (playerStyle === "gunner" && input.attack && !prevInput.attack) {
+      const now = performance.now();
+      if (now - lastAttackPressTime < RELOAD_DOUBLE_TAP_TIME) {
+        if (gunnerAmmo < gunnerMaxAmmo) {
+          gunnerAmmo = gunnerMaxAmmo;
+          playSound(seReload || seHandgun);
+          shotReloadTimer = 30;
+          stage.damageTexts.push({
+            x: player.x, y: player.y - 20, text: "RELOAD", life: 40, color: "#00ff00", vy: -1
+          });
+          lastAttackPressTime = 0;
+          return;
+        }
+      }
+      lastAttackPressTime = now;
     }
 
-    if (isShooting && shotReloadTimer <= 0) {
-      shotChargeTimer = Math.min(SHOT_CHARGE_MAX, shotChargeTimer + dt);
-      return;
-    }
+    if (shotInput && shotReloadTimer <= 0) {
+      if (playerStyle === "gunner" && gunnerAmmo <= 0) {
+        return;
+      }
+      const chargeMul = battleRankChargeMultiplier();
+      shotChargeTimer = Math.min(SHOT_CHARGE_MAX, shotChargeTimer + dt * chargeMul);
+    } else if (!shotInput) {
+      const shotReleased = playerStyle === "gunner" ? !input.attack : !input.shot;
+      if (shotChargeTimer > 0 && shotReleased) {
+        let tier = 0;
+        if (shotChargeTimer >= SHOT_CHARGE_MAX) tier = 3;
+        else if (shotChargeTimer >= SHOT_SHOTGUN_THRESHOLD) tier = 2;
+        else if (shotChargeTimer >= SHOT_MACHINEGUN_THRESHOLD) tier = 1;
 
-    // Release
-    if (shotChargeTimer > 0 && !isShooting) {
-      let tier = 0; // Handgun
-      if (shotChargeTimer >= SHOT_CHARGE_MAX - 1) tier = 3; // Bazooka
-      else if (shotChargeTimer >= SHOT_TIER2_THRESHOLD) tier = 2; // Shotgun (Medium charge)
-      else if (shotChargeTimer >= SHOT_TIER1_THRESHOLD) tier = 1; // Machinegun (Small charge)
+        // Initial Fire Check
+        // For Machinegun (tier 1), first shot costs 1.
+        // For Shotgun (tier 2), we check pellets count inside fireRangedWeapon?
+        // Or we check here.
+        // Let's check min requirement (1).
 
-      fireRangedWeapon(tier);
-      shotChargeTimer = 0;
-      // Set reload timer for handgun (tier 0)
-      if (tier === 0) {
-        const rankIdx = battleRankIndex;
-        const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
-        shotReloadTimer = reloadBase;
+        if (gunnerAmmo >= 1) {
+          fireRangedWeapon(tier);
+          // Cost handling moved to fireRangedWeapon/Burst loop for specific types
+          // Only Handgun/Bazooka effectively consume here?
+          // Actually, let's keep consumption here for single-fire weapons.
+          if (tier === 0) {
+            gunnerAmmo--;
+            const rankIdx = battleRankIndex;
+            const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
+            shotReloadTimer = reloadBase;
+          } else if (tier === 3) {
+            gunnerAmmo--; // Bazooka cost 1? Or 5? User didn't specify Bazooka cost in new request.
+            // Old plan was 5. New request "Use actual fired count". Bazooka fires 1. So 1?
+            // Let's stick to 1 for now (explosive).
+          }
+        }
+
+        shotChargeTimer = 0;
+      } else {
+        shotChargeTimer = 0;
       }
     }
 
     // Machine Gun Burst Handling
     if (shotMachineGunCount > 0) {
       shotMachineGunFrame += dt;
-      // Rank scaling for fire rate
-      // Danger(0): 6, Badass(1): 5, Apoc(2): 4, Savege(3): 3, SS(4): 3, SSS(5): 2, EX(6): 1
       const rankIdx = battleRankIndex;
       const delay = Math.max(1, 6 - Math.floor(rankIdx * 0.8));
       if (shotMachineGunFrame >= delay) {
         shotMachineGunFrame = 0;
-        shotMachineGunCount--;
-        fireRangedProjectile(1); // Machinegun Tier 1
-        if (seMachineGun) playSound(seMachineGun, 0.4);
+        if (gunnerAmmo > 0) {
+          gunnerAmmo--;
+          shotMachineGunCount--;
+          fireRangedProjectile(1);
+          if (seMachineGun) playSound(seMachineGun, 0.4);
+        } else {
+          shotMachineGunCount = 0; // Stop firing if empty
+        }
       }
     }
   }
@@ -6471,17 +6521,39 @@
     if (tier === 3) { // Bazooka
       fireRangedProjectile(3);
       if (seBazooka) playSound(seBazooka, 0.8);
-    } else if (tier === 2) { // Shotgun (Tier 2 now)
-      fireRangedProjectile(2);
-      if (seShotgun) playSound(seShotgun, 0.7);
-    } else if (tier === 1) { // Machine Gun (Tier 1 now)
-      // Rank scaling for Machinegun burst count
+    } else if (tier === 2) { // Shotgun
+      const rankIdx = battleRankIndex;
+      let pellets = 3;
+      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 7;
+      else if (rankIdx >= 5) pellets = 6;
+      else if (rankIdx >= 3) pellets = 5;
+      else if (rankIdx >= 2) pellets = 4;
+
+      // Consume Ammo = Pellets
+      const actualFire = Math.min(gunnerAmmo, pellets);
+      if (actualFire > 0) {
+        gunnerAmmo -= actualFire;
+        // Loop
+        const spreadBase = 1.0;
+        const startAngle = -Math.floor(actualFire / 2);
+        const dir = player.facing;
+        const px = player.x + player.w * 0.5;
+        const py = player.y + player.h * 0.45;
+
+        for (let i = 0; i < actualFire; i++) {
+          const ang = startAngle + i;
+          stage.playerWaves.push({
+            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.6
+          });
+        }
+        if (seShotgun) playSound(seShotgun, 0.7);
+      }
+    } else if (tier === 1) { // Machine Gun
       const rankIdx = battleRankIndex;
       const baseBurst = 3;
-      // Danger(0): 3, Badass(1): 4, Apoc(2): 5, Savege(3): 6, SS(4): 7, SSS(5): 8, EX(6): 10
       const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 7 : Math.min(5, rankIdx);
       shotMachineGunCount = baseBurst + extra;
-      shotMachineGunFrame = 4; // Immediate first shot
+      shotMachineGunFrame = 4;
     } else { // Handgun
       fireRangedProjectile(0);
       if (seHandgun) playSound(seHandgun, 0.5);
@@ -6495,42 +6567,24 @@
 
     if (tier === 3) { // Bazooka
       const rankIdx = battleRankIndex;
-      // Rank scaling for Bazooka (Grenade)
-      // Power and Size increase with rank
       const powerBase = 1.8 + rankIdx * 0.2;
       const sizeBase = 16 + Math.min(10, rankIdx * 2);
       stage.playerWaves.push({
         kind: "bazooka", x: px + dir * 20, y: py - 4, w: sizeBase, h: 8, vx: dir * 4.5, vy: 0, ttl: 120, power: powerBase, spin: 0
       });
-    } else if (tier === 2) { // Shotgun (Tier 2 now)
-      // Rank scaling for Shotgun pellets
+    } else if (tier === 2) {
+      // Handled in fireRangedWeapon
+    } else if (tier === 1) { // Machine Gun
       const rankIdx = battleRankIndex;
-      // Danger: 3, Badass: 3, Apoc: 4, Savege: 5, SS: 5, SSS: 6, EX: 7
-      let pellets = 3;
-      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 7;
-      else if (rankIdx >= 5) pellets = 6;
-      else if (rankIdx >= 3) pellets = 5;
-      else if (rankIdx >= 2) pellets = 4;
-
-      const spreadBase = 1.0;
-      const startAngle = -Math.floor(pellets / 2);
-      for (let i = 0; i < pellets; i++) {
-        const ang = startAngle + i;
-        stage.playerWaves.push({
-          kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.6
-        });
-      }
-    } else if (tier === 1) { // Machine Gun (Tier 1 now)
-      // Rank scaling for speed: 9.0 -> 20.0
-      const rankIdx = battleRankIndex;
-      const speed = 9.0 + rankIdx * 1.6;
+      // Slower speed: 6.0 start
+      const speed = 6.0 + rankIdx * 1.6;
       stage.playerWaves.push({
         kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 50, power: 0.4
       });
     } else { // Handgun
-      // Rank scaling for speed: 8.5 -> 18.0
       const rankIdx = battleRankIndex;
-      const speed = 8.5 + rankIdx * 1.5;
+      // Slower speed: 5.5 start
+      const speed = 5.5 + rankIdx * 1.5;
       stage.playerWaves.push({
         kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 60, power: 0.5
       });
@@ -6576,6 +6630,17 @@
       } else if (wave.kind === "bullet" || wave.kind === "shotgun") {
         wave.x += wave.vx * dt;
         wave.y += wave.vy * dt;
+        // Check for solids (Walls/Floors) - No penetration
+        const cx = wave.x + wave.w * 0.5;
+        const cy = wave.y + wave.h * 0.5;
+        for (const s of solids) {
+          if (s.kind === "crumble" && s.state === "gone") continue;
+          if (overlap(wave, s)) {
+            wave.dead = true;
+            triggerImpact(0.5, cx, cy, 1.5); // Small impact
+            break;
+          }
+        }
       } else if (wave.kind === "explosion") {
         // Explosion stays in place but might expand or fade
         wave.anim = (wave.anim || 0) + dt;
@@ -12139,6 +12204,7 @@
     for (let i = 0; i < lines.length; i += 1) {
       ctx.fillText(lines[i], 12, y + 6 + i * 12);
     }
+    drawAmmoUI();
   }
 
   function drawHeartIcon(x, y, filled) {
@@ -13808,9 +13874,11 @@
   function drawEmergencyDodgeOverlay() {
     if (!emergencyDodgeActive && emergencyDodgeFlashTimer <= 0) return;
 
+    ctx.save(); // Start Scope
+
     if (emergencyDodgeActive) {
-      const ratio = clamp(emergencyDodgeTimer / EMERGENCY_DODGE_WINDOW, 0, 1);
-      const pulse = 0.5 + Math.sin(emergencyDodgePhase * 1.2) * 0.5;
+      const ratio = clamp(emergencyDodgeTimer / EMERGENCY_DODGE_Input_WINDOW, 0, 1);
+      const pulse = (Math.sin(emergencyDodgePhase * 10) + 1) * 0.5;
 
       ctx.save();
       ctx.globalCompositeOperation = "difference";
@@ -13828,7 +13896,7 @@
         ctx.fillRect(0, gy, W, 1);
       }
 
-      const barY = H - 14;
+      const barY = H * 0.7;
       const barW = Math.floor((W - 20) * ratio);
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
       ctx.fillRect(8, barY - 1, W - 16, 8);
@@ -13852,6 +13920,8 @@
       ctx.fillStyle = `rgba(180, 255, 220, ${0.35 * flashRatio})`;
       ctx.fillRect(0, 0, W, H);
     }
+
+    ctx.restore(); // End Scope
   }
 
   function drawTimeBurstOverlay() {
@@ -14396,4 +14466,65 @@
   updateStyleUI();
   console.log("Game Version:", GAME_VERSION);
   requestAnimationFrame(loop);
+
+  // --- Gunner UI & Helper Functions ---
+  const btnAttack = document.getElementById("btn-attack");
+
+  function updateStyleUI() {
+    if (btnAttack) {
+      const isBerserker = playerStyle === "berserker";
+      btnAttack.style.background = isBerserker
+        ? "linear-gradient(to bottom, #ff5555, #cc0000)"
+        : "linear-gradient(to bottom, #5555ff, #0000cc)";
+      btnAttack.style.boxShadow = isBerserker
+        ? "0 4px 0 #990000"
+        : "0 4px 0 #000099";
+    }
+  }
+
+  function drawAmmoUI() {
+    if (playerStyle !== "gunner") return;
+
+    ctx.save();
+    ctx.font = "bold 14px 'Courier New', monospace";
+    ctx.textAlign = "left";
+    ctx.fillStyle = gunnerAmmo <= 0 ? "#ff0000" : "#00ffff";
+    ctx.fillText(`AMMO: ${gunnerAmmo} / ${gunnerMaxAmmo}`, 10, 80);
+
+    // Bar
+    const barW = 80;
+    const barH = 6;
+    const x = 10;
+    const y = 85;
+    const fill = clamp(gunnerAmmo / gunnerMaxAmmo, 0, 1);
+
+    ctx.fillStyle = "#444";
+    ctx.fillRect(x, y, barW, barH);
+    ctx.fillStyle = gunnerAmmo <= 0 ? "#ff0000" : "#00ffff";
+    ctx.fillRect(x, y, barW * fill, barH);
+    ctx.restore();
+  }
+
+  function drawChargeIndicator() {
+    if (playerStyle !== "gunner" || shotChargeTimer <= 0) return;
+
+    const x = player.x;
+    const y = player.y - 10;
+    const w = 20;
+    const h = 4;
+    const fill = clamp(shotChargeTimer / SHOT_CHARGE_MAX, 0, 1);
+
+    ctx.fillStyle = "#000";
+    ctx.fillRect(x, y, w, h);
+
+    // Color based on Tier
+    let color = "#fff";
+    if (shotChargeTimer >= SHOT_CHARGE_MAX) color = "#ff00ff"; // Bazooka
+    else if (shotChargeTimer >= SHOT_SHOTGUN_THRESHOLD) color = "#ffaa00"; // Shotgun
+    else if (shotChargeTimer >= SHOT_MACHINEGUN_THRESHOLD) color = "#00ff00"; // Machinegun
+
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w * fill, h);
+  }
+
 })();
