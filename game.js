@@ -6433,7 +6433,12 @@
       fireRangedProjectile(2);
       if (seShotgun) playSound(seShotgun, 0.7);
     } else if (tier === 1) { // Machine Gun (Tier 1 now)
-      shotMachineGunCount = 5;
+      // Rank scaling for Machinegun burst count
+      const rankIdx = battleRankIndex;
+      const baseBurst = 3;
+      // Danger(0): 3, Badass(1): 4, Apoc(2): 5, Savege(3): 6, SS(4): 7, SSS(5): 8, EX(6): 10
+      const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 7 : Math.min(5, rankIdx);
+      shotMachineGunCount = baseBurst + extra;
       shotMachineGunFrame = 4; // Immediate first shot
     } else { // Handgun
       fireRangedProjectile(0);
@@ -6447,13 +6452,30 @@
     const py = player.y + player.h * 0.45;
 
     if (tier === 3) { // Bazooka
+      const rankIdx = battleRankIndex;
+      // Rank scaling for Bazooka (Grenade)
+      // Power and Size increase with rank
+      const powerBase = 1.8 + rankIdx * 0.2;
+      const sizeBase = 16 + Math.min(10, rankIdx * 2);
       stage.playerWaves.push({
-        kind: "bazooka", x: px + dir * 20, y: py - 4, w: 16, h: 8, vx: dir * 4.5, vy: 0, ttl: 120, power: 1.8, spin: 0
+        kind: "bazooka", x: px + dir * 20, y: py - 4, w: sizeBase, h: 8, vx: dir * 4.5, vy: 0, ttl: 120, power: powerBase, spin: 0
       });
     } else if (tier === 2) { // Shotgun (Tier 2 now)
-      for (let i = -2; i <= 2; i++) {
+      // Rank scaling for Shotgun pellets
+      const rankIdx = battleRankIndex;
+      // Danger: 3, Badass: 3, Apoc: 4, Savege: 5, SS: 5, SSS: 6, EX: 7
+      let pellets = 3;
+      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 7;
+      else if (rankIdx >= 5) pellets = 6;
+      else if (rankIdx >= 3) pellets = 5;
+      else if (rankIdx >= 2) pellets = 4;
+
+      const spreadBase = 1.0;
+      const startAngle = -Math.floor(pellets / 2);
+      for (let i = 0; i < pellets; i++) {
+        const ang = startAngle + i;
         stage.playerWaves.push({
-          kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: i * 1.2, ttl: 25, power: 0.6
+          kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.6
         });
       }
     } else if (tier === 1) { // Machine Gun (Tier 1 now)
@@ -6465,6 +6487,25 @@
         kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * 8.5, vy: 0, ttl: 60, power: 0.5
       });
     }
+  }
+
+  function spawnExplosion(cx, cy, power) {
+    // Explosion size scales with power
+    const size = 60 + power * 20; // Base size
+    stage.playerWaves.push({
+      kind: "explosion",
+      x: cx,
+      y: cy,
+      w: size,
+      h: size,
+      vx: 0,
+      vy: 0,
+      ttl: 20,
+      power: power * 1.5, // High damage
+      anim: 0
+    });
+    triggerImpact(power * 2, cx, cy, 4);
+    playKickSfx(1.5); // Use existing SFX or add new one
   }
 
   function updatePlayerWaves(dt, solids) {
@@ -6487,6 +6528,10 @@
       } else if (wave.kind === "bullet" || wave.kind === "shotgun") {
         wave.x += wave.vx * dt;
         wave.y += wave.vy * dt;
+      } else if (wave.kind === "explosion") {
+        // Explosion stays in place but might expand or fade
+        wave.anim = (wave.anim || 0) + dt;
+        if (wave.anim > 20) wave.dead = true; // Short life logic
       } else {
         // Original Wave
         wave.phase += dt;
@@ -6525,6 +6570,11 @@
         triggerImpact(1.5 + (wave.power || 0), hx, hy, 2.6);
         spawnWaveBurst(hx, hy, 0.8 + (wave.power || 0) * 0.9);
         playKickSfx(1.32 + (wave.power || 0) * 0.34);
+
+        if (wave.kind === "bazooka") {
+          spawnExplosion(wave.x + wave.w / 2, wave.y + wave.h / 2, wave.power || 2);
+        }
+        wave.dead = true;
       }
 
       if (!wave.dead && stage.boss.active) {
@@ -6542,10 +6592,18 @@
           triggerImpact(2.0 + (wave.power || 0), hx, hy, 3.0);
           spawnWaveBurst(hx, hy, 1.0 + (wave.power || 0));
           playKickSfx(1.52 + (wave.power || 0) * 0.28);
+
+          if (wave.kind === "bazooka") {
+            spawnExplosion(wave.x + wave.w / 2, wave.y + wave.h / 2, wave.power || 2);
+          }
           handleBossHpZero();
+          wave.dead = true;
           break;
         }
       }
+
+
+
 
       for (const bullet of stage.hazardBullets) {
         if (wave.dead) break;
@@ -10804,6 +10862,20 @@
       ctx.restore();
       return;
     }
+    if (wave.kind === "explosion") {
+      const progress = (wave.anim || 0) / 20;
+      const radius = wave.w * (0.5 + progress * 0.5);
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 100, 50, ${1 - progress})`;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 200, 100, ${1 - progress})`;
+      ctx.fill();
+      return;
+    }
+
     const power = clamp(wave.power || 0, 0, 1.8);
     const flareBoost = clamp((power - 1) / 0.8, 0, 1);
     const shift = Math.floor(wave.phase * 0.95) % 6;
