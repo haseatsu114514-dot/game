@@ -6334,6 +6334,7 @@
 
     // In Gunner mode, the attack button is used for shooting, so skip melee logic
     if (playerStyle === "gunner") {
+      updateShot(dt);
       // Reset melee charge if switching modes while charging
       attackChargeTimer = 0;
       attackChargeReadyPlayed = false;
