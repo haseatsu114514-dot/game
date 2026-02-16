@@ -5432,6 +5432,16 @@
   }
 
   function releaseChargeAttack(chargeFrames, options = {}) {
+    if (!Number.isFinite(chargeFrames)) {
+      console.error("releaseChargeAttack called with invalid chargeFrames:", chargeFrames);
+      return;
+    }
+
+    // Debug log for Freeze investigation
+    if (playerStyle === "berserker" && chargeFrames < 10) {
+      console.log("releaseChargeAttack (Small Charge):", chargeFrames, options);
+    }
+
     const comboStage = clamp(Math.floor(options.comboStage || 0), 0, ATTACK_MASH_TRIGGER - 1);
     const comboPunch = comboStage > 0;
     const comboType = comboPunch
@@ -6407,16 +6417,21 @@
     if (deathAnimActive || player.hp <= 0) return;
     if (hitStopTimer > 0) return;
 
-    // Charging - in Gunner mode, use attack button; otherwise use shot button
-    const shotInput = playerStyle === "gunner" ? input.attack : input.shot;
-    if (shotInput && shotReloadTimer <= 0) {
+    // Charging - in Gunner mode, use attack button OR shot button
+    const isShooting = (playerStyle === "gunner" && input.attack) || input.shot;
+
+    // Debug Log for Gunner issue (throttled)
+    if (playerStyle === "gunner" && (input.attack || shotChargeTimer > 0) && Math.random() < 0.05) {
+      console.log(`Gunner Shot Debug: Input=${input.attack}, Timer=${shotChargeTimer.toFixed(2)}, Reload=${shotReloadTimer.toFixed(2)}`);
+    }
+
+    if (isShooting && shotReloadTimer <= 0) {
       shotChargeTimer = Math.min(SHOT_CHARGE_MAX, shotChargeTimer + dt);
       return;
     }
 
     // Release
-    const shotReleased = playerStyle === "gunner" ? !input.attack : !input.shot;
-    if (shotChargeTimer > 0 && shotReleased) {
+    if (shotChargeTimer > 0 && !isShooting) {
       let tier = 0; // Handgun
       if (shotChargeTimer >= SHOT_CHARGE_MAX - 1) tier = 3; // Bazooka
       else if (shotChargeTimer >= SHOT_TIER2_THRESHOLD) tier = 2; // Shotgun (Medium charge)
