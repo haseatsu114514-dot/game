@@ -139,6 +139,7 @@
   let attack2ChargeReadyPlayed = false;
   let attackMashCount = 0;
   let attackMashTimer = 0;
+  let shotChargeTimer = 0;
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
   let hyakuretsuAutoTimer = 0;
@@ -185,6 +186,10 @@
   let seShotgun = null;
   let seStageClear = null;
   let seWhipSwing = null;
+  let seHandgun = null;
+  let seMachineGun = null;
+  let seBazooka = null;
+  let seStrongHit = null;
   // New Audio Buffers
 
 
@@ -312,6 +317,9 @@
   const EMERGENCY_DODGE_SLOWMO_SCALE = 0.12;
   const EMERGENCY_DODGE_INVULN_DURATION = 60;
   const EMERGENCY_DODGE_CHANCE = [0, 0.08, 0.15, 0.22, 0.30, 0.40, 0.50];
+  const SHOT_CHARGE_MAX = 120;
+  const SHOT_MACHINEGUN_THRESHOLD = 60;
+  const SHOT_SHOTGUN_THRESHOLD = 20;
   const WEAPON_DURATION = 600;
   const PROTEIN_BURST_REQUIRE = 18;
   const PROTEIN_BURST_MIN = Math.ceil(PROTEIN_BURST_REQUIRE * 0.5);
@@ -1035,6 +1043,17 @@
       audio.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
+    }
+  }
+
+  function playSound(audio, vol = 1.0) {
+    if (!audio) return;
+    try {
+      audio.currentTime = 0;
+      audio.volume = Math.min(1.0, Math.max(0, vol));
+      audio.play().catch(() => { });
+    } catch (_e) {
+      // Ignore
     }
   }
 
@@ -5533,7 +5552,6 @@
         x: dir > 0 ? hitBox.x + hitBox.w - tipW : hitBox.x,
         y: hitBox.y - 2,
         w: tipW,
-        w: tipW,
         h: hitBox.h + 4,
       });
     } else if (maxChargeMorningStar) {
@@ -6354,7 +6372,6 @@
 
     // Charging
     if (input.shot) {
-      if (typeof shotChargeTimer === "undefined") shotChargeTimer = 0;
       shotChargeTimer = Math.min(SHOT_CHARGE_MAX, shotChargeTimer + dt);
       return;
     }
@@ -14075,6 +14092,7 @@
     Space: "jump",
     KeyJ: "attack",
     KeyF: "attack",
+    KeyD: "attack2",
     KeyH: "shot",
     KeyI: "shot",
     KeyK: "special",
@@ -14107,6 +14125,7 @@
     input.jump = false;
     input.attack = false;
     input.attack2 = false;
+    input.shot = false;
     input.special = false;
     input.special2 = false;
     input.start = false;
@@ -14115,12 +14134,14 @@
     releaseAllHoldButtons();
     input.special2 = false;
     input.start = false;
+    input.shot = false;
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       releaseAllHoldButtons();
       input.special2 = false;
       input.start = false;
+      input.shot = false;
     }
   });
 
