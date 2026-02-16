@@ -6466,8 +6466,8 @@
       if (shotChargeTimer > 0 && shotReleased) {
         let tier = 0;
         if (shotChargeTimer >= SHOT_CHARGE_MAX) tier = 3;
-        else if (shotChargeTimer >= SHOT_SHOTGUN_THRESHOLD) tier = 2;
-        else if (shotChargeTimer >= SHOT_MACHINEGUN_THRESHOLD) tier = 1;
+        else if (shotChargeTimer >= SHOT_TIER2_THRESHOLD) tier = 2;
+        else if (shotChargeTimer >= SHOT_TIER1_THRESHOLD) tier = 1;
 
         // Initial Fire Check
         // For Machinegun (tier 1), first shot costs 1.
@@ -14524,8 +14524,8 @@
     // Color based on Tier
     let color = "#fff";
     if (shotChargeTimer >= SHOT_CHARGE_MAX) color = "#ff00ff"; // Bazooka
-    else if (shotChargeTimer >= SHOT_SHOTGUN_THRESHOLD) color = "#ffaa00"; // Shotgun
-    else if (shotChargeTimer >= SHOT_MACHINEGUN_THRESHOLD) color = "#00ff00"; // Machinegun
+    else if (shotChargeTimer >= SHOT_TIER2_THRESHOLD) color = "#ffaa00"; // Shotgun
+    else if (shotChargeTimer >= SHOT_TIER1_THRESHOLD) color = "#00ff00"; // Machinegun
 
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w * fill, h);
