@@ -14034,6 +14034,7 @@
       drawClearOverlay();
     }
     ctx.restore();
+    drawVersion();
     drawPs1Overlay();
   }
 
