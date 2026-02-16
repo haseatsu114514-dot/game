@@ -6448,13 +6448,8 @@
 
     // Charging - in Gunner mode, use attack button OR shot button
     // Rank Scaling for Max Ammo
-    // Start 50, Max 70 (or just fixed 50 based on user request "Change to 50")
-    // User said "Change max ammo to 50". Let's set base to 30 and rank bonus to 20 to reach 50, or just base 50.
-    // Let's go with Base 32 + Rank * 3 -> Max 50 (Ex=18, 32+18=50).
-    const rankIdx = battleRankIndex;
-    const baseMax = 32;
-    const rankBonus = Math.min(18, rankIdx * 3); // C=0, B=3, A=6, S=9, SS=12, SSS=15, EX=18
-    gunnerMaxAmmo = baseMax + rankBonus;
+    // Set max ammo to 50
+    gunnerMaxAmmo = 50;
 
     const shotInput = playerStyle === "gunner" ? input.attack : input.shot;
 
@@ -6503,9 +6498,9 @@
       if (playerStyle === "gunner" && gunnerAmmo <= 0) {
         // Play Empty Ammo Click (nc371030.mp3)
         if (typeof seNoAmmo !== "undefined" && seNoAmmo) {
-          playSound(seNoAmmo, 0.6);
+          playSound(seNoAmmo, 1.0); // Louder
         } else if (typeof seHandgun !== "undefined" && seHandgun) {
-          playSound(seHandgun, 0.3, 1.8); // High pitch click fallback
+          playSound(seHandgun, 0.7, 1.8); // High pitch click fallback, louder
         }
         shotReloadTimer = 20; // Prevent spamming click
         return;
