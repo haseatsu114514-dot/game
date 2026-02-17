@@ -235,6 +235,59 @@ body {
     0 0 14px rgba(132, 238, 255, 0.42);
 }
 
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, #111, #261a2a 20%);
+  padding: 8px 12px;
+}
+
+.volume-control label {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+.volume-control input[type="range"] {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--line);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.volume-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+
+.volume-control input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+
+#vol-value {
+  font-size: 0.85rem;
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .help {
   border: 2px solid var(--line);
   border-radius: 8px;
