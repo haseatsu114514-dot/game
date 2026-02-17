@@ -375,10 +375,10 @@
   const PRE_BOSS_MOVIE_START_AT = 230;
   const GOD_PHASE_CUTSCENE_DURATION = 210;
   const GOD_PHASE_CUTSCENE_SKIP_MIN = 24;
-  const PEACOCK_BOSS_HP = 11;
-  const PEACOCK_HUMAN_BOSS_HP = 14;
-  const GOD_BOSS_PHASE1_HP = 18;
-  const GOD_BOSS_PHASE2_HP = 24;
+  const PEACOCK_BOSS_HP = 14;
+  const PEACOCK_HUMAN_BOSS_HP = 18;
+  const GOD_BOSS_PHASE1_HP = 23;
+  const GOD_BOSS_PHASE2_HP = 31;
   const GOD_BOSS_SHOT_DENSITY_MUL = 1.28;
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
@@ -3437,8 +3437,8 @@
           vy: 0,
           dir: -1,
           onGround: false,
-          hp: 7,
-          maxHp: 7,
+          hp: 9,
+          maxHp: 9,
           mode: "idle",
           modeTimer: 0,
           shotCooldown: 48,
@@ -4012,8 +4012,8 @@
         vy: 0,
         dir: -1,
         onGround: false,
-        hp: 28,
-        maxHp: 28,
+        hp: 36,
+        maxHp: 36,
         mode: "idle",
         modeTimer: 0,
         shotCooldown: 56,
@@ -6453,7 +6453,7 @@
     // Rank Scaling for Max Ammo
     const rankIdx = battleRankIndex;
     const baseMax = 15;
-    const rankBonus = Math.min(45, Math.round(rankIdx * 7.5));
+    const rankBonus = Math.min(35, Math.round(rankIdx * 35 / 6));
     gunnerMaxAmmo = baseMax + rankBonus;
     // Clamp ammo to current rank max (prevents over-ammo if rank dropped)
     if (gunnerAmmo > gunnerMaxAmmo) gunnerAmmo = gunnerMaxAmmo;
@@ -6468,7 +6468,7 @@
       gunnerReloadDelay -= dt;
       if (gunnerReloadDelay <= 0) {
         // Recalculate max based on current rank to prevent over-reload
-        const reloadRankBonus = Math.min(45, Math.round(battleRankIndex * 7.5));
+        const reloadRankBonus = Math.min(35, Math.round(battleRankIndex * 35 / 6));
         const reloadMax = 15 + reloadRankBonus;
         gunnerMaxAmmo = reloadMax;
         gunnerAmmo = gunnerMaxAmmo;
@@ -6605,10 +6605,8 @@
       if (actualFire > 0) {
         gunnerAmmo -= actualFire;
         // Loop
-        // Shotgun Spread: Scales with Rank
-        // Base 1.0 -> +0.2 per rank above C?
-        // Rank Idx: 0(C) to 6(EX)
-        const spreadBase = 1.0 + rankIdx * 0.25;
+        // Shotgun Spread: Tighter spread, higher power
+        const spreadBase = 0.55 + rankIdx * 0.12;
         const startAngle = -Math.floor(actualFire / 2);
         const dir = player.facing;
         const px = player.x + player.w * 0.5;
@@ -6617,7 +6615,7 @@
         for (let i = 0; i < actualFire; i++) {
           const ang = startAngle + i;
           stage.playerWaves.push({
-            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.6
+            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.85
           });
         }
         if (seShotgun) playSound(seShotgun, 0.7);
@@ -6760,25 +6758,27 @@
         if (!enemy.alive || enemy.kicked) continue;
         if (!waveHitbox || !overlap(waveHitbox, enemy)) continue;
         const dir = wave.vx >= 0 ? 1 : -1;
-        kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul, {
+        const isGun = wave.kind === "bullet" || wave.kind === "shotgun";
+        const knockMul = isGun ? 0.4 : 1.0;
+        kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul * knockMul, {
           immediateRemove: false,
-          flyLifetime: 38,
+          flyLifetime: isGun ? 22 : 38,
           rankStyle: "atk1_wave_shot",
         });
-        enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3) * crisisMul;
-        enemy.vy = -(3.5 + (wave.power || 0) * 0.7 + (crisisMul - 1) * 0.9);
+        enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3) * crisisMul * knockMul;
+        enemy.vy = -(3.5 + (wave.power || 0) * 0.7 + (crisisMul - 1) * 0.9) * knockMul;
         enemy.flash = 12;
         const hx = enemy.x + enemy.w * 0.5;
         const hy = enemy.y + enemy.h * 0.4;
-        triggerImpact(1.5 + (wave.power || 0), hx, hy, 2.6);
-        spawnWaveBurst(hx, hy, 0.8 + (wave.power || 0) * 0.9);
-        playKickSfx(1.32 + (wave.power || 0) * 0.34);
+        triggerImpact((isGun ? 0.6 : 1.5) + (wave.power || 0) * (isGun ? 0.3 : 1), hx, hy, isGun ? 1.5 : 2.6);
+        spawnWaveBurst(hx, hy, (isGun ? 0.4 : 0.8) + (wave.power || 0) * (isGun ? 0.4 : 0.9));
+        playKickSfx(isGun ? 0.8 : 1.32 + (wave.power || 0) * 0.34);
 
         if (wave.kind === "bazooka") {
           spawnExplosion(wave.x + wave.w / 2, wave.y + wave.h / 2, wave.power || 2);
         }
         wave.dead = true;
-      }
+        break;
 
       if (!wave.dead && stage.boss.active) {
         for (const boss of getBossEntities()) {
@@ -6808,29 +6808,33 @@
 
 
 
-      for (const bullet of stage.hazardBullets) {
-        if (wave.dead) break;
-        if (bullet.dead) continue;
-        if (!waveHitbox || !overlap(waveHitbox, bullet)) continue;
-        bullet.dead = true;
-        parryX = bullet.x + bullet.w * 0.5;
-        parryY = bullet.y + bullet.h * 0.5;
-        parryHits += 1;
-      }
+      // Guns (bullet/shotgun) cannot cancel enemy projectiles; other weapons can
+      const canParry = wave.kind !== "bullet" && wave.kind !== "shotgun";
+      if (canParry) {
+        for (const bullet of stage.hazardBullets) {
+          if (wave.dead) break;
+          if (bullet.dead) continue;
+          if (!waveHitbox || !overlap(waveHitbox, bullet)) continue;
+          bullet.dead = true;
+          parryX = bullet.x + bullet.w * 0.5;
+          parryY = bullet.y + bullet.h * 0.5;
+          parryHits += 1;
+        }
 
-      for (const shot of stage.bossShots) {
-        if (wave.dead) break;
-        if (shot.dead) continue;
-        if (!waveHitbox || !overlap(waveHitbox, shot)) continue;
-        shot.dead = true;
-        parryX = shot.x + shot.w * 0.5;
-        parryY = shot.y + shot.h * 0.5;
-        parryHits += 1;
-      }
+        for (const shot of stage.bossShots) {
+          if (wave.dead) break;
+          if (shot.dead) continue;
+          if (!waveHitbox || !overlap(waveHitbox, shot)) continue;
+          shot.dead = true;
+          parryX = shot.x + shot.w * 0.5;
+          parryY = shot.y + shot.h * 0.5;
+          parryHits += 1;
+        }
 
-      if (parryHits > 0) {
-        playParrySfx();
-        spawnWaveBurst(parryX, parryY, 0.72 + (wave.power || 0) * 0.7);
+        if (parryHits > 0) {
+          playParrySfx();
+          spawnWaveBurst(parryX, parryY, 0.72 + (wave.power || 0) * 0.7);
+        }
       }
 
       if (wave.ttl <= 0 || wave.x + wave.w < -24 || wave.x > stage.width + 24) {
