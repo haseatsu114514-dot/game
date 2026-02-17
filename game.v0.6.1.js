@@ -146,8 +146,8 @@
   let shotReloadTimer = 0;
 
   // Gunner Ammo System
-  let gunnerAmmo = 32; // Initial ammo = D-rank max
-  let gunnerMaxAmmo = 6;
+  let gunnerAmmo = 15; // Initial ammo
+  let gunnerMaxAmmo = 15;
   let lastAttackPressTime = 0;
   const RELOAD_DOUBLE_TAP_TIME = 300; // ms
   let hyakuretsuTimer = 0;
@@ -206,6 +206,8 @@
   let seNoAmmo = null;
   // New Audio Buffers
 
+  // Master Volume Control (0.0 - 1.0)
+  let masterVolume = 0.7;
 
   let audioCtx = null;
   let bgmMaster = null;
@@ -982,14 +984,14 @@
       stageMusicFadeTimer = 0;
       stageMusicFadeDuration = 0;
       try {
-        stageMusic.volume = safeTarget;
+        stageMusic.volume = clamp(safeTarget * masterVolume, 0, 1);
       } catch (_e) {
         // Ignore media errors and keep gameplay responsive.
       }
       return;
     }
 
-    stageMusicFadeStart = clamp(stageMusic.volume || 0, 0, 1);
+    stageMusicFadeStart = clamp((stageMusic.volume || 0) / Math.max(0.01, masterVolume), 0, 1);
     stageMusicFadeEnd = safeTarget;
     stageMusicFadeDuration = Math.max(1, Math.round(fadeSec * 60));
     stageMusicFadeTimer = stageMusicFadeDuration;
@@ -1001,7 +1003,7 @@
     const t = 1 - stageMusicFadeTimer / stageMusicFadeDuration;
     const vol = stageMusicFadeStart + (stageMusicFadeEnd - stageMusicFadeStart) * clamp(t, 0, 1);
     try {
-      stageMusic.volume = clamp(vol, 0, 1);
+      stageMusic.volume = clamp(vol * masterVolume, 0, 1);
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
     }
@@ -1061,7 +1063,7 @@
     if (!audio) return;
     try {
       audio.currentTime = 0;
-      audio.volume = VOICE_VOL;
+      audio.volume = Math.min(1.0, Math.max(0, VOICE_VOL * masterVolume));
       audio.play().catch(() => { });
     } catch (_e) {
       // Ignore media errors and keep gameplay responsive.
@@ -1072,7 +1074,7 @@
     if (!audio) return;
     try {
       audio.currentTime = 0;
-      audio.volume = Math.min(1.0, Math.max(0, vol));
+      audio.volume = Math.min(1.0, Math.max(0, vol * masterVolume));
       if ("playbackRate" in audio) {
         audio.playbackRate = rate;
       }
@@ -6450,9 +6452,11 @@
     // Rank Scaling for Max Ammo
     // Rank Scaling for Max Ammo
     const rankIdx = battleRankIndex;
-    const baseMax = 32;
-    const rankBonus = Math.min(18, rankIdx * 3); // C=0, B=3, A=6, S=9, SS=12, SSS=15, EX=18
+    const baseMax = 15;
+    const rankBonus = Math.min(45, Math.round(rankIdx * 7.5));
     gunnerMaxAmmo = baseMax + rankBonus;
+    // Clamp ammo to current rank max (prevents over-ammo if rank dropped)
+    if (gunnerAmmo > gunnerMaxAmmo) gunnerAmmo = gunnerMaxAmmo;
 
     const shotInput = playerStyle === "gunner" ? input.attack : input.shot;
 
@@ -6463,6 +6467,10 @@
     if (gunnerReloadDelay > 0) {
       gunnerReloadDelay -= dt;
       if (gunnerReloadDelay <= 0) {
+        // Recalculate max based on current rank to prevent over-reload
+        const reloadRankBonus = Math.min(45, Math.round(battleRankIndex * 7.5));
+        const reloadMax = 15 + reloadRankBonus;
+        gunnerMaxAmmo = reloadMax;
         gunnerAmmo = gunnerMaxAmmo;
         gunnerReloadDelay = 0;
         if (stage.damageTexts) {
@@ -6523,17 +6531,14 @@
         // For Shotgun (tier 2), we check pellets count inside fireRangedWeapon?
         // For Grenade (tier 3), cost is 10.
 
-        const cost = tier === 3 ? 10 : 1;
+        const cost = tier === 3 ? 15 : tier === 2 ? 3 : 1;
 
         if (gunnerAmmo >= cost) {
           if (tier === 3) {
-            gunnerAmmo -= 10;
+            gunnerAmmo -= 15;
           } else if (tier === 0) {
             gunnerAmmo--;
           }
-          // Shotgun consumes in fireRangedWeapon based on pellets, but we should ensure we have enough to start?
-          // Actually fireRangedWeapon handles consumption for shotgun.
-          // We just checked >= 1, but for Bazooka we need 10.
 
           fireRangedWeapon(tier);
 
@@ -6542,11 +6547,18 @@
             const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
             shotReloadTimer = reloadBase;
           }
-        } else if (tier === 3 && gunnerAmmo < 10) {
-          // Not enough ammo for grenade, fail or shoot smaller?
-          // Let's prevent shooting and maybe show "NO AMMO" or click sound?
-          // For now just do nothing or maybe shoot tier 0?
-          // Let's just return to save ammo or maybe force reload logic elsewhere.
+        } else {
+          // Not enough ammo - prompt reload
+          if (typeof seNoAmmo !== "undefined" && seNoAmmo) {
+            playSound(seNoAmmo, 0.8);
+          }
+          const tierName = tier === 3 ? "BAZOOKA(15)" : tier === 2 ? "SHOTGUN" : "FIRE";
+          if (stage.damageTexts) {
+            stage.damageTexts.push({
+              x: player.x, y: player.y - 28, text: `弾不足! RELOAD→攻撃x2`, life: 50, color: "#ffaa00", vy: -0.8
+            });
+          }
+          shotReloadTimer = 15;
         }
 
         shotChargeTimer = 0;
@@ -6559,16 +6571,17 @@
     if (shotMachineGunCount > 0) {
       shotMachineGunFrame += dt;
       const rankIdx = battleRankIndex;
-      const delay = Math.max(1, 6 - Math.floor(rankIdx * 0.8));
+      const delay = Math.max(2, 6 - Math.floor(rankIdx * 0.6));
       if (shotMachineGunFrame >= delay) {
         shotMachineGunFrame = 0;
         if (gunnerAmmo > 0) {
           gunnerAmmo--;
           shotMachineGunCount--;
           fireRangedProjectile(1);
-          if (seMachineGun) playSound(seMachineGun, 0.4);
+          // Only play SE every other bullet to reduce audio overhead
+          if (shotMachineGunCount % 2 === 0 && seMachineGun) playSound(seMachineGun, 0.4);
         } else {
-          shotMachineGunCount = 0; // Stop firing if empty
+          shotMachineGunCount = 0;
         }
       }
     }
@@ -6580,11 +6593,12 @@
       if (seBazooka) playSound(seBazooka, 0.8);
     } else if (tier === 2) { // Shotgun
       const rankIdx = battleRankIndex;
-      let pellets = 3;
-      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 7;
-      else if (rankIdx >= 5) pellets = 6;
-      else if (rankIdx >= 3) pellets = 5;
-      else if (rankIdx >= 2) pellets = 4;
+      let pellets = 5;  // Base increased from 3
+      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 10;
+      else if (rankIdx >= 5) pellets = 9;
+      else if (rankIdx >= 3) pellets = 8;
+      else if (rankIdx >= 2) pellets = 7;
+      else if (rankIdx >= 1) pellets = 6;
 
       // Consume Ammo = Pellets
       const actualFire = Math.min(gunnerAmmo, pellets);
@@ -6611,9 +6625,9 @@
     } else if (tier === 1) { // Machine Gun
       const rankIdx = battleRankIndex;
       const baseBurst = 3;
-      const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 7 : Math.min(5, rankIdx);
+      const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 5 : Math.min(4, rankIdx);
       shotMachineGunCount = baseBurst + extra;
-      shotMachineGunFrame = 4;
+      shotMachineGunFrame = 3;
 
       // SFX: Rank S+ uses Heavy Machinegun
       if (rankIdx >= 4) { // Rank S is index 4 usually? Check if S=4 or 5. Assuming 4.
@@ -6637,11 +6651,10 @@
     const py = player.y + player.h * 0.45;
 
     if (tier === 3) { // Bazooka / Grenade
-      const rankIdx = battleRankIndex;
-      // Buffed Power: Base 3.5 + Rank * 0.4
-      const powerBase = 3.5 + rankIdx * 0.4;
-      // Larger Size: Base 32
-      const sizeBase = 28 + Math.min(16, rankIdx * 3);
+      // Fixed power (no rank scaling) - costs 15 ammo
+      const powerBase = 5.5;
+      // Fixed size
+      const sizeBase = 36;
       stage.playerWaves.push({
         kind: "bazooka", x: px + dir * 20, y: py - 4, w: sizeBase, h: 12, vx: dir * 4.5, vy: 0, ttl: 120, power: powerBase, spin: 0
       });
@@ -6649,17 +6662,17 @@
       // Handled in fireRangedWeapon
     } else if (tier === 1) { // Machine Gun
       const rankIdx = battleRankIndex;
-      // Slower speed: 6.0 start
-      const speed = 6.0 + rankIdx * 1.6;
+      // Slower speed: 4.8 start (reduced from 6.0)
+      const speed = 4.8 + rankIdx * 1.3;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 50, power: 0.4
+        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 55, power: 0.4
       });
     } else { // Handgun
       const rankIdx = battleRankIndex;
-      // Slower speed: 5.5 start
-      const speed = 5.5 + rankIdx * 1.5;
+      // Slower speed: 4.5 start (reduced from 5.5)
+      const speed = 4.5 + rankIdx * 1.2;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 60, power: 0.5
+        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 65, power: 0.5
       });
     }
   }
@@ -6703,15 +6716,19 @@
       } else if (wave.kind === "bullet" || wave.kind === "shotgun") {
         wave.x += wave.vx * dt;
         wave.y += wave.vy * dt;
-        // Check for solids (Walls/Floors) - No penetration
+        // Check for solids (Walls/Floors) - only near screen
         const cx = wave.x + wave.w * 0.5;
         const cy = wave.y + wave.h * 0.5;
-        for (const s of solids) {
-          if (s.kind === "crumble" && s.state === "gone") continue;
-          if (overlap(wave, s)) {
-            wave.dead = true;
-            triggerImpact(0.5, cx, cy, 1.5); // Small impact
-            break;
+        if (cx >= screenLeft - 40 && cx <= screenRight + 40 && cy >= -20 && cy <= screenBottom + 20) {
+          for (const s of solids) {
+            if (s.kind === "crumble" && s.state === "gone") continue;
+            // Skip solids far from bullet
+            if (Math.abs(s.x + s.w * 0.5 - cx) > s.w * 0.5 + 20) continue;
+            if (overlap(wave, s)) {
+              wave.dead = true;
+              triggerImpact(0.5, cx, cy, 1.5);
+              break;
+            }
           }
         }
       } else if (wave.kind === "explosion") {
@@ -8596,11 +8613,14 @@
     if (emergencyDodgeInvulnTimer > 0) {
       emergencyDodgeInvulnTimer = Math.max(0, emergencyDodgeInvulnTimer - rawDt);
     }
+    // Always decrement flash timer even when dodge is inactive
+    if (emergencyDodgeFlashTimer > 0) {
+      emergencyDodgeFlashTimer = Math.max(0, emergencyDodgeFlashTimer - rawDt);
+    }
     if (!emergencyDodgeActive) return false;
 
     emergencyDodgeTimer = Math.max(0, emergencyDodgeTimer - rawDt);
     emergencyDodgePhase += rawDt;
-    emergencyDodgeFlashTimer = Math.max(0, emergencyDodgeFlashTimer - rawDt);
 
     const anyButton = actions.jumpPressed || actions.attackPressed ||
       actions.specialPressed || actions.special2Pressed || actions.startPressed;
@@ -13981,7 +14001,7 @@
     ctx.save(); // Start Scope
 
     if (emergencyDodgeActive) {
-      const ratio = clamp(emergencyDodgeTimer / EMERGENCY_DODGE_Input_WINDOW, 0, 1);
+      const ratio = clamp(emergencyDodgeTimer / EMERGENCY_DODGE_WINDOW, 0, 1);
       const pulse = (Math.sin(emergencyDodgePhase * 10) + 1) * 0.5;
 
       ctx.save();
@@ -14600,10 +14620,7 @@
       // 1. Ammo Display
       if (playerStyle === "gunner") {
         hudAmmo.style.display = "block";
-        const rankIdx = battleRankIndex;
-        const baseMax = 12;
-        const rankBonus = Math.min(18, rankIdx * 3);
-        const maxAmmo = baseMax + rankBonus;
+        const maxAmmo = gunnerMaxAmmo;
         hudAmmo.textContent = `Ammo: ${gunnerAmmo} / ${maxAmmo}`;
         // Low Ammo Warning
         if (gunnerAmmo <= maxAmmo / 5) {
@@ -14645,22 +14662,61 @@
     if (playerStyle !== "gunner") return;
 
     ctx.save();
-    ctx.font = "bold 14px 'Courier New', monospace";
+    const ammoRatio = clamp(gunnerAmmo / Math.max(1, gunnerMaxAmmo), 0, 1);
+    const isLow = ammoRatio <= 0.2;
+    const isEmpty = gunnerAmmo <= 0;
+    const pulse = isEmpty ? Math.abs(Math.sin(performance.now() * 0.006)) : 0;
+
+    // Background panel
+    const panelX = 6;
+    const panelY = 62;
+    const panelW = 108;
+    const panelH = 28;
+    ctx.fillStyle = `rgba(0, 0, 0, ${isEmpty ? 0.82 + pulse * 0.1 : 0.72})`;
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    ctx.strokeStyle = isEmpty ? `rgba(255, 60, 60, ${0.7 + pulse * 0.3})` : isLow ? "rgba(255, 180, 60, 0.6)" : "rgba(0, 220, 255, 0.4)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+    // Ammo text - larger and bolder
+    ctx.font = "bold 11px 'Courier New', monospace";
     ctx.textAlign = "left";
-    ctx.fillStyle = gunnerAmmo <= 0 ? "#ff0000" : "#00ffff";
-    ctx.fillText(`AMMO: ${gunnerAmmo} / ${gunnerMaxAmmo}`, 10, 80);
+    ctx.textBaseline = "top";
+    if (isEmpty) {
+      ctx.fillStyle = `rgba(255, 50, 50, ${0.8 + pulse * 0.2})`;
+      ctx.fillText("NO AMMO", panelX + 5, panelY + 3);
+    } else if (isLow) {
+      ctx.fillStyle = "#ff9933";
+      ctx.fillText(`AMMO: ${gunnerAmmo}/${gunnerMaxAmmo}`, panelX + 5, panelY + 3);
+    } else {
+      ctx.fillStyle = "#00eeff";
+      ctx.fillText(`AMMO: ${gunnerAmmo}/${gunnerMaxAmmo}`, panelX + 5, panelY + 3);
+    }
 
-    // Bar
-    const barW = 80;
-    const barH = 6;
-    const x = 10;
-    const y = 85;
-    const fill = clamp(gunnerAmmo / gunnerMaxAmmo, 0, 1);
+    // Ammo bar - wider and taller
+    const barX = panelX + 5;
+    const barY = panelY + 17;
+    const barW = panelW - 10;
+    const barH = 7;
 
-    ctx.fillStyle = "#444";
-    ctx.fillRect(x, y, barW, barH);
-    ctx.fillStyle = gunnerAmmo <= 0 ? "#ff0000" : "#00ffff";
-    ctx.fillRect(x, y, barW * fill, barH);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(barX, barY, barW, barH);
+
+    if (isEmpty) {
+      ctx.fillStyle = `rgba(255, 40, 40, ${0.6 + pulse * 0.4})`;
+    } else if (isLow) {
+      ctx.fillStyle = "#ff9933";
+    } else {
+      ctx.fillStyle = "#00ddff";
+    }
+    ctx.fillRect(barX, barY, Math.floor(barW * ammoRatio), barH);
+
+    // Highlight on top of bar
+    if (ammoRatio > 0) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+      ctx.fillRect(barX, barY, Math.floor(barW * ammoRatio), 2);
+    }
+
     ctx.restore();
   }
 
@@ -14685,5 +14741,42 @@
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w * fill, h);
   }
+
+  // --- Master Volume Slider ---
+  const volSlider = document.getElementById("vol-slider");
+  const volValue = document.getElementById("vol-value");
+  function applyMasterVolume() {
+    if (stageMusic && !stageMusic.paused) {
+      try { stageMusic.volume = clamp(BGM_NORMAL_VOL * masterVolume, 0, 1); } catch (_e) {}
+    }
+    if (bossMusic && !bossMusic.paused) {
+      try { bossMusic.volume = clamp(BOSS_BGM_VOL * masterVolume, 0, 1); } catch (_e) {}
+    }
+    if (invincibleMusic && !invincibleMusic.paused) {
+      try { invincibleMusic.volume = clamp(INVINCIBLE_BGM_VOL * masterVolume, 0, 1); } catch (_e) {}
+    }
+  }
+  if (volSlider) {
+    volSlider.addEventListener("input", () => {
+      masterVolume = parseInt(volSlider.value, 10) / 100;
+      if (volValue) volValue.textContent = volSlider.value + "%";
+      applyMasterVolume();
+    });
+  }
+  // Mute toggle with M key
+  let preMuteVolume = 0.7;
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "KeyM") {
+      if (masterVolume > 0) {
+        preMuteVolume = masterVolume;
+        masterVolume = 0;
+      } else {
+        masterVolume = preMuteVolume || 0.7;
+      }
+      if (volSlider) volSlider.value = Math.round(masterVolume * 100);
+      if (volValue) volValue.textContent = Math.round(masterVolume * 100) + "%";
+      applyMasterVolume();
+    }
+  });
 
 })();
