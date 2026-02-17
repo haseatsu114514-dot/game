@@ -150,6 +150,28 @@
   let gunnerMaxAmmo = 15;
   let lastAttackPressTime = 0;
   const RELOAD_DOUBLE_TAP_TIME = 300; // ms
+
+  // --- Swordmaster Style ---
+  let swordComboStage = 0; // 0-2 for three-hit combo
+  let swordComboTimer = 0; // Window to chain next hit
+  let swordDoubleJumpUsed = false;
+  let swordStingerActive = false;
+  let swordStingerTimer = 0;
+  let swordUpperActive = false;
+  let swordUpperTimer = 0;
+  let swordUpperHangTimer = 0; // 1-second hang time
+  let swordSlamActive = false;
+  let swordSlamTimer = 0;
+  let swordAttackCooldown = 0;
+  let swordChargeTimer = 0;
+  let swordChargeReadyPlayed = false;
+  // Devil Trigger (Swordmaster Burst)
+  let devilTriggerTimer = 0;
+  let devilTriggerDuration = 0;
+  let devilTriggerHitCount = 0;
+  let devilTriggerResultTimer = 0;
+  let devilTriggerResultCount = 0;
+
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
   let hyakuretsuAutoTimer = 0;
@@ -342,6 +364,24 @@
   const SHOT_TIER2_THRESHOLD = 60; // Medium charge (Shotgun)
   const SHOT_TIER1_THRESHOLD = 20; // Small charge (Machinegun)
   const WEAPON_DURATION = 600;
+
+  // Swordmaster Constants
+  const SWORD_CHARGE_MAX = 132;
+  const SWORD_STINGER_THRESHOLD = 30;     // Small charge -> Stinger
+  const SWORD_UPPER_THRESHOLD = 70;       // Medium charge -> Upper
+  const SWORD_SLAM_THRESHOLD = 132;       // Max charge -> Slam
+  const SWORD_COMBO_WINDOW = 28;          // Frames to chain combo
+  const SWORD_COMBO_REACH = [22, 26, 32]; // Reach per combo stage
+  const SWORD_COMBO_POWER = [1.0, 1.2, 1.8]; // Base power per stage
+  const SWORD_STINGER_DURATION = 14;
+  const SWORD_STINGER_SPEED = 5.5;
+  const SWORD_UPPER_DURATION = 12;
+  const SWORD_UPPER_HANG_TIME = 60;       // 1 second at 60fps
+  const SWORD_SLAM_DURATION = 18;
+  const SWORD_SLAM_REACH = 38;
+  const SWORD_SLAM_HEIGHT = 40;
+  const DEVIL_TRIGGER_MAX_SEC = 6;
+  const DEVIL_TRIGGER_MIN_SEC = 3;
   const PROTEIN_BURST_REQUIRE = 18;
   const PROTEIN_BURST_MIN = Math.ceil(PROTEIN_BURST_REQUIRE * 0.5);
   const PROTEIN_BURST_GAIN_PROTEIN = 0.6;
@@ -375,10 +415,10 @@
   const PRE_BOSS_MOVIE_START_AT = 230;
   const GOD_PHASE_CUTSCENE_DURATION = 210;
   const GOD_PHASE_CUTSCENE_SKIP_MIN = 24;
-  const PEACOCK_BOSS_HP = 11;
-  const PEACOCK_HUMAN_BOSS_HP = 14;
-  const GOD_BOSS_PHASE1_HP = 18;
-  const GOD_BOSS_PHASE2_HP = 24;
+  const PEACOCK_BOSS_HP = 14;
+  const PEACOCK_HUMAN_BOSS_HP = 18;
+  const GOD_BOSS_PHASE1_HP = 23;
+  const GOD_BOSS_PHASE2_HP = 31;
   const GOD_BOSS_SHOT_DENSITY_MUL = 1.28;
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
@@ -779,6 +819,7 @@
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
     hyakuretsuAutoTimer = 0;
+    resetSwordmasterState();
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -2653,6 +2694,7 @@
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
     hyakuretsuAutoTimer = 0;
+    resetSwordmasterState();
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -3024,6 +3066,12 @@
         if (!triggerProteinBurst()) {
           if (isTimeBurstActive() || proteinBurstTimer > 0) return;
           hudMessage = `BURST: ATTACK ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
+          hudTimer = 28;
+        }
+      } else if (playerStyle === "swordmaster") {
+        if (!triggerDevilTrigger()) {
+          if (devilTriggerTimer > 0 || isTimeBurstActive() || proteinBurstTimer > 0) return;
+          hudMessage = `BURST: DEVIL ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
           hudTimer = 28;
         }
       } else {
@@ -3437,8 +3485,8 @@
           vy: 0,
           dir: -1,
           onGround: false,
-          hp: 7,
-          maxHp: 7,
+          hp: 9,
+          maxHp: 9,
           mode: "idle",
           modeTimer: 0,
           shotCooldown: 48,
@@ -4012,8 +4060,8 @@
         vy: 0,
         dir: -1,
         onGround: false,
-        hp: 28,
-        maxHp: 28,
+        hp: 36,
+        maxHp: 36,
         mode: "idle",
         modeTimer: 0,
         shotCooldown: 56,
@@ -4476,6 +4524,16 @@
       return;
     }
 
+    // Devil Trigger super armor - take no damage, no knockback
+    if (devilTriggerTimer > 0 && !ignoreInvincible && !instantGameOver) {
+      if (invincibleHitCooldown > 0) return;
+      invincibleHitCooldown = 6;
+      hudMessage = "SUPER ARMOR!";
+      hudTimer = 20;
+      triggerImpact(0.7, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.0);
+      return;
+    }
+
     if (!instantGameOver) {
       if (damageInvulnTimer > 0) return;
       if (emergencyDodgeInvulnTimer > 0) return;
@@ -4593,6 +4651,7 @@
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
     hyakuretsuAutoTimer = 0;
+    resetSwordmasterState();
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -4699,6 +4758,7 @@
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
     hyakuretsuAutoTimer = 0;
+    resetSwordmasterState();
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -4789,6 +4849,7 @@
     hyakuretsuTimer = 0;
     hyakuretsuHitTimer = 0;
     hyakuretsuAutoTimer = 0;
+    resetSwordmasterState();
     attackEffectTimer = 0;
     attackEffectPhase = 0;
     attackEffectMode = "none";
@@ -6364,9 +6425,16 @@
     // In Gunner mode, the attack button is used for shooting, so skip melee logic
     if (playerStyle === "gunner") {
       updateShot(dt, actions);
-      // Reset melee charge if switching modes while charging
       attackChargeTimer = 0;
       attackChargeReadyPlayed = false;
+      return;
+    }
+
+    // --- Swordmaster attack processing ---
+    if (playerStyle === "swordmaster") {
+      attackChargeTimer = 0;
+      attackChargeReadyPlayed = false;
+      updateSwordmasterAttack(dt, actions);
       return;
     }
 
@@ -6453,7 +6521,7 @@
     // Rank Scaling for Max Ammo
     const rankIdx = battleRankIndex;
     const baseMax = 15;
-    const rankBonus = Math.min(45, Math.round(rankIdx * 7.5));
+    const rankBonus = Math.min(35, Math.round(rankIdx * 35 / 6));
     gunnerMaxAmmo = baseMax + rankBonus;
     // Clamp ammo to current rank max (prevents over-ammo if rank dropped)
     if (gunnerAmmo > gunnerMaxAmmo) gunnerAmmo = gunnerMaxAmmo;
@@ -6468,7 +6536,7 @@
       gunnerReloadDelay -= dt;
       if (gunnerReloadDelay <= 0) {
         // Recalculate max based on current rank to prevent over-reload
-        const reloadRankBonus = Math.min(45, Math.round(battleRankIndex * 7.5));
+        const reloadRankBonus = Math.min(35, Math.round(battleRankIndex * 35 / 6));
         const reloadMax = 15 + reloadRankBonus;
         gunnerMaxAmmo = reloadMax;
         gunnerAmmo = gunnerMaxAmmo;
@@ -6605,10 +6673,8 @@
       if (actualFire > 0) {
         gunnerAmmo -= actualFire;
         // Loop
-        // Shotgun Spread: Scales with Rank
-        // Base 1.0 -> +0.2 per rank above C?
-        // Rank Idx: 0(C) to 6(EX)
-        const spreadBase = 1.0 + rankIdx * 0.25;
+        // Shotgun Spread: Tighter spread, higher power
+        const spreadBase = 0.55 + rankIdx * 0.12;
         const startAngle = -Math.floor(actualFire / 2);
         const dir = player.facing;
         const px = player.x + player.w * 0.5;
@@ -6617,7 +6683,7 @@
         for (let i = 0; i < actualFire; i++) {
           const ang = startAngle + i;
           stage.playerWaves.push({
-            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.6
+            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.85
           });
         }
         if (seShotgun) playSound(seShotgun, 0.7);
@@ -6696,6 +6762,340 @@
     playKickSfx(1.5); // Use existing SFX or add new one
   }
 
+  // ========== SWORDMASTER SYSTEM ==========
+
+  function updateSwordmasterAttack(dt, actions) {
+    const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    if (!playable) return;
+    if (deathAnimActive || player.hp <= 0) return;
+    if (hitStopTimer > 0) return;
+
+    // Devil Trigger update
+    if (devilTriggerTimer > 0) {
+      devilTriggerTimer -= dt;
+      if (devilTriggerTimer <= 0) {
+        endDevilTrigger();
+      }
+    }
+
+    // Combo window decay
+    if (swordComboTimer > 0) {
+      swordComboTimer -= dt;
+      if (swordComboTimer <= 0) {
+        swordComboStage = 0;
+        swordComboTimer = 0;
+      }
+    }
+
+    // Cooldown
+    if (swordAttackCooldown > 0) {
+      swordAttackCooldown -= dt;
+      return;
+    }
+
+    // Charge input
+    if (input.attack) {
+      const chargeMul = battleRankChargeMultiplier();
+      const before = swordChargeTimer;
+      swordChargeTimer = Math.min(SWORD_CHARGE_MAX, swordChargeTimer + dt * chargeMul);
+      if (!swordChargeReadyPlayed && swordChargeTimer >= SWORD_SLAM_THRESHOLD && before < SWORD_SLAM_THRESHOLD) {
+        swordChargeReadyPlayed = true;
+        playChargeReadySfx();
+      }
+      return;
+    }
+
+    // Release
+    if (swordChargeTimer > 0) {
+      if (swordChargeTimer >= SWORD_SLAM_THRESHOLD - 1) {
+        performSwordSlam();
+      } else if (swordChargeTimer >= SWORD_UPPER_THRESHOLD) {
+        performSwordUpper();
+      } else if (swordChargeTimer >= SWORD_STINGER_THRESHOLD) {
+        performSwordStinger();
+      } else {
+        performSwordCombo();
+      }
+      swordChargeTimer = 0;
+      swordChargeReadyPlayed = false;
+      return;
+    }
+
+  }
+
+  function performSwordCombo() {
+    const dir = player.facing;
+    const rankIdx = battleRankIndex;
+    const stage_ = swordComboStage;
+    const reach = SWORD_COMBO_REACH[stage_] + rankIdx * 2;
+    const power = SWORD_COMBO_POWER[stage_] * (1 + rankIdx * 0.06);
+    const hitH = stage_ === 2 ? 18 : 14;
+    const cooldown = Math.max(5, 12 - rankIdx * 0.8);
+
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 2 : player.x - reach + 2,
+      y: player.y + 2,
+      w: reach,
+      h: hitH,
+    };
+
+    swordHitEnemies(hitBox, dir, power, stage_ === 2 ? 1.2 : 0.8);
+    swordHitBoss(hitBox, dir, power);
+
+    triggerImpact(0.8 + stage_ * 0.4, player.x + player.w * 0.5 + dir * reach * 0.5, player.y + 10, 1.5 + stage_ * 0.5);
+    spawnSwordSlash(dir, stage_);
+
+    if (seWhipSwing) playSound(seWhipSwing, 0.6 + stage_ * 0.1, 1.2 - stage_ * 0.1);
+
+    swordComboStage = (stage_ + 1) % 3;
+    swordComboTimer = SWORD_COMBO_WINDOW;
+    swordAttackCooldown = cooldown;
+    attackEffectTimer = 8 + stage_ * 2;
+    attackEffectMode = "sword";
+  }
+
+  function performSwordStinger() {
+    const dir = player.facing;
+    const rankIdx = battleRankIndex;
+    const reach = 30 + rankIdx * 3;
+    const power = 1.5 + rankIdx * 0.1;
+
+    swordStingerActive = true;
+    swordStingerTimer = SWORD_STINGER_DURATION;
+    damageInvulnTimer = Math.max(damageInvulnTimer, SWORD_STINGER_DURATION + 4);
+
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w : player.x - reach,
+      y: player.y + 4,
+      w: reach,
+      h: 12,
+    };
+
+    swordHitEnemies(hitBox, dir, power, 1.5);
+    swordHitBoss(hitBox, dir, power);
+    triggerImpact(1.8, player.x + dir * reach, player.y + 10, 3);
+    spawnSwordSlash(dir, 3);
+
+    if (seStrongHit) playSound(seStrongHit, 0.7);
+    swordAttackCooldown = 14;
+    swordComboStage = 0;
+    swordComboTimer = 0;
+    attackEffectTimer = 12;
+    attackEffectMode = "sword";
+    hudMessage = "STINGER!";
+    hudTimer = 30;
+  }
+
+  function performSwordUpper() {
+    const dir = player.facing;
+    const rankIdx = battleRankIndex;
+    const reach = 24 + rankIdx * 2;
+    const power = 2.0 + rankIdx * 0.12;
+
+    // Launch player and enemies upward
+    player.vy = -7;
+    player.onGround = false;
+
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 4 : player.x - reach + 4,
+      y: player.y - 10,
+      w: reach,
+      h: 28,
+    };
+
+    swordHitEnemies(hitBox, dir, power, 0.3, true); // true = launch enemies up
+    swordHitBoss(hitBox, dir, power, true);
+    swordUpperHangTimer = SWORD_UPPER_HANG_TIME;
+    triggerImpact(2.2, player.x + player.w * 0.5, player.y, 4);
+    spawnSwordSlash(dir, 4);
+
+    if (seStrongHit) playSound(seStrongHit, 0.8, 0.8);
+    swordAttackCooldown = 6;
+    swordComboStage = 0;
+    swordComboTimer = SWORD_COMBO_WINDOW + 30; // Extended window for air combos
+    attackEffectTimer = 14;
+    attackEffectMode = "sword";
+    hudMessage = "HIGH TIME!";
+    hudTimer = 40;
+  }
+
+  function performSwordSlam() {
+    const dir = player.facing;
+    const rankIdx = battleRankIndex;
+    const reach = SWORD_SLAM_REACH + rankIdx * 3;
+    const power = 3.0 + rankIdx * 0.15;
+
+    // Large vertical hitbox (top-to-diagonal swing)
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 6 : player.x - reach + 6,
+      y: player.y - SWORD_SLAM_HEIGHT * 0.5,
+      w: reach,
+      h: SWORD_SLAM_HEIGHT + 10,
+    };
+
+    swordHitEnemies(hitBox, dir, power, 1.8);
+    swordHitBoss(hitBox, dir, power * 1.2);
+    triggerImpact(3.5, player.x + dir * reach * 0.5, player.y, 5);
+
+    // Spawn ground shockwave
+    stage.playerWaves.push({
+      kind: "swordwave",
+      x: player.x + dir * 8,
+      y: player.y + player.h * 0.3,
+      w: reach * 1.2,
+      h: 16,
+      vx: dir * 2,
+      vy: 0,
+      ttl: 20,
+      phase: 0,
+      spin: 0,
+      power: power * 0.6,
+    });
+
+    if (seBazooka) playSound(seBazooka, 0.6, 0.6);
+    if (seStrongHit) playSound(seStrongHit, 0.9, 0.7);
+    swordAttackCooldown = 22;
+    swordComboStage = 0;
+    swordComboTimer = 0;
+    attackEffectTimer = 18;
+    attackEffectMode = "sword";
+    hudMessage = "HELM BREAKER!";
+    hudTimer = 40;
+  }
+
+  function swordHitEnemies(hitBox, dir, power, knockMul, launchUp) {
+    const crisisMul = pinchAttackMultiplier();
+    const effectivePower = power * crisisMul;
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlap(hitBox, enemy)) continue;
+      const bf = rollBlackFlashHit(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 1.1 + power * 0.5);
+      kickEnemy(enemy, dir, effectivePower * (bf ? BLACK_FLASH_DAMAGE_MUL : 1), {
+        immediateRemove: false,
+        flyLifetime: 38,
+        rankStyle: "atk1_wave_shot",
+        blackFlash: bf,
+        blackFlashPowerApplied: true,
+      });
+      enemy.vx = dir * (3 + power * 0.8) * knockMul * crisisMul;
+      if (launchUp) {
+        enemy.vy = -(6 + power * 0.5);
+      } else {
+        enemy.vy = -(2 + power * 0.4) * knockMul;
+      }
+      enemy.flash = 12;
+      const hx = enemy.x + enemy.w * 0.5;
+      const hy = enemy.y + enemy.h * 0.4;
+      spawnWaveBurst(hx, hy, 0.6 + power * 0.4);
+      if (devilTriggerTimer > 0) devilTriggerHitCount++;
+    }
+  }
+
+  function swordHitBoss(hitBox, dir, power, launchUp) {
+    if (!stage.boss || !stage.boss.active) return;
+    const crisisMul = pinchAttackMultiplier();
+    for (const boss of getBossEntities()) {
+      if (boss.hp <= 0) continue;
+      // Devil Trigger ignores boss invulnerability
+      if (boss.invuln > 0 && devilTriggerTimer <= 0) continue;
+      if (!overlap(hitBox, boss)) continue;
+      const hx = boss.x + boss.w * 0.5;
+      const hy = boss.y + boss.h * 0.4;
+      const bf = rollBlackFlashHit(hx, hy, 1.14 + power * 0.6);
+      const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
+      boss.hp = Math.max(0, boss.hp - bossDamage);
+      if (devilTriggerTimer <= 0) {
+        boss.invuln = BOSS_HIT_INVULN_FRAMES;
+      } else {
+        boss.invuln = Math.min(boss.invuln, 4); // Minimal invuln in DT
+      }
+      boss.vx += dir * (0.4 + power * 0.15);
+      if (launchUp) {
+        boss.vy = Math.min(boss.vy, -(2.5 + power * 0.3));
+      } else {
+        boss.vy = Math.min(boss.vy, -(1 + power * 0.2));
+      }
+      triggerImpact(2.0 + power * 0.5, hx, hy, 3.0);
+      spawnWaveBurst(hx, hy, 1.0 + power * 0.4);
+      playKickSfx(1.5 + power * 0.2);
+      handleBossHpZero();
+      if (devilTriggerTimer > 0) devilTriggerHitCount++;
+      break;
+    }
+  }
+
+  function spawnSwordSlash(dir, type) {
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.4;
+    const colors = ["#aaddff", "#88ccff", "#66aaff", "#ff8844", "#ff44aa"];
+    const color = colors[Math.min(type, colors.length - 1)];
+    for (let i = 0; i < 3 + type; i++) {
+      const life = 8 + Math.random() * 6;
+      hitSparks.push({
+        x: px + dir * (6 + Math.random() * 14),
+        y: py + (Math.random() - 0.5) * 16,
+        vx: dir * (2 + Math.random() * 3),
+        vy: (Math.random() - 0.5) * 2 - (type >= 4 ? 2 : 0),
+        life: life,
+        maxLife: life,
+        color: color,
+      });
+    }
+  }
+
+  // --- Devil Trigger (Swordmaster Burst) ---
+  function triggerDevilTrigger() {
+    if (devilTriggerTimer > 0) return false;
+    if (isTimeBurstActive() || proteinBurstTimer > 0) return false;
+    if (proteinBurstGauge1 < PROTEIN_BURST_MIN) return false;
+
+    const gaugeRatio = clamp(proteinBurstGauge1 / PROTEIN_BURST_REQUIRE, 0, 1);
+    const seconds = DEVIL_TRIGGER_MIN_SEC + (DEVIL_TRIGGER_MAX_SEC - DEVIL_TRIGGER_MIN_SEC) * gaugeRatio;
+    devilTriggerDuration = seconds * 60;
+    devilTriggerTimer = devilTriggerDuration;
+    devilTriggerHitCount = 0;
+    proteinBurstGauge1 = 0;
+    proteinBurstGauge2 = 0;
+
+    hudMessage = "DEVIL TRIGGER!";
+    hudTimer = 80;
+    triggerImpact(4, player.x + player.w * 0.5, player.y + player.h * 0.5, 5);
+    if (seBurst1Max) playSound(seBurst1Max, 0.9);
+    return true;
+  }
+
+  function endDevilTrigger() {
+    devilTriggerTimer = 0;
+    devilTriggerResultTimer = 180;
+    devilTriggerResultCount = devilTriggerHitCount;
+    devilTriggerHitCount = 0;
+  }
+
+  function isDevilTriggerActive() {
+    return devilTriggerTimer > 0;
+  }
+
+  function resetSwordmasterState() {
+    swordComboStage = 0;
+    swordComboTimer = 0;
+    swordDoubleJumpUsed = false;
+    swordStingerActive = false;
+    swordStingerTimer = 0;
+    swordUpperActive = false;
+    swordUpperTimer = 0;
+    swordUpperHangTimer = 0;
+    swordSlamActive = false;
+    swordSlamTimer = 0;
+    swordAttackCooldown = 0;
+    swordChargeTimer = 0;
+    swordChargeReadyPlayed = false;
+    devilTriggerTimer = 0;
+    devilTriggerDuration = 0;
+    devilTriggerHitCount = 0;
+    devilTriggerResultTimer = 0;
+    devilTriggerResultCount = 0;
+  }
+
   function updatePlayerWaves(dt, solids) {
     if (!stage.playerWaves || stage.playerWaves.length === 0) return;
     const crisisMul = pinchAttackMultiplier();
@@ -6735,6 +7135,11 @@
         // Explosion stays in place but might expand or fade
         wave.anim = (wave.anim || 0) + dt;
         if (wave.anim > 20) wave.dead = true; // Short life logic
+      } else if (wave.kind === "swordwave") {
+        // Swordmaster slam shockwave - expands outward briefly
+        wave.phase += dt;
+        wave.x += wave.vx * dt;
+        wave.w += dt * 2.5; // Expand hitbox
       } else {
         // Original Wave
         wave.phase += dt;
@@ -6760,25 +7165,29 @@
         if (!enemy.alive || enemy.kicked) continue;
         if (!waveHitbox || !overlap(waveHitbox, enemy)) continue;
         const dir = wave.vx >= 0 ? 1 : -1;
-        kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul, {
+        const isGun = wave.kind === "bullet" || wave.kind === "shotgun";
+        const knockMul = isGun ? 0.4 : 1.0;
+        kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul * knockMul, {
           immediateRemove: false,
-          flyLifetime: 38,
+          flyLifetime: isGun ? 22 : 38,
           rankStyle: "atk1_wave_shot",
         });
-        enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3) * crisisMul;
-        enemy.vy = -(3.5 + (wave.power || 0) * 0.7 + (crisisMul - 1) * 0.9);
+        enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3) * crisisMul * knockMul;
+        enemy.vy = -(3.5 + (wave.power || 0) * 0.7 + (crisisMul - 1) * 0.9) * knockMul;
         enemy.flash = 12;
         const hx = enemy.x + enemy.w * 0.5;
         const hy = enemy.y + enemy.h * 0.4;
-        triggerImpact(1.5 + (wave.power || 0), hx, hy, 2.6);
-        spawnWaveBurst(hx, hy, 0.8 + (wave.power || 0) * 0.9);
-        playKickSfx(1.32 + (wave.power || 0) * 0.34);
+        triggerImpact((isGun ? 0.6 : 1.5) + (wave.power || 0) * (isGun ? 0.3 : 1), hx, hy, isGun ? 1.5 : 2.6);
+        spawnWaveBurst(hx, hy, (isGun ? 0.4 : 0.8) + (wave.power || 0) * (isGun ? 0.4 : 0.9));
+        playKickSfx(isGun ? 0.8 : 1.32 + (wave.power || 0) * 0.34);
 
         if (wave.kind === "bazooka") {
           spawnExplosion(wave.x + wave.w / 2, wave.y + wave.h / 2, wave.power || 2);
         }
-        wave.dead = true;
-      }
+        if (wave.kind !== "swordwave" && wave.kind !== "explosion") {
+          wave.dead = true;
+          break;
+        }
 
       if (!wave.dead && stage.boss.active) {
         for (const boss of getBossEntities()) {
@@ -6808,29 +7217,33 @@
 
 
 
-      for (const bullet of stage.hazardBullets) {
-        if (wave.dead) break;
-        if (bullet.dead) continue;
-        if (!waveHitbox || !overlap(waveHitbox, bullet)) continue;
-        bullet.dead = true;
-        parryX = bullet.x + bullet.w * 0.5;
-        parryY = bullet.y + bullet.h * 0.5;
-        parryHits += 1;
-      }
+      // Guns (bullet/shotgun) cannot cancel enemy projectiles; other weapons can
+      const canParry = wave.kind !== "bullet" && wave.kind !== "shotgun";
+      if (canParry) {
+        for (const bullet of stage.hazardBullets) {
+          if (wave.dead) break;
+          if (bullet.dead) continue;
+          if (!waveHitbox || !overlap(waveHitbox, bullet)) continue;
+          bullet.dead = true;
+          parryX = bullet.x + bullet.w * 0.5;
+          parryY = bullet.y + bullet.h * 0.5;
+          parryHits += 1;
+        }
 
-      for (const shot of stage.bossShots) {
-        if (wave.dead) break;
-        if (shot.dead) continue;
-        if (!waveHitbox || !overlap(waveHitbox, shot)) continue;
-        shot.dead = true;
-        parryX = shot.x + shot.w * 0.5;
-        parryY = shot.y + shot.h * 0.5;
-        parryHits += 1;
-      }
+        for (const shot of stage.bossShots) {
+          if (wave.dead) break;
+          if (shot.dead) continue;
+          if (!waveHitbox || !overlap(waveHitbox, shot)) continue;
+          shot.dead = true;
+          parryX = shot.x + shot.w * 0.5;
+          parryY = shot.y + shot.h * 0.5;
+          parryHits += 1;
+        }
 
-      if (parryHits > 0) {
-        playParrySfx();
-        spawnWaveBurst(parryX, parryY, 0.72 + (wave.power || 0) * 0.7);
+        if (parryHits > 0) {
+          playParrySfx();
+          spawnWaveBurst(parryX, parryY, 0.72 + (wave.power || 0) * 0.7);
+        }
       }
 
       if (wave.ttl <= 0 || wave.x + wave.w < -24 || wave.x > stage.width + 24) {
@@ -8692,6 +9105,7 @@
       if (actions.jumpPressed && player.onGround) {
         player.vy = -jumpPower;
         playJumpSfx();
+        swordDoubleJumpUsed = false;
         const runningJump = move !== 0 && Math.abs(player.vx) >= DASH_JUMP_MIN_SPEED && Math.sign(player.vx) === move;
         if (runningJump) {
           player.vx = clamp(player.vx + move * DASH_JUMP_VX_BONUS, -maxSpeed * DASH_JUMP_SPEED_CAP_MULT, maxSpeed * DASH_JUMP_SPEED_CAP_MULT);
@@ -8699,9 +9113,27 @@
           dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
         }
         player.onGround = false;
+      } else if (actions.jumpPressed && !player.onGround && playerStyle === "swordmaster" && !swordDoubleJumpUsed) {
+        swordDoubleJumpUsed = true;
+        player.vy = -(jumpPower * 0.85);
+        playJumpSfx();
       }
 
-      const gravityMult = dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1;
+      // Swordmaster upper hang
+      if (swordUpperHangTimer > 0) {
+        swordUpperHangTimer -= dt;
+        player.vy = Math.min(player.vy, -0.1);
+        if (swordUpperHangTimer <= 0) swordUpperHangTimer = 0;
+      }
+      if (swordStingerActive && swordStingerTimer > 0) {
+        swordStingerTimer -= dt;
+        player.vx = player.facing * SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08);
+        damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+        if (swordStingerTimer <= 0) swordStingerActive = false;
+      }
+
+      const gravityMult = (dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1)
+        * (swordUpperHangTimer > 0 ? 0 : 1);
       player.vy = Math.min(player.vy + GRAVITY * gravityMult * dt, MAX_FALL);
       moveWithCollisions(player, solids, dt, triggerCrumble);
       player.x = clamp(player.x, 0, stage.width - player.w);
@@ -8781,6 +9213,7 @@
       if (actions.jumpPressed && player.onGround) {
         player.vy = -jumpPower;
         playJumpSfx();
+        swordDoubleJumpUsed = false;
         const runningJump = move !== 0 && Math.abs(player.vx) >= DASH_JUMP_MIN_SPEED && Math.sign(player.vx) === move;
         if (runningJump) {
           player.vx = clamp(player.vx + move * DASH_JUMP_VX_BONUS, -maxSpeed * DASH_JUMP_SPEED_CAP_MULT, maxSpeed * DASH_JUMP_SPEED_CAP_MULT);
@@ -8788,9 +9221,26 @@
           dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
         }
         player.onGround = false;
+      } else if (actions.jumpPressed && !player.onGround && playerStyle === "swordmaster" && !swordDoubleJumpUsed) {
+        swordDoubleJumpUsed = true;
+        player.vy = -(jumpPower * 0.85);
+        playJumpSfx();
       }
 
-      const gravityMult = dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1;
+      if (swordUpperHangTimer > 0) {
+        swordUpperHangTimer -= dt;
+        player.vy = Math.min(player.vy, -0.1);
+        if (swordUpperHangTimer <= 0) swordUpperHangTimer = 0;
+      }
+      if (swordStingerActive && swordStingerTimer > 0) {
+        swordStingerTimer -= dt;
+        player.vx = player.facing * SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08);
+        damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+        if (swordStingerTimer <= 0) swordStingerActive = false;
+      }
+
+      const gravityMult = (dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1)
+        * (swordUpperHangTimer > 0 ? 0 : 1);
       player.vy = Math.min(player.vy + GRAVITY * gravityMult * dt, MAX_FALL);
       moveWithCollisions(player, solids, dt, triggerCrumble);
       player.x = clamp(player.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
@@ -11083,6 +11533,25 @@
       ctx.fill();
       return;
     }
+    if (wave.kind === "swordwave") {
+      const alpha = clamp(wave.ttl / 20, 0, 1);
+      const dtActive = devilTriggerTimer > 0;
+      // Ground slash wave effect
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 60, 20, ${0.35 * alpha})`
+        : `rgba(160, 200, 255, ${0.3 * alpha})`;
+      ctx.fillRect(x - 2, y - 2, wave.w + 4, wave.h + 4);
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 120, 60, ${0.6 * alpha})`
+        : `rgba(200, 230, 255, ${0.5 * alpha})`;
+      ctx.fillRect(x, y, wave.w, wave.h);
+      // Central bright line
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 200, 100, ${0.7 * alpha})`
+        : `rgba(255, 255, 255, ${0.6 * alpha})`;
+      ctx.fillRect(x + 1, y + Math.floor(wave.h * 0.4), wave.w - 2, 2);
+      return;
+    }
 
     const power = clamp(wave.power || 0, 0, 1.8);
     const flareBoost = clamp((power - 1) / 0.8, 0, 1);
@@ -11416,11 +11885,12 @@
     const isMorningStar = mode === "morningstar";
     const isShoryu = mode === "shoryu";
     const isHammer = mode === "hammer";
+    const isSword = mode === "sword";
     const isCombo = comboStage > 0;
     const comboMove = isCombo
       ? (comboStage === 1 ? "punch" : comboStage === 2 ? "kick" : "upper")
       : "none";
-    const effectDuration = isHammer ? 22 : isWave ? 16 : isHyakuretsu ? 6 : isMorningStarSpin ? 18 : isMorningStar ? 16 : isShoryu ? 18 : isCombo ? 8 + comboStage * 2 : 11;
+    const effectDuration = isSword ? 14 : isHammer ? 22 : isWave ? 16 : isHyakuretsu ? 6 : isMorningStarSpin ? 18 : isMorningStar ? 16 : isShoryu ? 18 : isCombo ? 8 + comboStage * 2 : 11;
     const ratio = clamp(attackEffectTimer / effectDuration, 0, 1);
     const effectPower = clamp(attackEffectPower, 0, 1.8);
     const visualPower = effectPower <= 1 ? effectPower : 1 + (effectPower - 1) * 0.72;
@@ -11453,6 +11923,54 @@
       ctx.fillRect(hx + 2, hy + 1, 2, 1);
       ctx.fillStyle = "rgba(255, 186, 132, 0.48)";
       ctx.fillRect(hx - 4, hy + 2, hammerW + 8, 1);
+      return;
+    }
+    if (isSword) {
+      // Draw sword slash arc
+      const swing = clamp(1 - ratio, 0, 1);
+      const bladeLen = Math.floor(20 + visualPower * 12 + swing * 4);
+      const anchorX = dir > 0 ? cx + 4 : cx - 4;
+      const anchorY = cy - 6;
+      const dtActive = devilTriggerTimer > 0;
+      const baseAngle = dir > 0
+        ? -0.8 + swing * 1.6
+        : Math.PI + 0.8 - swing * 1.6;
+      const tipX = Math.round(anchorX + Math.cos(baseAngle) * bladeLen);
+      const tipY = Math.round(anchorY + Math.sin(baseAngle) * bladeLen);
+
+      // Blade segments
+      const segments = 8;
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const lx = Math.round(anchorX + (tipX - anchorX) * t);
+        const ly = Math.round(anchorY + (tipY - anchorY) * t);
+        const alpha = (1 - t * 0.4) * ratio;
+        ctx.fillStyle = dtActive
+          ? `rgba(255, ${Math.floor(80 + t * 120)}, ${Math.floor(40 + t * 60)}, ${alpha.toFixed(2)})`
+          : `rgba(${Math.floor(180 + t * 75)}, ${Math.floor(210 + t * 45)}, 255, ${alpha.toFixed(2)})`;
+        ctx.fillRect(lx - 1, ly - 1, 3, 2);
+      }
+
+      // Bright tip
+      const tipAlpha = ratio * 0.8;
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 100, 60, ${tipAlpha.toFixed(2)})`
+        : `rgba(255, 255, 255, ${tipAlpha.toFixed(2)})`;
+      ctx.fillRect(tipX - 2, tipY - 2, 4, 4);
+
+      // Trail arc
+      if (swing > 0.2) {
+        const trailAlpha = (swing - 0.2) * 0.6 * ratio;
+        ctx.strokeStyle = dtActive
+          ? `rgba(255, 60, 30, ${trailAlpha.toFixed(2)})`
+          : `rgba(160, 200, 255, ${trailAlpha.toFixed(2)})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const startA = dir > 0 ? -0.8 : Math.PI + 0.8;
+        const endA = baseAngle;
+        ctx.arc(anchorX, anchorY, bladeLen * 0.8, startA, endA, dir < 0);
+        ctx.stroke();
+      }
       return;
     }
     if (isMorningStarSpin) {
@@ -14085,6 +14603,48 @@
     }
   }
 
+  function drawDevilTriggerOverlay() {
+    // DT result display
+    if (devilTriggerResultTimer > 0) {
+      devilTriggerResultTimer -= 1;
+      const alpha = clamp(devilTriggerResultTimer / 60, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#ff3300";
+      ctx.font = "bold 12px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(`DEVIL TRIGGER RESULT: ${devilTriggerResultCount} HITS!`, W * 0.5, H * 0.35);
+      ctx.restore();
+    }
+
+    if (devilTriggerTimer <= 0) return;
+
+    // Red world tint
+    const ratio = clamp(devilTriggerTimer / devilTriggerDuration, 0, 1);
+    const pulse = 0.5 + Math.sin(performance.now() * 0.004) * 0.15;
+    const intensity = 0.12 + pulse * 0.06;
+
+    ctx.fillStyle = `rgba(180, 20, 0, ${intensity * ratio})`;
+    ctx.fillRect(0, 0, W, H);
+
+    // Vignette edges
+    const grad = ctx.createRadialGradient(W * 0.5, H * 0.5, W * 0.2, W * 0.5, H * 0.5, W * 0.7);
+    grad.addColorStop(0, "rgba(0, 0, 0, 0)");
+    grad.addColorStop(1, `rgba(120, 0, 0, ${0.15 * ratio})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // DT timer bar
+    const barW = 60;
+    const barH = 3;
+    const barX = Math.floor(W * 0.5 - barW * 0.5);
+    const barY = 18;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+    ctx.fillStyle = `rgba(255, ${Math.floor(50 + pulse * 50)}, 0, 0.9)`;
+    ctx.fillRect(barX, barY, Math.floor(barW * ratio), barH);
+  }
+
   function drawProteinBurstLaserOverlay() {
     const laserModeActive = proteinBurstMode === PROTEIN_BURST_MODE_LASER && proteinBurstTimer > 0;
     if (proteinBurstLaserTimer <= 0 && !laserModeActive) return;
@@ -14209,6 +14769,7 @@
     drawKickBurstOverlay();
     drawWaveFlashOverlay();
     drawProteinBurstLaserOverlay();
+    drawDevilTriggerOverlay();
     if (stopMonochrome) {
       ctx.filter = "none";
     }
@@ -14558,12 +15119,29 @@
       const actions = sampleActions();
 
       if (actions.styleChangePressed) {
-        playerStyle = playerStyle === "berserker" ? "gunner" : "berserker";
-        hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE" : "GUNNER STYLE";
+        if (playerStyle === "berserker") playerStyle = "gunner";
+        else if (playerStyle === "gunner") playerStyle = "swordmaster";
+        else playerStyle = "berserker";
+
+        hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE"
+          : playerStyle === "gunner" ? "GUNNER STYLE"
+          : "SWORDMASTER STYLE";
         hudTimer = 60;
 
-        // Reset gunner reload timer to prevent jams
+        // Reset timers to prevent jams
         shotReloadTimer = 0;
+        attackCooldown = 0;
+        attackChargeTimer = 0;
+        swordComboStage = 0;
+        swordComboTimer = 0;
+        swordChargeTimer = 0;
+        swordChargeReadyPlayed = false;
+        swordStingerActive = false;
+        swordStingerTimer = 0;
+        swordUpperActive = false;
+        swordUpperHangTimer = 0;
+        swordSlamActive = false;
+        swordAttackCooldown = 0;
 
         updateStyleUI();
       }
@@ -14608,12 +15186,17 @@
   function updateStyleUI() {
     if (btnAttack) {
       const isBerserker = playerStyle === "berserker";
+      const isSwordmaster = playerStyle === "swordmaster";
       btnAttack.style.background = isBerserker
         ? "linear-gradient(to bottom, #ff5555, #cc0000)"
-        : "linear-gradient(to bottom, #5555ff, #0000cc)";
+        : isSwordmaster
+          ? "linear-gradient(to bottom, #ff6644, #cc3300)"
+          : "linear-gradient(to bottom, #5555ff, #0000cc)";
       btnAttack.style.boxShadow = isBerserker
         ? "0 4px 0 #990000"
-        : "0 4px 0 #000099";
+        : isSwordmaster
+          ? "0 4px 0 #992200"
+          : "0 4px 0 #000099";
     }
 
     if (hudAmmo && hudChargeFill) {
@@ -14641,6 +15224,8 @@
         chargeRatio = attackChargeTimer / ATTACK_CHARGE_MAX;
       } else if (playerStyle === "gunner") {
         chargeRatio = shotChargeTimer / SHOT_CHARGE_MAX;
+      } else if (playerStyle === "swordmaster") {
+        chargeRatio = swordChargeTimer / SWORD_CHARGE_MAX;
       }
 
       const chargeRatio2 = attack2ChargeTimer / ATTACK2_CHARGE_MAX;
