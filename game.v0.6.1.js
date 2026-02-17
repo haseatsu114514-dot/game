@@ -146,8 +146,8 @@
   let shotReloadTimer = 0;
 
   // Gunner Ammo System
-  let gunnerAmmo = 32; // Initial ammo = D-rank max
-  let gunnerMaxAmmo = 6;
+  let gunnerAmmo = 15; // Initial ammo
+  let gunnerMaxAmmo = 15;
   let lastAttackPressTime = 0;
   const RELOAD_DOUBLE_TAP_TIME = 300; // ms
   let hyakuretsuTimer = 0;
@@ -6452,8 +6452,8 @@
     // Rank Scaling for Max Ammo
     // Rank Scaling for Max Ammo
     const rankIdx = battleRankIndex;
-    const baseMax = 32;
-    const rankBonus = Math.min(18, rankIdx * 3); // C=0, B=3, A=6, S=9, SS=12, SSS=15, EX=18
+    const baseMax = 15;
+    const rankBonus = Math.min(45, Math.round(rankIdx * 7.5));
     gunnerMaxAmmo = baseMax + rankBonus;
     // Clamp ammo to current rank max (prevents over-ammo if rank dropped)
     if (gunnerAmmo > gunnerMaxAmmo) gunnerAmmo = gunnerMaxAmmo;
@@ -6468,8 +6468,8 @@
       gunnerReloadDelay -= dt;
       if (gunnerReloadDelay <= 0) {
         // Recalculate max based on current rank to prevent over-reload
-        const reloadRankBonus = Math.min(18, battleRankIndex * 3);
-        const reloadMax = 32 + reloadRankBonus;
+        const reloadRankBonus = Math.min(45, Math.round(battleRankIndex * 7.5));
+        const reloadMax = 15 + reloadRankBonus;
         gunnerMaxAmmo = reloadMax;
         gunnerAmmo = gunnerMaxAmmo;
         gunnerReloadDelay = 0;
@@ -6531,7 +6531,7 @@
         // For Shotgun (tier 2), we check pellets count inside fireRangedWeapon?
         // For Grenade (tier 3), cost is 10.
 
-        const cost = tier === 3 ? 15 : 1;
+        const cost = tier === 3 ? 15 : tier === 2 ? 3 : 1;
 
         if (gunnerAmmo >= cost) {
           if (tier === 3) {
@@ -6539,9 +6539,6 @@
           } else if (tier === 0) {
             gunnerAmmo--;
           }
-          // Shotgun consumes in fireRangedWeapon based on pellets, but we should ensure we have enough to start?
-          // Actually fireRangedWeapon handles consumption for shotgun.
-          // We just checked >= 1, but for Bazooka we need 10.
 
           fireRangedWeapon(tier);
 
@@ -6550,11 +6547,18 @@
             const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
             shotReloadTimer = reloadBase;
           }
-        } else if (tier === 3 && gunnerAmmo < 15) {
-          // Not enough ammo for grenade, fail or shoot smaller?
-          // Let's prevent shooting and maybe show "NO AMMO" or click sound?
-          // For now just do nothing or maybe shoot tier 0?
-          // Let's just return to save ammo or maybe force reload logic elsewhere.
+        } else {
+          // Not enough ammo - prompt reload
+          if (typeof seNoAmmo !== "undefined" && seNoAmmo) {
+            playSound(seNoAmmo, 0.8);
+          }
+          const tierName = tier === 3 ? "BAZOOKA(15)" : tier === 2 ? "SHOTGUN" : "FIRE";
+          if (stage.damageTexts) {
+            stage.damageTexts.push({
+              x: player.x, y: player.y - 28, text: `弾不足! RELOAD→攻撃x2`, life: 50, color: "#ffaa00", vy: -0.8
+            });
+          }
+          shotReloadTimer = 15;
         }
 
         shotChargeTimer = 0;
@@ -6567,16 +6571,17 @@
     if (shotMachineGunCount > 0) {
       shotMachineGunFrame += dt;
       const rankIdx = battleRankIndex;
-      const delay = Math.max(1, 6 - Math.floor(rankIdx * 0.8));
+      const delay = Math.max(2, 6 - Math.floor(rankIdx * 0.6));
       if (shotMachineGunFrame >= delay) {
         shotMachineGunFrame = 0;
         if (gunnerAmmo > 0) {
           gunnerAmmo--;
           shotMachineGunCount--;
           fireRangedProjectile(1);
-          if (seMachineGun) playSound(seMachineGun, 0.4);
+          // Only play SE every other bullet to reduce audio overhead
+          if (shotMachineGunCount % 2 === 0 && seMachineGun) playSound(seMachineGun, 0.4);
         } else {
-          shotMachineGunCount = 0; // Stop firing if empty
+          shotMachineGunCount = 0;
         }
       }
     }
@@ -6620,9 +6625,9 @@
     } else if (tier === 1) { // Machine Gun
       const rankIdx = battleRankIndex;
       const baseBurst = 3;
-      const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 7 : Math.min(5, rankIdx);
+      const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 5 : Math.min(4, rankIdx);
       shotMachineGunCount = baseBurst + extra;
-      shotMachineGunFrame = 4;
+      shotMachineGunFrame = 3;
 
       // SFX: Rank S+ uses Heavy Machinegun
       if (rankIdx >= 4) { // Rank S is index 4 usually? Check if S=4 or 5. Assuming 4.
@@ -6646,11 +6651,10 @@
     const py = player.y + player.h * 0.45;
 
     if (tier === 3) { // Bazooka / Grenade
-      const rankIdx = battleRankIndex;
-      // Buffed Power: Base 5.5 + Rank * 0.6 (costs 15 ammo now)
-      const powerBase = 5.5 + rankIdx * 0.6;
-      // Larger Size: Base 32
-      const sizeBase = 28 + Math.min(16, rankIdx * 3);
+      // Fixed power (no rank scaling) - costs 15 ammo
+      const powerBase = 5.5;
+      // Fixed size
+      const sizeBase = 36;
       stage.playerWaves.push({
         kind: "bazooka", x: px + dir * 20, y: py - 4, w: sizeBase, h: 12, vx: dir * 4.5, vy: 0, ttl: 120, power: powerBase, spin: 0
       });
@@ -6712,15 +6716,19 @@
       } else if (wave.kind === "bullet" || wave.kind === "shotgun") {
         wave.x += wave.vx * dt;
         wave.y += wave.vy * dt;
-        // Check for solids (Walls/Floors) - No penetration
+        // Check for solids (Walls/Floors) - only near screen
         const cx = wave.x + wave.w * 0.5;
         const cy = wave.y + wave.h * 0.5;
-        for (const s of solids) {
-          if (s.kind === "crumble" && s.state === "gone") continue;
-          if (overlap(wave, s)) {
-            wave.dead = true;
-            triggerImpact(0.5, cx, cy, 1.5); // Small impact
-            break;
+        if (cx >= screenLeft - 40 && cx <= screenRight + 40 && cy >= -20 && cy <= screenBottom + 20) {
+          for (const s of solids) {
+            if (s.kind === "crumble" && s.state === "gone") continue;
+            // Skip solids far from bullet
+            if (Math.abs(s.x + s.w * 0.5 - cx) > s.w * 0.5 + 20) continue;
+            if (overlap(wave, s)) {
+              wave.dead = true;
+              triggerImpact(0.5, cx, cy, 1.5);
+              break;
+            }
           }
         }
       } else if (wave.kind === "explosion") {
@@ -8605,11 +8613,14 @@
     if (emergencyDodgeInvulnTimer > 0) {
       emergencyDodgeInvulnTimer = Math.max(0, emergencyDodgeInvulnTimer - rawDt);
     }
+    // Always decrement flash timer even when dodge is inactive
+    if (emergencyDodgeFlashTimer > 0) {
+      emergencyDodgeFlashTimer = Math.max(0, emergencyDodgeFlashTimer - rawDt);
+    }
     if (!emergencyDodgeActive) return false;
 
     emergencyDodgeTimer = Math.max(0, emergencyDodgeTimer - rawDt);
     emergencyDodgePhase += rawDt;
-    emergencyDodgeFlashTimer = Math.max(0, emergencyDodgeFlashTimer - rawDt);
 
     const anyButton = actions.jumpPressed || actions.attackPressed ||
       actions.specialPressed || actions.special2Pressed || actions.startPressed;
@@ -13990,7 +14001,7 @@
     ctx.save(); // Start Scope
 
     if (emergencyDodgeActive) {
-      const ratio = clamp(emergencyDodgeTimer / EMERGENCY_DODGE_Input_WINDOW, 0, 1);
+      const ratio = clamp(emergencyDodgeTimer / EMERGENCY_DODGE_WINDOW, 0, 1);
       const pulse = (Math.sin(emergencyDodgePhase * 10) + 1) * 0.5;
 
       ctx.save();
