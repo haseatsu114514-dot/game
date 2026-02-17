@@ -7188,6 +7188,7 @@
           wave.dead = true;
           break;
         }
+      }
 
       if (!wave.dead && stage.boss.active) {
         for (const boss of getBossEntities()) {
