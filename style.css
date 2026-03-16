@@ -306,11 +306,33 @@ body {
 }
 
 .command-list h3 {
-  margin: 0 0 6px 0;
-  font-size: 1rem;
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
   color: var(--accent);
-  letter-spacing: 2px;
+  letter-spacing: 3px;
   text-align: center;
+  text-transform: uppercase;
+}
+
+.cmd-columns {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.cmd-group {
+  flex: 1;
+  min-width: 180px;
+  max-width: 280px;
+}
+
+.cmd-group h4 {
+  margin: 0 0 4px 0;
+  font-size: 0.85rem;
+  color: #ff9966;
+  border-bottom: 1px solid rgba(255,153,102,0.3);
+  padding-bottom: 2px;
 }
 
 .key-table {
@@ -320,7 +342,7 @@ body {
 }
 
 .key-table td {
-  padding: 2px 8px;
+  padding: 3px 6px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
@@ -329,14 +351,17 @@ body {
   font-weight: bold;
   color: #aaddff;
   white-space: nowrap;
-  width: 120px;
+  width: 110px;
+  background: rgba(100,150,255,0.06);
+  border-radius: 3px;
 }
 
 .tip {
-  margin-top: 8px !important;
+  margin-top: 10px !important;
   text-align: center;
   color: #ffd47d;
-  font-size: 0.8rem !important;
+  font-size: 0.82rem !important;
+  font-style: italic;
 }
 
 @media (max-width: 720px) {

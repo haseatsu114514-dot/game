@@ -35,6 +35,7 @@
   const input = {
     left: false,
     right: false,
+    up: false,
     jump: false,
     down: false,
     attack: false,
@@ -404,7 +405,7 @@
   const SWORD_STINGER_DURATION = 14;
   const SWORD_STINGER_SPEED = 5.5;
   const SWORD_UPPER_DURATION = 12;
-  const SWORD_UPPER_HANG_TIME = 60;       // 1 second at 60fps
+  const SWORD_UPPER_HANG_TIME = 20;       // ~0.33 second hang time (reduced from 60)
   const SWORD_SLAM_DURATION = 18;
   const SWORD_SLAM_REACH = 38;
   const SWORD_SLAM_HEIGHT = 40;
@@ -4490,16 +4491,19 @@
     if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) {
       enemy.hp = enemy.maxHp;
     }
-    enemy.hp = Math.max(0, enemy.hp - 1);
+    // Power-based damage: scale with attack power (min 1)
+    const hpDamage = Math.max(1, Math.round(effectivePower * 0.8));
+    enemy.hp = Math.max(0, enemy.hp - hpDamage);
     const defeatedNow = enemy.hp <= 0;
     spawnEnemyBlood(hitX, hitY, effectivePower + (blackFlash ? 0.22 : 0));
     if (!defeatedNow) {
       enemy.hitstun = Math.max(enemy.hitstun || 0, 14 + effectivePower * 2.2);
-      enemy.vx = dir * (1.8 + effectivePower * 0.34);
-      enemy.vy = Math.min(enemy.vy, -(1.3 + effectivePower * 0.28 + (blackFlash ? 0.14 : 0)));
+      // Stronger knockback so enemies visibly react to hits
+      enemy.vx = dir * (2.5 + effectivePower * 0.6);
+      enemy.vy = Math.min(enemy.vy, -(2.0 + effectivePower * 0.5 + (blackFlash ? 0.2 : 0)));
       enemy.onGround = false;
       enemy.flash = Math.max(enemy.flash || 0, 11);
-      hitStopTimer = Math.max(hitStopTimer, blackFlash ? 4.6 : 3.0);
+      hitStopTimer = Math.max(hitStopTimer, blackFlash ? 4.6 : 2.5);
       playKickSfx(1.03 + effectivePower * 0.08 + (blackFlash ? 0.12 : 0));
       return;
     }
@@ -6830,19 +6834,18 @@
       const fwd = (input.right && player.facing > 0) || (input.left && player.facing < 0);
       if (!player.onGround) {
         // --- Air attacks ---
-        if (input.down) {
-          performSwordSlam();   // Air + Down + J = Helm Breaker (叩き落とし)
-        } else {
-          performSwordCombo();  // Air + J = Air combo (空中連撃)
-          airComboCount++;
-          airComboDisplayTimer = 90;
-        }
+        // Air + J = Helm Breaker (叩き落とし) — always slam down in air
+        performSwordSlam();
+        airComboCount++;
+        airComboDisplayTimer = 90;
       } else {
         // --- Ground attacks ---
-        if (input.down) {
-          performSwordUpper();  // Down + J = High Time (打ち上げ)
+        if (input.up) {
+          performSwordUpper();  // Up + J = High Time (打ち上げ)
         } else if (fwd) {
           performSwordStinger(); // Forward + J = Stinger (突進斬り)
+        } else if (input.down) {
+          performSwordSlam();   // Down + J = Ground slam
         } else {
           performSwordCombo();   // J = Normal combo (通常コンボ)
         }
@@ -6850,20 +6853,6 @@
       swordChargeTimer = 0;
       swordChargeReadyPlayed = false;
       return;
-    }
-
-    // Legacy charge support (hold attack still works for charged slam)
-    if (input.attack) {
-      const chargeMul = battleRankChargeMultiplier();
-      swordChargeTimer = Math.min(SWORD_CHARGE_MAX, swordChargeTimer + dt * chargeMul);
-      return;
-    }
-    if (swordChargeTimer > 0) {
-      if (swordChargeTimer >= SWORD_SLAM_THRESHOLD - 1) {
-        performSwordSlam();
-      }
-      swordChargeTimer = 0;
-      swordChargeReadyPlayed = false;
     }
   }
 
@@ -7173,38 +7162,38 @@
   function updateDedicatedGun(dt, actions) {
     if (dedicatedGunCooldown > 0) {
       dedicatedGunCooldown -= dt;
-      return;
     }
-    if (actions.shootPressed) {
-      const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
-      if (!playable) return;
-      if (deathAnimActive) return;
-      if (hitStopTimer > 0) return;
+    // Fire on press OR hold (auto-fire when holding K)
+    const wantShoot = input.shoot && dedicatedGunCooldown <= 0;
+    if (!wantShoot) return;
 
-      // Air gun: reduce gravity for hang time
-      if (!player.onGround) {
-        player.vy = Math.min(player.vy, 0.8);
-        airComboCount++;
-        airComboDisplayTimer = 90;
-      }
+    const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    if (!playable) return;
+    if (deathAnimActive) return;
 
-      // Fire handgun using existing projectile system
-      const dir = player.facing;
-      const px = player.x + player.w * 0.5;
-      const py = player.y + player.h * 0.45;
-      const rankIdx = battleRankIndex;
-      const speed = 5.0 + rankIdx * 1.0;
-      stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4,
-        vx: dir * speed, vy: 0, ttl: 65, power: 0.6
-      });
-      if (seHandgun) playSound(seHandgun, 0.45);
-      dedicatedGunCooldown = DEDICATED_GUN_RELOAD;
-      triggerImpact(0.5, px + dir * 15, py, 1.0);
-
-      // Battle rank: register as gun style for diversity bonus
-      battleRankGainByStyle("gun_shot", 0.6);
+    // Air gun: reduce gravity for hang time
+    if (!player.onGround) {
+      player.vy = Math.min(player.vy, 0.5);
+      airComboCount++;
+      airComboDisplayTimer = 90;
     }
+
+    // Fire handgun using existing projectile system
+    const dir = player.facing;
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.45;
+    const rankIdx = battleRankIndex;
+    const speed = 5.5 + rankIdx * 1.0;
+    stage.playerWaves.push({
+      kind: "bullet", x: px + dir * 6, y: py, w: 8, h: 4,
+      vx: dir * speed, vy: (Math.random() - 0.5) * 0.3, ttl: 65, power: 0.6
+    });
+    if (seHandgun) playSound(seHandgun, 0.45);
+    dedicatedGunCooldown = DEDICATED_GUN_RELOAD;
+    triggerImpact(0.5, px + dir * 10, py, 1.0);
+
+    // Battle rank: register as gun style for diversity bonus
+    battleRankGainByStyle("gun_shot", 0.6);
   }
 
   // ========== WEAPON SWITCH (I KEY - reserved for future use) ==========
@@ -15176,6 +15165,7 @@
     }
   });
 
+  // Multiple actions per key: ArrowUp triggers both "jump" and "up"
   const keyToInput = {
     ArrowLeft: "left",
     KeyA: "left",
@@ -15194,6 +15184,8 @@
     KeyS: "styleChange",
     Enter: "start",
   };
+  // Keys that also set "up" direction (ArrowUp and W)
+  const keyAlsoUp = { ArrowUp: true, KeyW: true };
 
   window.addEventListener("keydown", (e) => {
     unlockAudio();
@@ -15205,6 +15197,8 @@
     }
 
     input[mapped] = true;
+    // ArrowUp/W also sets "up" direction for attack combos
+    if (keyAlsoUp[e.code]) input.up = true;
 
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(e.code)) {
       e.preventDefault();
@@ -15215,12 +15209,14 @@
     const mapped = keyToInput[e.code];
     if (!mapped) return;
     input[mapped] = false;
+    if (keyAlsoUp[e.code]) input.up = false;
   });
 
   window.addEventListener("blur", () => {
     releaseAllHoldButtons();
     input.left = false;
     input.right = false;
+    input.up = false;
     input.jump = false;
     input.down = false;
     input.attack = false;
