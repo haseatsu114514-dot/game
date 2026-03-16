@@ -182,9 +182,18 @@
   // --- Royal Guard ---
   let royalGuardEnergy = 0;           // Stored energy from blocking
   let royalGuardBlockTimer = 0;       // Active guard frames
-  const ROYAL_GUARD_BLOCK_WINDOW = 16; // Frames of active guard (generous window)
+  const ROYAL_GUARD_BLOCK_WINDOW_BASE = 16; // Base frames of active guard
   let royalGuardFlashTimer = 0;       // Visual flash on successful guard
   let royalGuardFlashColor = "#22ff88";
+  // Royal Guard scales with battle rank
+  function royalGuardBlockWindow() {
+    // Base 16f → up to 28f at max rank
+    return ROYAL_GUARD_BLOCK_WINDOW_BASE + battleRankIndex * 2;
+  }
+  function royalGuardBoxScale() {
+    // Guard box grows with rank: 1.0 → 1.6 at rank 6
+    return 1.0 + battleRankIndex * 0.1;
+  }
   const ROYAL_GUARD_MAX_ENERGY = 100;
   // --- Drive Charge (charged drive = Overdrive, fires multiple waves) ---
   let driveChargeTimer = 0;
@@ -844,18 +853,34 @@
     return clamp((battleRankGauge - curr.threshold) / span, 0, 1);
   }
 
+  // Style-specific signature moves — no spam penalty for your current style's moves
+  const STYLE_SIGNATURE_MOVES = {
+    swordmaster: ["prop_shredder", "overdrive", "drive", "air_slash"],
+    trickster: ["trickster", "air_trick", "dodge_success"],
+    gunslinger: ["twosome_time", "bullet_rain", "gun_handgun", "gun_shotgun", "gun_grenade"],
+    royalguard: ["royal_guard", "royal_release"],
+  };
+
   function battleRankGainByStyle(styleKey, power = 1) {
     const style = styleKey || "impact";
     const p = clamp(power, 0.8, 4.8);
     // Base gain reduced — raw hits give less; variety gives more
     let gain = 12 + p * 4.0;
 
+    // Check if this is a signature move for the current style — exempt from spam penalty
+    const sigMoves = STYLE_SIGNATURE_MOVES[playerStyle] || [];
+    const isSignature = sigMoves.includes(style);
+
     const sameStyle = style === battleRankLastStyle;
-    if (sameStyle) {
+    if (sameStyle && !isSignature) {
       battleRankStyleStreak += 1;
       // Heavy penalty for spamming the same move
       gain *= Math.max(0.2, 0.75 - battleRankStyleStreak * 0.15);
       battleRankComboVariety = Math.max(0, battleRankComboVariety - 1);
+    } else if (sameStyle && isSignature) {
+      // Signature moves: mild diminishing returns instead of penalty
+      battleRankStyleStreak += 1;
+      gain *= Math.max(0.6, 1.0 - battleRankStyleStreak * 0.05);
     } else {
       const seenRecent = battleRankRecentStyles.includes(style);
       battleRankStyleStreak = 0;
@@ -3204,6 +3229,54 @@
           hudMessage = `BURST: DEVIL ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
           hudTimer = 28;
         }
+      } else if (playerStyle === "royalguard") {
+        // Royal Guard Burst: damage ALL enemies on screen
+        if (proteinBurstGauge1 >= PROTEIN_BURST_MIN) {
+          const gpx = player.x + player.w * 0.5;
+          const gpy = player.y + player.h * 0.5;
+          const gaugeRatio = clamp(proteinBurstGauge1 / PROTEIN_BURST_REQUIRE, 0, 1);
+          const burstPower = 3.0 + gaugeRatio * 5.0;
+          proteinBurstGauge1 = 0;
+          proteinBurstGauge2 = 0;
+
+          // Damage all enemies
+          for (const enemy of stage.enemies) {
+            if (!enemy.alive || enemy.kicked) continue;
+            const dir = enemy.x + enemy.w * 0.5 > gpx ? 1 : -1;
+            kickEnemy(enemy, dir, burstPower, {
+              immediateRemove: false, flyLifetime: 40, rankStyle: "royal_burst",
+            });
+          }
+          // Damage boss
+          for (const boss of getBossEntities()) {
+            if (boss.hp <= 0) continue;
+            const bossDmg = Math.max(2, Math.round((2 + bossDamageBonus()) * (1 + gaugeRatio * 2)));
+            boss.hp = Math.max(0, boss.hp - bossDmg);
+            boss.invuln = Math.max(boss.invuln || 0, 8);
+            boss.flash = Math.max(boss.flash || 0, 20);
+            const bdir = boss.x + boss.w * 0.5 > gpx ? 1 : -1;
+            boss.vx += bdir * 1.5;
+          }
+          // Big burst effect
+          triggerImpact(5.0, gpx, gpy, 6.0);
+          hitStopTimer = Math.max(hitStopTimer, 8);
+          royalGuardFlashTimer = 20;
+          royalGuardFlashColor = "#ffff44";
+          for (let i = 0; i < 20; i++) {
+            const angle = (i / 20) * Math.PI * 2;
+            const speed = 3 + Math.random() * 3;
+            hitSparks.push({ x: gpx, y: gpy, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+              life: 20, maxLife: 20, color: ["#22ff88", "#44ffaa", "#ffff44", "#ffffff"][i % 4] });
+          }
+          if (seBurst1Max) playSound(seBurst1Max, 1.0);
+          hudMessage = "ROYAL BURST!!";
+          hudTimer = 80;
+          battleRankGainByStyle("royal_burst", 4.0);
+          damageInvulnTimer = Math.max(damageInvulnTimer, 40);
+        } else {
+          hudMessage = `BURST: ROYAL ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
+          hudTimer = 28;
+        }
       } else {
         if (!triggerTimeBurst()) {
           if (isTimeBurstActive() || proteinBurstTimer > 0) return;
@@ -4719,7 +4792,9 @@
       if (emergencyDodgeActive) return;
 
       if (!emergencyDodgeSkipNext) {
-        const dodgeChance = EMERGENCY_DODGE_CHANCE[clamp(battleRankIndex, 0, EMERGENCY_DODGE_CHANCE.length - 1)] || 0;
+        let dodgeChance = EMERGENCY_DODGE_CHANCE[clamp(battleRankIndex, 0, EMERGENCY_DODGE_CHANCE.length - 1)] || 0;
+        // Trickster: +20% emergency dodge chance
+        if (playerStyle === "trickster") dodgeChance = Math.min(0.9, dodgeChance + 0.2);
         if (dodgeChance > 0 && Math.random() < dodgeChance) {
           emergencyDodgeActive = true;
           emergencyDodgeTimer = EMERGENCY_DODGE_WINDOW;
@@ -5388,6 +5463,28 @@
         : bullet;
       const touchingPlayer = overlap(player, hit);
       if (touchingPlayer) {
+        // Royal Guard: auto-absorb hazard bullets during block
+        if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+          bullet.dead = true;
+          royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 20);
+          battleRankDodgeChain++;
+          const gpx = player.x + player.w * 0.5;
+          const gpy = player.y + player.h * 0.5;
+          triggerImpact(2.0, gpx, gpy, 2.5);
+          royalGuardFlashTimer = 10;
+          royalGuardFlashColor = "#22ff88";
+          for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            hitSparks.push({ x: gpx, y: gpy, vx: Math.cos(angle) * 2, vy: Math.sin(angle) * 2,
+              life: 10, maxLife: 10, color: "#22ff88" });
+          }
+          if (seStrongHit) playSound(seStrongHit, 0.5, 1.3);
+          hudMessage = "GUARD!";
+          hudTimer = 15;
+          battleRankGainByStyle("royal_guard", 1.5);
+          damageInvulnTimer = Math.max(damageInvulnTimer, 15);
+          continue;
+        }
         killPlayer(bullet.reason || "飛び道具に被弾");
       } else {
         tryRegisterProjectileGraze(bullet, hit, bullet.kind === "cannon" ? 1.08 : 0.92);
@@ -7033,12 +7130,14 @@
       const fwd = movingFwd && directionHoldTimer < 6;
       const hasDirection = fwd || input.jump || input.down;
       if (!player.onGround) {
-        // Swordmaster: ↓+J in air = Prop Shredder (multi-hit spin)
-        if (playerStyle === "swordmaster" && input.down) {
+        // Swordmaster: ↓+J in air OR any J after 2nd aerial hit = Prop Shredder
+        const smPropReady = playerStyle === "swordmaster" && (input.down || airComboStage >= 2);
+        if (smPropReady) {
           performPropShredder();
           airComboCount++;
           airComboDisplayTimer = 90;
           attackChargeTimer = 0;
+          // Don't reset airComboStage so player can keep spinning
           return;
         }
         // --- Aerial Rave: 4-stage air combo (DMC style) ---
@@ -7071,8 +7170,8 @@
         return;
       } else if (hasDirection) {
         // --- Direction attacks (instant on press) ---
-        if (input.jump) {
-          performSwordUpper();  // W + J = High Time (打ち上げ)
+        if (input.jump || input.up) {
+          performSwordUpper();  // W/↑ + J = High Time (打ち上げ)
         } else if (fwd) {
           performSwordStinger(); // D/A + J = Stinger (突進斬り)
         } else if (input.down) {
@@ -7341,8 +7440,8 @@
     // Launch shockwave projectile
     const waveW = dtActive ? 22 : 16;
     const waveH = dtActive ? 16 : 12;
-    const waveSpeed = (4.5 + rankIdx * 0.5) * (dtActive ? 1.4 : 1);
-    const waveTtl = dtActive ? 80 : 55;
+    const waveSpeed = (3.5 + rankIdx * 0.35) * (dtActive ? 1.3 : 1);
+    const waveTtl = dtActive ? 50 : 32;
     stage.playerWaves.push({
       kind: "drive",
       x: px + dir * 12,
@@ -7637,16 +7736,18 @@
 
     if (!nearest) return false;
 
-    // Teleport near the target
+    // Teleport above the target — ready for immediate enemy step
     const oldX = player.x;
     const oldY = player.y;
     const dir = nearest.x > px ? 1 : -1;
-    player.x = nearest.x - dir * (player.w + 4);
-    player.y = nearest.y - player.h * 0.5;
+    player.x = nearest.x - dir * (player.w * 0.5);
+    player.y = nearest.y - player.h - 6; // Position above enemy
     player.x = clamp(player.x, 0, stage.width - player.w);
+    player.y = Math.max(0, player.y);
     player.facing = dir;
-    player.vy = Math.min(player.vy, -1.0); // Slight upward momentum
+    player.vy = 0.5; // Slight downward = ready for stomp
     player.onGround = false;
+    stompChainGuardTimer = Math.max(stompChainGuardTimer, 12); // Assist stomp window
 
     tricksterCooldown = TRICKSTER_COOLDOWN;
     damageInvulnTimer = Math.max(damageInvulnTimer, 12);
@@ -8009,17 +8110,19 @@
           combatDashCooldown = COMBAT_DASH_COOLDOWN;
           return true;
         }
-        // Block mode
-        royalGuardBlockTimer = ROYAL_GUARD_BLOCK_WINDOW;
-        damageInvulnTimer = Math.max(damageInvulnTimer, ROYAL_GUARD_BLOCK_WINDOW + 6);
+        // Block mode — scales with battle rank
+        const guardWindow = royalGuardBlockWindow();
+        royalGuardBlockTimer = guardWindow;
+        damageInvulnTimer = Math.max(damageInvulnTimer, guardWindow + 6);
         player.vx *= 0.3;
         hudMessage = "GUARD!";
         hudTimer = 15;
         if (seWhipSwing) playSound(seWhipSwing, 0.3, 0.8);
-        // Wider guard box — can catch charging enemies too
+        // Guard box scales with rank
+        const gs = royalGuardBoxScale();
         const guardBox = {
-          x: player.x - 14, y: player.y - 8,
-          w: player.w + 28, h: player.h + 16,
+          x: player.x - Math.floor(14 * gs), y: player.y - Math.floor(8 * gs),
+          w: player.w + Math.floor(28 * gs), h: player.h + Math.floor(16 * gs),
         };
         let absorbed = false;
         let absorbCount = 0;
@@ -8730,7 +8833,8 @@
       if (stompable) {
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
         const pLv = proteinLevel();
-        const stompPower = ((weakPartyGuest ? 1.28 : 1.45) + pLv * 0.045) * crisisMul;
+        const tricksterBonus = playerStyle === "trickster" ? 1.4 : 1.0;
+        const stompPower = ((weakPartyGuest ? 1.28 : 1.45) + pLv * 0.045) * crisisMul * tricksterBonus;
         kickEnemy(enemy, dir, stompPower + 0.35, { rankStyle: "stomp" });
         player.vy = -6.35 - Math.min(0.45, Math.abs(player.vx) * 0.08);
         player.vx += dir * 0.12;
@@ -8791,6 +8895,33 @@
         continue;
       }
 
+      // Royal Guard: block enemy body contact
+      if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+        const ex = enemy.x + enemy.w * 0.5;
+        const px2 = player.x + player.w * 0.5;
+        enemy.hitstun = Math.max(enemy.hitstun || 0, 30);
+        enemy.flash = Math.max(enemy.flash || 0, 15);
+        enemy.vx = (ex > px2 ? 1 : -1) * 3.0;
+        royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 30);
+        battleRankDodgeChain++;
+        const gpx = player.x + player.w * 0.5;
+        const gpy = player.y + player.h * 0.5;
+        triggerImpact(3.0, gpx, gpy, 4.0);
+        hitStopTimer = Math.max(hitStopTimer, 5);
+        royalGuardFlashTimer = 15;
+        royalGuardFlashColor = battleRankDodgeChain >= 3 ? "#ffff00" : "#44ffaa";
+        for (let i = 0; i < 10; i++) {
+          const angle = (i / 10) * Math.PI * 2;
+          hitSparks.push({ x: gpx, y: gpy, vx: Math.cos(angle) * 3, vy: Math.sin(angle) * 3,
+            life: 14, maxLife: 14, color: royalGuardFlashColor });
+        }
+        if (seStrongHit) playSound(seStrongHit, 0.8, 1.0);
+        hudMessage = battleRankDodgeChain >= 3 ? "PERFECT GUARD!!" : "JUST GUARD!";
+        hudTimer = 35;
+        battleRankGainByStyle("royal_guard", 2.5 + battleRankDodgeChain * 0.5);
+        damageInvulnTimer = Math.max(damageInvulnTimer, 20);
+        continue;
+      }
       if (enemy.kind === "peacock") {
         killPlayer("孔雀に接触");
       } else {
@@ -8843,7 +8974,8 @@
           const hitX = b.x + b.w * 0.5;
           const hitY = b.y + b.h * 0.25;
           const bf = rollBlackFlashHit(hitX, hitY, 1.28 + (kickCombo > 1 ? 0.24 : 0));
-          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier() * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
+          const tricksterStompMul = playerStyle === "trickster" ? 1.4 : 1.0;
+          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier() * tricksterStompMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
           b.hp = Math.max(0, b.hp - damage);
           b.invuln = BOSS_HIT_INVULN_FRAMES;
           b.vx += dir * (0.72 + (bf ? 0.28 : 0));
@@ -8877,6 +9009,34 @@
       if (stompChainGuardTimer > 0) {
         player.vy = Math.min(player.vy, -4.8);
         player.onGround = false;
+        return;
+      }
+
+      // Royal Guard: block boss contact / charge attacks
+      if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+        const gpx = player.x + player.w * 0.5;
+        const gpy = player.y + player.h * 0.5;
+        const pushDir = gpx < b.x + b.w * 0.5 ? -1 : 1;
+        player.vx = pushDir * 2.5;
+        royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + (b.mode === "dash" ? 50 : 35));
+        battleRankDodgeChain++;
+        const guardLevel = battleRankDodgeChain >= 3 ? 3 : battleRankDodgeChain >= 2 ? 2 : 1;
+        triggerImpact(3.5 + guardLevel, gpx, gpy, 5.0);
+        hitStopTimer = Math.max(hitStopTimer, 6 + guardLevel * 2);
+        royalGuardFlashTimer = 18;
+        royalGuardFlashColor = guardLevel >= 3 ? "#ffff00" : guardLevel >= 2 ? "#44ffaa" : "#22ff88";
+        for (let i = 0; i < 12; i++) {
+          const angle = (i / 12) * Math.PI * 2;
+          hitSparks.push({ x: gpx, y: gpy, vx: Math.cos(angle) * 3.5, vy: Math.sin(angle) * 3.5,
+            life: 16, maxLife: 16, color: royalGuardFlashColor });
+        }
+        if (seStrongHit) playSound(seStrongHit, 0.9, 0.9);
+        hudMessage = b.mode === "dash"
+          ? (guardLevel >= 3 ? "PERFECT COUNTER!!" : "CHARGE GUARD!")
+          : (guardLevel >= 3 ? "PERFECT GUARD!!" : "JUST GUARD!");
+        hudTimer = 45;
+        battleRankGainByStyle("royal_guard", 3.0 + battleRankDodgeChain * 0.6);
+        damageInvulnTimer = Math.max(damageInvulnTimer, 30);
         return;
       }
 
@@ -9812,6 +9972,28 @@
 
       const touchingPlayer = overlap(player, shot);
       if (touchingPlayer) {
+        // Royal Guard: absorb boss shots during block
+        if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+          shot.dead = true;
+          royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 35);
+          battleRankDodgeChain++;
+          const gpx = player.x + player.w * 0.5;
+          const gpy = player.y + player.h * 0.5;
+          triggerImpact(2.5, gpx, gpy, 3.0);
+          royalGuardFlashTimer = 12;
+          royalGuardFlashColor = battleRankDodgeChain >= 3 ? "#ffff00" : "#44ffaa";
+          for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            hitSparks.push({ x: gpx, y: gpy, vx: Math.cos(angle) * 2.5, vy: Math.sin(angle) * 2.5,
+              life: 12, maxLife: 12, color: royalGuardFlashColor });
+          }
+          if (seStrongHit) playSound(seStrongHit, 0.6, 1.1);
+          hudMessage = battleRankDodgeChain >= 3 ? "PERFECT GUARD!!" : "JUST GUARD!";
+          hudTimer = 25;
+          battleRankGainByStyle("royal_guard", 2.0 + battleRankDodgeChain * 0.4);
+          damageInvulnTimer = Math.max(damageInvulnTimer, 20);
+          continue;
+        }
         killPlayer(shot.reason || "ボス弾に被弾");
       } else if (shot.kind !== "rain_warn") {
         const grazePower = shot.kind === "rain" ? 1.14 : shot.kind === "spiral" || shot.kind === "nova" || shot.kind === "nova2" ? 1.22 : 1.02;
