@@ -167,6 +167,12 @@
   let swordDoubleJumpUsed = false;
   let swordStingerActive = false;
   let swordStingerTimer = 0;
+  let stingerCaughtEnemies = []; // Enemies being dragged by stinger
+  let millionStabActive = false;
+  let millionStabTimer = 0;
+  let millionStabHitTimer = 0;
+  const MILLION_STAB_DURATION = 45; // ~0.75 seconds of rapid stabbing
+  const MILLION_STAB_HIT_INTERVAL = 4; // Hit every 4 frames
   let swordUpperActive = false;
   let swordUpperTimer = 0;
   let swordUpperHangTimer = 0; // 1-second hang time
@@ -402,8 +408,8 @@
   const SWORD_COMBO_WINDOW = 28;          // Frames to chain combo
   const SWORD_COMBO_REACH = [22, 26, 32]; // Reach per combo stage
   const SWORD_COMBO_POWER = [1.0, 1.2, 1.8]; // Base power per stage
-  const SWORD_STINGER_DURATION = 14;
-  const SWORD_STINGER_SPEED = 5.5;
+  const SWORD_STINGER_DURATION = 20;
+  const SWORD_STINGER_SPEED = 7.0;
   const SWORD_UPPER_DURATION = 12;
   const SWORD_UPPER_HANG_TIME = 20;       // ~0.33 second hang time (reduced from 60)
   const SWORD_SLAM_DURATION = 18;
@@ -3383,7 +3389,7 @@
         enemy.shootInterval = enemy.shooter ? 176 + i * 9 : 0;
         enemy.shootCooldown = enemy.shooter ? 104 + i * 7 : 0;
         enemy.flash = 0;
-        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
         enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
         enemy.hitstun = 0;
       }
@@ -3607,7 +3613,7 @@
         enemy.shootInterval = enemy.shooter ? 162 + i * 8 : 0;
         enemy.shootCooldown = enemy.shooter ? 94 + i * 7 : 0;
         enemy.flash = 0;
-        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
         enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
         enemy.hitstun = 0;
       }
@@ -3879,7 +3885,7 @@
       enemy.shootInterval = enemy.shooter ? 156 + i * 10 : 0;
       enemy.shootCooldown = enemy.shooter ? 96 + i * 10 : 0;
       enemy.flash = 0;
-      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
+      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
       enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
       enemy.hitstun = 0;
     }
@@ -4487,7 +4493,7 @@
       : false;
     const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
     const effectivePower = blackFlash && !blackFlashPowerApplied ? power * BLACK_FLASH_DAMAGE_MUL : power;
-    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
+    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
     if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) {
       enemy.hp = enemy.maxHp;
     }
@@ -6823,6 +6829,9 @@
       }
     }
 
+    // Block attacks during stinger rush / million stab (handled in physics loop)
+    if (swordStingerActive || millionStabActive) return;
+
     // Cooldown
     if (swordAttackCooldown > 0) {
       swordAttackCooldown -= dt;
@@ -6892,27 +6901,53 @@
   function performSwordStinger() {
     const dir = player.facing;
     const rankIdx = battleRankIndex;
-    const reach = 30 + rankIdx * 3;
-    const power = 1.5 + rankIdx * 0.1;
+    const reach = 48 + rankIdx * 4;
+    const power = 2.5 + rankIdx * 0.15;
 
     swordStingerActive = true;
     swordStingerTimer = SWORD_STINGER_DURATION;
     damageInvulnTimer = Math.max(damageInvulnTimer, SWORD_STINGER_DURATION + 4);
+    millionStabActive = false;
+    millionStabTimer = 0;
 
     const hitBox = {
       x: dir > 0 ? player.x + player.w : player.x - reach,
-      y: player.y + 4,
+      y: player.y + 2,
       w: reach,
-      h: 12,
+      h: 16,
     };
 
-    swordHitEnemies(hitBox, dir, power, 1.5);
+    // Catch enemies in stinger — drag them along instead of knocking away
+    stingerCaughtEnemies = [];
+    const crisisMul = pinchAttackMultiplier();
+    const effectivePower = power * crisisMul;
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlap(hitBox, enemy)) continue;
+      const bf = rollBlackFlashHit(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 1.1 + power * 0.5);
+      kickEnemy(enemy, dir, effectivePower * (bf ? BLACK_FLASH_DAMAGE_MUL : 1), {
+        immediateRemove: false,
+        flyLifetime: 38,
+        rankStyle: "atk1_wave_shot",
+        blackFlash: bf,
+        blackFlashPowerApplied: true,
+      });
+      // Instead of knockback, lock enemy to player position
+      enemy.vx = 0;
+      enemy.vy = 0;
+      enemy.flash = 12;
+      stingerCaughtEnemies.push(enemy);
+      const hx = enemy.x + enemy.w * 0.5;
+      const hy = enemy.y + enemy.h * 0.4;
+      spawnWaveBurst(hx, hy, 0.6 + power * 0.4);
+      if (devilTriggerTimer > 0) devilTriggerHitCount++;
+    }
     swordHitBoss(hitBox, dir, power);
-    triggerImpact(1.8, player.x + dir * reach, player.y + 10, 3);
+    triggerImpact(2.5, player.x + dir * reach, player.y + 10, 4);
     spawnSwordSlash(dir, 3);
 
-    if (seStrongHit) playSound(seStrongHit, 0.7);
-    swordAttackCooldown = 14;
+    if (seStrongHit) playSound(seStrongHit, 0.8);
+    swordAttackCooldown = 12;
     swordComboStage = 0;
     swordComboTimer = 0;
     attackEffectTimer = 12;
@@ -7012,10 +7047,13 @@
         blackFlash: bf,
         blackFlashPowerApplied: true,
       });
-      enemy.vx = dir * (3 + power * 0.8) * knockMul * crisisMul;
       if (launchUp) {
-        enemy.vy = -(6 + power * 0.5);
+        // Launch enemies strongly UPWARD with minimal horizontal movement
+        enemy.vx = dir * 0.5;  // Almost no horizontal knockback
+        enemy.vy = -(8.5 + power * 0.6);  // Strong upward launch
+        enemy.onGround = false;
       } else {
+        enemy.vx = dir * (3 + power * 0.8) * knockMul * crisisMul;
         enemy.vy = -(2 + power * 0.4) * knockMul;
       }
       enemy.flash = 12;
@@ -7173,18 +7211,37 @@
     if (!playable) return;
     if (deathAnimActive) return;
 
-    // Air gun: reduce gravity for hang time
-    if (!player.onGround) {
-      player.vy = Math.min(player.vy, 0.5);
-      airComboCount++;
-      airComboDisplayTimer = 90;
-    }
-
-    // Fire handgun using existing projectile system
     const dir = player.facing;
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.45;
     const rankIdx = battleRankIndex;
+
+    // Air + Down + K = Bullet Rain (下方向に弾をばらまく)
+    if (!player.onGround && input.down) {
+      player.vy = Math.min(player.vy, 0.3); // Hang in air
+      const bulletCount = 2 + Math.floor(rankIdx * 0.5);
+      for (let i = 0; i < bulletCount; i++) {
+        const spread = (Math.random() - 0.5) * 3.0;
+        stage.playerWaves.push({
+          kind: "bullet", x: px + spread * 4, y: py + 4, w: 6, h: 6,
+          vx: spread, vy: 5.0 + Math.random() * 2, ttl: 40, power: 0.5
+        });
+      }
+      if (seHandgun) playSound(seHandgun, 0.5, 0.9);
+      dedicatedGunCooldown = DEDICATED_GUN_RELOAD + 4;
+      triggerImpact(1.0, px, py + 10, 2.0);
+      battleRankGainByStyle("bullet_rain", 0.8);
+      hudMessage = "BULLET RAIN!";
+      hudTimer = 25;
+      return;
+    }
+
+    // Normal gun: air shooting gives hang time
+    if (!player.onGround) {
+      player.vy = Math.min(player.vy, 0.5);
+    }
+
+    // Fire handgun
     const speed = 5.5 + rankIdx * 1.0;
     stage.playerWaves.push({
       kind: "bullet", x: px + dir * 6, y: py, w: 8, h: 4,
@@ -7193,8 +7250,6 @@
     if (seHandgun) playSound(seHandgun, 0.45);
     dedicatedGunCooldown = DEDICATED_GUN_RELOAD;
     triggerImpact(0.5, px + dir * 10, py, 1.0);
-
-    // Battle rank: register as gun style for diversity bonus
     battleRankGainByStyle("gun_shot", 0.6);
   }
 
@@ -9243,7 +9298,95 @@
         swordStingerTimer -= dt;
         player.vx = player.facing * SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08);
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
-        if (swordStingerTimer <= 0) swordStingerActive = false;
+        // Drag caught enemies along with player
+        for (const enemy of stingerCaughtEnemies) {
+          if (!enemy.alive) continue;
+          enemy.x = player.x + player.facing * (player.w + 2);
+          enemy.y = player.y + (player.h - enemy.h) * 0.5;
+          enemy.vx = player.vx;
+          enemy.vy = 0;
+          enemy.flash = Math.max(enemy.flash, 2);
+        }
+        // J pressed during stinger -> Million Stab
+        if (actions.attackPressed && !millionStabActive) {
+          millionStabActive = true;
+          millionStabTimer = MILLION_STAB_DURATION;
+          millionStabHitTimer = 0;
+          swordStingerTimer = 0; // End stinger rush
+          player.vx = 0; // Stop moving
+          swordAttackCooldown = 0; // Allow immediate hits
+          hudMessage = "MILLION STAB!";
+          hudTimer = 40;
+          if (seStrongHit) playSound(seStrongHit, 0.7);
+        }
+        if (swordStingerTimer <= 0 && !millionStabActive) {
+          swordStingerActive = false;
+          // Release caught enemies with knockback
+          const dir = player.facing;
+          for (const enemy of stingerCaughtEnemies) {
+            if (!enemy.alive) continue;
+            enemy.vx = dir * 4;
+            enemy.vy = -2;
+          }
+          stingerCaughtEnemies = [];
+        }
+      }
+      // Million Stab: rapid multi-hit while stationary
+      if (millionStabActive && millionStabTimer > 0) {
+        millionStabTimer -= dt;
+        millionStabHitTimer -= dt;
+        player.vx = 0; // Stay in place
+        damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+        swordAttackCooldown = 0;
+        // Rapid hits
+        if (millionStabHitTimer <= 0) {
+          millionStabHitTimer = MILLION_STAB_HIT_INTERVAL;
+          const dir = player.facing;
+          const reach = 28;
+          const power = 0.8 + battleRankIndex * 0.08;
+          const hitBox = {
+            x: dir > 0 ? player.x + player.w : player.x - reach,
+            y: player.y + 2,
+            w: reach,
+            h: 14,
+          };
+          swordHitEnemies(hitBox, dir, power, 0.1); // Very low knockback
+          swordHitBoss(hitBox, dir, power);
+          // Keep caught enemies locked in place
+          for (const enemy of stingerCaughtEnemies) {
+            if (!enemy.alive) continue;
+            enemy.x = player.x + dir * (player.w + 2);
+            enemy.y = player.y + (player.h - enemy.h) * 0.5;
+            enemy.vx = 0;
+            enemy.vy = 0;
+            enemy.flash = Math.max(enemy.flash, 3);
+          }
+          triggerImpact(0.8, player.x + dir * 20, player.y + 8, 1.5);
+          spawnSwordSlash(dir, 1);
+          if (seHandgun) playSound(seHandgun, 0.3, 1.2 + Math.random() * 0.4);
+          battleRankGainByStyle("million_stab", 0.5);
+        }
+        // Extending: if J is held/pressed again, extend duration slightly
+        if (actions.attackPressed && millionStabTimer > 4) {
+          millionStabTimer = Math.min(millionStabTimer + 6, MILLION_STAB_DURATION);
+        }
+        if (millionStabTimer <= 0) {
+          millionStabActive = false;
+          swordStingerActive = false;
+          // Final hit — launch enemies away
+          const dir = player.facing;
+          for (const enemy of stingerCaughtEnemies) {
+            if (!enemy.alive) continue;
+            enemy.vx = dir * 6;
+            enemy.vy = -3;
+          }
+          stingerCaughtEnemies = [];
+          swordAttackCooldown = 10;
+          attackEffectTimer = 8;
+          attackEffectMode = "sword";
+          triggerImpact(2.0, player.x + dir * 20, player.y + 8, 3);
+          if (seStrongHit) playSound(seStrongHit, 0.9);
+        }
       }
 
       const gravityMult = (dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1)
@@ -9369,7 +9512,87 @@
         swordStingerTimer -= dt;
         player.vx = player.facing * SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08);
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
-        if (swordStingerTimer <= 0) swordStingerActive = false;
+        for (const enemy of stingerCaughtEnemies) {
+          if (!enemy.alive) continue;
+          enemy.x = player.x + player.facing * (player.w + 2);
+          enemy.y = player.y + (player.h - enemy.h) * 0.5;
+          enemy.vx = player.vx;
+          enemy.vy = 0;
+          enemy.flash = Math.max(enemy.flash, 2);
+        }
+        if (actions.attackPressed && !millionStabActive) {
+          millionStabActive = true;
+          millionStabTimer = MILLION_STAB_DURATION;
+          millionStabHitTimer = 0;
+          swordStingerTimer = 0;
+          player.vx = 0;
+          swordAttackCooldown = 0;
+          hudMessage = "MILLION STAB!";
+          hudTimer = 40;
+          if (seStrongHit) playSound(seStrongHit, 0.7);
+        }
+        if (swordStingerTimer <= 0 && !millionStabActive) {
+          swordStingerActive = false;
+          const dir = player.facing;
+          for (const enemy of stingerCaughtEnemies) {
+            if (!enemy.alive) continue;
+            enemy.vx = dir * 4;
+            enemy.vy = -2;
+          }
+          stingerCaughtEnemies = [];
+        }
+      }
+      if (millionStabActive && millionStabTimer > 0) {
+        millionStabTimer -= dt;
+        millionStabHitTimer -= dt;
+        player.vx = 0;
+        damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+        swordAttackCooldown = 0;
+        if (millionStabHitTimer <= 0) {
+          millionStabHitTimer = MILLION_STAB_HIT_INTERVAL;
+          const dir = player.facing;
+          const reach = 28;
+          const power = 0.8 + battleRankIndex * 0.08;
+          const hitBox = {
+            x: dir > 0 ? player.x + player.w : player.x - reach,
+            y: player.y + 2,
+            w: reach,
+            h: 14,
+          };
+          swordHitEnemies(hitBox, dir, power, 0.1);
+          swordHitBoss(hitBox, dir, power);
+          for (const enemy of stingerCaughtEnemies) {
+            if (!enemy.alive) continue;
+            enemy.x = player.x + dir * (player.w + 2);
+            enemy.y = player.y + (player.h - enemy.h) * 0.5;
+            enemy.vx = 0;
+            enemy.vy = 0;
+            enemy.flash = Math.max(enemy.flash, 3);
+          }
+          triggerImpact(0.8, player.x + dir * 20, player.y + 8, 1.5);
+          spawnSwordSlash(dir, 1);
+          if (seHandgun) playSound(seHandgun, 0.3, 1.2 + Math.random() * 0.4);
+          battleRankGainByStyle("million_stab", 0.5);
+        }
+        if (actions.attackPressed && millionStabTimer > 4) {
+          millionStabTimer = Math.min(millionStabTimer + 6, MILLION_STAB_DURATION);
+        }
+        if (millionStabTimer <= 0) {
+          millionStabActive = false;
+          swordStingerActive = false;
+          const dir = player.facing;
+          for (const enemy of stingerCaughtEnemies) {
+            if (!enemy.alive) continue;
+            enemy.vx = dir * 6;
+            enemy.vy = -3;
+          }
+          stingerCaughtEnemies = [];
+          swordAttackCooldown = 10;
+          attackEffectTimer = 8;
+          attackEffectMode = "sword";
+          triggerImpact(2.0, player.x + dir * 20, player.y + 8, 3);
+          if (seStrongHit) playSound(seStrongHit, 0.9);
+        }
       }
 
       const gravityMult = (dashJumpAssistTimer > 0 && input.jump ? DASH_JUMP_GRAVITY_MULT : 1)
