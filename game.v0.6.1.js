@@ -36,8 +36,13 @@
     left: false,
     right: false,
     jump: false,
+    down: false,
     attack: false,
     attack2: false,
+    shoot: false,
+    dash: false,
+    weaponSwitch: false,
+    burst: false,
     special: false,
     special2: false,
     start: false,
@@ -48,6 +53,10 @@
     attack: false,
     attack2: false,
     shot: false,
+    shoot: false,
+    dash: false,
+    weaponSwitch: false,
+    burst: false,
     styleChange: false,
     special: false,
     special2: false,
@@ -142,7 +151,7 @@
   let attackMashCount = 0;
   let attackMashTimer = 0;
   let shotChargeTimer = 0;
-  let playerStyle = "berserker"; // "berserker" or "gunner"
+  let playerStyle = "swordmaster"; // "swordmaster" (default), "berserker" or "gunner"
   let shotReloadTimer = 0;
 
   // Gunner Ammo System
@@ -171,6 +180,25 @@
   let devilTriggerHitCount = 0;
   let devilTriggerResultTimer = 0;
   let devilTriggerResultCount = 0;
+
+  // --- Combat Dash/Dodge System ---
+  let combatDashTimer = 0;
+  let combatDashCooldown = 0;
+  let combatDashDir = 1;
+  const COMBAT_DASH_DURATION = 10;
+  const COMBAT_DASH_SPEED = 6.5;
+  const COMBAT_DASH_COOLDOWN = 18;
+  const COMBAT_DASH_INVULN = 12;
+
+  // --- Air Combo Tracker ---
+  let airComboCount = 0;
+  let airComboMaxHits = 6;
+  let airComboDisplayTimer = 0;
+  let airGunHangTime = 8; // Frames of reduced gravity when shooting in air
+
+  // --- Dedicated Gun (always available) ---
+  let dedicatedGunCooldown = 0;
+  const DEDICATED_GUN_RELOAD = 12;
 
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
@@ -3354,7 +3382,7 @@
         enemy.shootInterval = enemy.shooter ? 176 + i * 9 : 0;
         enemy.shootCooldown = enemy.shooter ? 104 + i * 7 : 0;
         enemy.flash = 0;
-        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 3 : 1)));
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
         enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
         enemy.hitstun = 0;
       }
@@ -3578,7 +3606,7 @@
         enemy.shootInterval = enemy.shooter ? 162 + i * 8 : 0;
         enemy.shootCooldown = enemy.shooter ? 94 + i * 7 : 0;
         enemy.flash = 0;
-        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 3 : 1)));
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
         enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
         enemy.hitstun = 0;
       }
@@ -3850,7 +3878,7 @@
       enemy.shootInterval = enemy.shooter ? 156 + i * 10 : 0;
       enemy.shootCooldown = enemy.shooter ? 96 + i * 10 : 0;
       enemy.flash = 0;
-      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 3 : 1)));
+      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
       enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
       enemy.hitstun = 0;
     }
@@ -4458,7 +4486,7 @@
       : false;
     const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
     const effectivePower = blackFlash && !blackFlashPowerApplied ? power * BLACK_FLASH_DAMAGE_MUL : power;
-    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 3 : 1)));
+    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
     if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) {
       enemy.hp = enemy.maxHp;
     }
@@ -6422,15 +6450,19 @@
 
     if (shotReloadTimer > 0) shotReloadTimer -= dt;
 
-    // In Gunner mode, the attack button is used for shooting, so skip melee logic
+    // --- Always use Swordmaster attack processing (style system disabled) ---
+    attackChargeTimer = 0;
+    attackChargeReadyPlayed = false;
+    updateSwordmasterAttack(dt, actions);
+    return;
+
+    // Legacy style branches (disabled)
     if (playerStyle === "gunner") {
       updateShot(dt, actions);
       attackChargeTimer = 0;
       attackChargeReadyPlayed = false;
       return;
     }
-
-    // --- Swordmaster attack processing ---
     if (playerStyle === "swordmaster") {
       attackChargeTimer = 0;
       attackChargeReadyPlayed = false;
@@ -6793,34 +6825,46 @@
       return;
     }
 
-    // Charge input
-    if (input.attack) {
-      const chargeMul = battleRankChargeMultiplier();
-      const before = swordChargeTimer;
-      swordChargeTimer = Math.min(SWORD_CHARGE_MAX, swordChargeTimer + dt * chargeMul);
-      if (!swordChargeReadyPlayed && swordChargeTimer >= SWORD_SLAM_THRESHOLD && before < SWORD_SLAM_THRESHOLD) {
-        swordChargeReadyPlayed = true;
-        playChargeReadySfx();
-      }
-      return;
-    }
-
-    // Release
-    if (swordChargeTimer > 0) {
-      if (swordChargeTimer >= SWORD_SLAM_THRESHOLD - 1) {
-        performSwordSlam();
-      } else if (swordChargeTimer >= SWORD_UPPER_THRESHOLD) {
-        performSwordUpper();
-      } else if (swordChargeTimer >= SWORD_STINGER_THRESHOLD) {
-        performSwordStinger();
+    // Direction-based attack on press (DMC style)
+    if (actions.attackPressed) {
+      const fwd = (input.right && player.facing > 0) || (input.left && player.facing < 0);
+      if (!player.onGround) {
+        // --- Air attacks ---
+        if (input.down) {
+          performSwordSlam();   // Air + Down + J = Helm Breaker (叩き落とし)
+        } else {
+          performSwordCombo();  // Air + J = Air combo (空中連撃)
+          airComboCount++;
+          airComboDisplayTimer = 90;
+        }
       } else {
-        performSwordCombo();
+        // --- Ground attacks ---
+        if (input.down) {
+          performSwordUpper();  // Down + J = High Time (打ち上げ)
+        } else if (fwd) {
+          performSwordStinger(); // Forward + J = Stinger (突進斬り)
+        } else {
+          performSwordCombo();   // J = Normal combo (通常コンボ)
+        }
       }
       swordChargeTimer = 0;
       swordChargeReadyPlayed = false;
       return;
     }
 
+    // Legacy charge support (hold attack still works for charged slam)
+    if (input.attack) {
+      const chargeMul = battleRankChargeMultiplier();
+      swordChargeTimer = Math.min(SWORD_CHARGE_MAX, swordChargeTimer + dt * chargeMul);
+      return;
+    }
+    if (swordChargeTimer > 0) {
+      if (swordChargeTimer >= SWORD_SLAM_THRESHOLD - 1) {
+        performSwordSlam();
+      }
+      swordChargeTimer = 0;
+      swordChargeReadyPlayed = false;
+    }
   }
 
   function performSwordCombo() {
@@ -7094,6 +7138,78 @@
     devilTriggerHitCount = 0;
     devilTriggerResultTimer = 0;
     devilTriggerResultCount = 0;
+  }
+
+  // ========== COMBAT DASH / DODGE SYSTEM ==========
+  function updateCombatDash(dt, actions) {
+    if (combatDashTimer > 0) {
+      combatDashTimer -= dt;
+      player.vx = combatDashDir * COMBAT_DASH_SPEED;
+      damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+      if (combatDashTimer <= 0) {
+        combatDashTimer = 0;
+        combatDashCooldown = COMBAT_DASH_COOLDOWN;
+      }
+      return true;
+    }
+    if (combatDashCooldown > 0) combatDashCooldown -= dt;
+    if (actions.dashPressed && combatDashCooldown <= 0) {
+      combatDashDir = player.facing;
+      combatDashTimer = COMBAT_DASH_DURATION;
+      damageInvulnTimer = Math.max(damageInvulnTimer, COMBAT_DASH_INVULN);
+      if (seWhipSwing) playSound(seWhipSwing, 0.4, 1.5);
+      hudMessage = "DODGE!";
+      hudTimer = 20;
+      // Air dash: slight upward boost to maintain height
+      if (!player.onGround) {
+        player.vy = Math.min(player.vy, 0.3);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // ========== DEDICATED GUN (K KEY - always available) ==========
+  function updateDedicatedGun(dt, actions) {
+    if (dedicatedGunCooldown > 0) {
+      dedicatedGunCooldown -= dt;
+      return;
+    }
+    if (actions.shootPressed) {
+      const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
+      if (!playable) return;
+      if (deathAnimActive) return;
+      if (hitStopTimer > 0) return;
+
+      // Air gun: reduce gravity for hang time
+      if (!player.onGround) {
+        player.vy = Math.min(player.vy, 0.8);
+        airComboCount++;
+        airComboDisplayTimer = 90;
+      }
+
+      // Fire handgun using existing projectile system
+      const dir = player.facing;
+      const px = player.x + player.w * 0.5;
+      const py = player.y + player.h * 0.45;
+      const rankIdx = battleRankIndex;
+      const speed = 5.0 + rankIdx * 1.0;
+      stage.playerWaves.push({
+        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4,
+        vx: dir * speed, vy: 0, ttl: 65, power: 0.6
+      });
+      if (seHandgun) playSound(seHandgun, 0.45);
+      dedicatedGunCooldown = DEDICATED_GUN_RELOAD;
+      triggerImpact(0.5, px + dir * 15, py, 1.0);
+
+      // Battle rank: register as gun style for diversity bonus
+      battleRankGainByStyle("gun_shot", 0.6);
+    }
+  }
+
+  // ========== WEAPON SWITCH (I KEY - reserved for future use) ==========
+  function handleWeaponSwitch(actions) {
+    // Style system disabled - always swordmaster with full combat kit
   }
 
   function updatePlayerWaves(dt, solids) {
@@ -9002,6 +9118,9 @@
       attackReleased: !input.attack && prevInput.attack,
       attack2Pressed: false,
       attack2Released: false,
+      shootPressed: input.shoot && !prevInput.shoot,
+      dashPressed: input.dash && !prevInput.dash,
+      weaponSwitchPressed: input.weaponSwitch && !prevInput.weaponSwitch,
       specialPressed: input.special && !prevInput.special,
       special2Pressed: input.special2 && !prevInput.special2,
       startPressed: input.start && !prevInput.start,
@@ -9014,6 +9133,9 @@
     prevInput.right = input.right;
     prevInput.attack = input.attack;
     prevInput.attack2 = false;
+    prevInput.shoot = input.shoot;
+    prevInput.dash = input.dash;
+    prevInput.weaponSwitch = input.weaponSwitch;
     prevInput.special = input.special;
     prevInput.special2 = input.special2;
     prevInput.start = input.start;
@@ -9114,7 +9236,7 @@
           dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
         }
         player.onGround = false;
-      } else if (actions.jumpPressed && !player.onGround && playerStyle === "swordmaster" && !swordDoubleJumpUsed) {
+      } else if (actions.jumpPressed && !player.onGround && !swordDoubleJumpUsed) {
         swordDoubleJumpUsed = true;
         player.vy = -(jumpPower * 0.85);
         playJumpSfx();
@@ -9157,6 +9279,25 @@
     updateLifeUpItems(worldDt);
     updateBikes(worldDt);
     updateCheckpointTokens(worldDt);
+    // --- Combat Dash ---
+    if (!bursting) {
+      updateCombatDash(dt, actions);
+    }
+    // --- Dedicated Gun (K key, always available) ---
+    updateDedicatedGun(dt, actions);
+    // --- Weapon Switch (I key) ---
+    handleWeaponSwitch(actions);
+    // --- Air combo reset on landing ---
+    if (player.onGround && airComboCount > 0) {
+      if (airComboCount >= 3) {
+        hudMessage = airComboCount + " HIT AIR COMBO!";
+        hudTimer = 50;
+        battleRankGainByStyle("air_combo_finish", airComboCount * 0.5);
+      }
+      airComboCount = 0;
+    }
+    if (airComboDisplayTimer > 0) airComboDisplayTimer -= dt;
+
     if (proteinBurstTimer <= 0) {
       updatePlayerAttack(dt, actions);
     }
@@ -9222,7 +9363,7 @@
           dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
         }
         player.onGround = false;
-      } else if (actions.jumpPressed && !player.onGround && playerStyle === "swordmaster" && !swordDoubleJumpUsed) {
+      } else if (actions.jumpPressed && !player.onGround && !swordDoubleJumpUsed) {
         swordDoubleJumpUsed = true;
         player.vy = -(jumpPower * 0.85);
         playJumpSfx();
@@ -9263,6 +9404,19 @@
     if (gameState !== STATE.BOSS) return;
     updateEnemies(worldDt, solids);
     updateHazardBullets(worldDt, solids);
+    // --- Combat systems (Boss battle) ---
+    updateCombatDash(dt, actions);
+    updateDedicatedGun(dt, actions);
+    handleWeaponSwitch(actions);
+    if (player.onGround && airComboCount > 0) {
+      if (airComboCount >= 3) {
+        hudMessage = airComboCount + " HIT AIR COMBO!";
+        hudTimer = 50;
+        battleRankGainByStyle("air_combo_finish", airComboCount * 0.5);
+      }
+      airComboCount = 0;
+    }
+    if (airComboDisplayTimer > 0) airComboDisplayTimer -= dt;
     if (proteinBurstTimer <= 0) {
       updatePlayerAttack(dt, actions);
     }
@@ -10448,19 +10602,18 @@
     const maxHp = Math.max(1, Math.round(enemy.maxHp || 1));
     if (maxHp <= 1) return;
     const hp = clamp(Math.round(enemy.hp || maxHp), 0, maxHp);
-    const pipW = maxHp >= 4 ? 2 : 3;
-    const pipH = 2;
-    const gap = 1;
-    const totalW = maxHp * pipW + (maxHp - 1) * gap;
-    const startX = x + Math.floor((enemy.w - totalW) * 0.5);
+    // Use bar style for higher HP enemies
+    const barW = Math.min(24, Math.max(14, enemy.w + 4));
+    const barH = 2;
+    const startX = x + Math.floor((enemy.w - barW) * 0.5);
     const startY = y - 5;
+    const ratio = hp / maxHp;
     ctx.fillStyle = "rgba(10,12,17,0.78)";
-    ctx.fillRect(startX - 1, startY - 1, totalW + 2, pipH + 2);
-    for (let i = 0; i < maxHp; i += 1) {
-      const filled = i < hp;
-      ctx.fillStyle = filled ? "#ff7468" : "#2d374a";
-      ctx.fillRect(startX + i * (pipW + gap), startY, pipW, pipH);
-    }
+    ctx.fillRect(startX - 1, startY - 1, barW + 2, barH + 2);
+    ctx.fillStyle = "#2d374a";
+    ctx.fillRect(startX, startY, barW, barH);
+    ctx.fillStyle = ratio > 0.5 ? "#ff7468" : ratio > 0.25 ? "#ff9944" : "#ff3333";
+    ctx.fillRect(startX, startY, Math.ceil(barW * ratio), barH);
   }
 
   function drawEnemy(enemy) {
@@ -13884,6 +14037,32 @@
       ctx.fillStyle = `rgba(255, 130, 130, ${0.18 * flash})`;
       ctx.fillRect(0, hudH, W, H - hudH);
     }
+
+    // --- Air Combo Counter ---
+    if (airComboCount >= 2 && airComboDisplayTimer > 0) {
+      const comboAlpha = clamp(airComboDisplayTimer / 30, 0.3, 1.0);
+      const comboText = `${airComboCount} HITS`;
+      ctx.font = "bold 8px monospace";
+      const tw = ctx.measureText(comboText).width;
+      const cx = W - tw - 8;
+      const cy = H - 22;
+      ctx.fillStyle = `rgba(10, 8, 20, ${0.6 * comboAlpha})`;
+      ctx.fillRect(cx - 3, cy - 1, tw + 6, 10);
+      const comboColor = airComboCount >= 6 ? "#ff4466" : airComboCount >= 4 ? "#ffaa44" : "#aaddff";
+      ctx.fillStyle = comboColor;
+      ctx.globalAlpha = comboAlpha;
+      ctx.fillText(comboText, cx, cy + 1);
+      ctx.globalAlpha = 1;
+    }
+
+    // --- Dash Cooldown Indicator ---
+    if (combatDashCooldown > 0) {
+      const dashRatio = 1 - clamp(combatDashCooldown / COMBAT_DASH_COOLDOWN, 0, 1);
+      ctx.fillStyle = "rgba(10, 12, 20, 0.5)";
+      ctx.fillRect(W - 28, H - 10, 24, 3);
+      ctx.fillStyle = `rgba(120, 200, 255, ${0.5 + dashRatio * 0.5})`;
+      ctx.fillRect(W - 28, H - 10, Math.floor(24 * dashRatio), 3);
+    }
   }
 
   function drawDeadOverlay() {
@@ -15005,11 +15184,14 @@
     ArrowUp: "jump",
     KeyW: "jump",
     Space: "jump",
+    ArrowDown: "down",
     KeyJ: "attack",
     KeyF: "attack",
+    KeyK: "shoot",
+    KeyL: "dash",
+    KeyI: "weaponSwitch",
+    KeyU: "burst",
     KeyS: "styleChange",
-    KeyK: "burst",
-    KeyL: "burst",
     Enter: "start",
   };
 
@@ -15024,7 +15206,7 @@
 
     input[mapped] = true;
 
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", "Space"].includes(e.code)) {
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(e.code)) {
       e.preventDefault();
     }
   });
@@ -15040,9 +15222,14 @@
     input.left = false;
     input.right = false;
     input.jump = false;
+    input.down = false;
     input.attack = false;
     input.attack2 = false;
     input.shot = false;
+    input.shoot = false;
+    input.dash = false;
+    input.weaponSwitch = false;
+    input.burst = false;
     input.styleChange = false;
     input.special = false;
     input.special2 = false;
@@ -15119,7 +15306,8 @@
       scheduleBGM();
       const actions = sampleActions();
 
-      if (actions.styleChangePressed) {
+      // Style system disabled - always swordmaster with gun on K
+      if (false && actions.styleChangePressed) {
         if (playerStyle === "berserker") playerStyle = "gunner";
         else if (playerStyle === "gunner") playerStyle = "swordmaster";
         else playerStyle = "berserker";

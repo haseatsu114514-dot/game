@@ -301,6 +301,44 @@ body {
   opacity: 0.9;
 }
 
+.command-list {
+  padding: 4px 0;
+}
+
+.command-list h3 {
+  margin: 0 0 6px 0;
+  font-size: 1rem;
+  color: var(--accent);
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.key-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.key-table td {
+  padding: 2px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.key-table td.key {
+  font-family: monospace;
+  font-weight: bold;
+  color: #aaddff;
+  white-space: nowrap;
+  width: 120px;
+}
+
+.tip {
+  margin-top: 8px !important;
+  text-align: center;
+  color: #ffd47d;
+  font-size: 0.8rem !important;
+}
+
 @media (max-width: 720px) {
   body {
     padding: 8px 8px calc(212px + env(safe-area-inset-bottom));
