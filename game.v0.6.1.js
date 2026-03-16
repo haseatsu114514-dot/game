@@ -411,7 +411,7 @@
   const SWORD_STINGER_DURATION = 20;
   const SWORD_STINGER_SPEED = 7.0;
   const SWORD_UPPER_DURATION = 12;
-  const SWORD_UPPER_HANG_TIME = 20;       // ~0.33 second hang time (reduced from 60)
+  const SWORD_UPPER_HANG_TIME = 30;       // ~0.5 second hang time for air combos
   const SWORD_SLAM_DURATION = 18;
   const SWORD_SLAM_REACH = 38;
   const SWORD_SLAM_HEIGHT = 40;
@@ -6844,6 +6844,8 @@
       const hasDirection = fwd || input.jump || input.down;
       if (!player.onGround) {
         // --- Air attacks ---
+        // Brief hang before attack for better air control
+        player.vy = Math.min(player.vy, 0.2);
         // Air + J = Helm Breaker (叩き落とし) — always slam down in air
         performSwordSlam();
         airComboCount++;
@@ -7269,10 +7271,13 @@
     const py = player.y + player.h * 0.45;
     const rankIdx = battleRankIndex;
 
+    // Rank-scaled fire rate: faster at higher ranks
+    const rankReload = Math.max(4, DEDICATED_GUN_RELOAD - rankIdx * 1.2);
+
     // Air + Down + K = Bullet Rain (下方向に弾をばらまく)
     if (!player.onGround && input.down) {
-      player.vy = Math.min(player.vy, 0.3); // Hang in air
-      const bulletCount = 4 + Math.floor(rankIdx * 0.8);
+      player.vy = Math.min(player.vy, -0.2); // Strong hang in air
+      const bulletCount = 4 + Math.floor(rankIdx * 1.5);
       for (let i = 0; i < bulletCount; i++) {
         const spread = (Math.random() - 0.5) * 8.0;
         stage.playerWaves.push({
@@ -7281,7 +7286,7 @@
         });
       }
       if (seHandgun) playSound(seHandgun, 0.5, 0.9);
-      dedicatedGunCooldown = DEDICATED_GUN_RELOAD + 4;
+      dedicatedGunCooldown = rankReload + 2;
       triggerImpact(1.0, px, py + 10, 2.0);
       battleRankGainByStyle("bullet_rain", 0.8);
       hudMessage = "BULLET RAIN!";
@@ -7289,9 +7294,9 @@
       return;
     }
 
-    // Normal gun: air shooting gives hang time
+    // Normal gun: air shooting gives stronger hang time
     if (!player.onGround) {
-      player.vy = Math.min(player.vy, 0.5);
+      player.vy = Math.min(player.vy, -0.1);
     }
 
     // Fire handgun
@@ -7301,7 +7306,7 @@
       vx: dir * speed, vy: (Math.random() - 0.5) * 0.3, ttl: 65, power: 0.6
     });
     if (seHandgun) playSound(seHandgun, 0.45);
-    dedicatedGunCooldown = DEDICATED_GUN_RELOAD;
+    dedicatedGunCooldown = rankReload;
     triggerImpact(0.5, px + dir * 10, py, 1.0);
     battleRankGainByStyle("gun_shot", 0.6);
   }
