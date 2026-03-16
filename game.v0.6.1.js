@@ -192,10 +192,10 @@
   let combatDashTimer = 0;
   let combatDashCooldown = 0;
   let combatDashDir = 1;
-  const COMBAT_DASH_DURATION = 10;
-  const COMBAT_DASH_SPEED = 6.5;
-  const COMBAT_DASH_COOLDOWN = 18;
-  const COMBAT_DASH_INVULN = 12;
+  const COMBAT_DASH_DURATION = 16;
+  const COMBAT_DASH_SPEED = 8.0;
+  const COMBAT_DASH_COOLDOWN = 20;
+  const COMBAT_DASH_INVULN = 22;
 
   // --- Air Combo Tracker ---
   let airComboCount = 0;
@@ -206,6 +206,8 @@
   // --- Dedicated Gun (always available) ---
   let dedicatedGunCooldown = 0;
   const DEDICATED_GUN_RELOAD = 12;
+  let bulletRainTimer = 0;     // Remaining duration (frames)
+  let bulletRainCooldown = 0;  // Cooldown after use
 
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
@@ -408,8 +410,8 @@
   const SWORD_COMBO_WINDOW = 28;          // Frames to chain combo
   const SWORD_COMBO_REACH = [22, 26, 32]; // Reach per combo stage
   const SWORD_COMBO_POWER = [1.0, 1.2, 1.8]; // Base power per stage
-  const SWORD_STINGER_DURATION = 20;
-  const SWORD_STINGER_SPEED = 7.0;
+  const SWORD_STINGER_DURATION = 14;
+  const SWORD_STINGER_SPEED = 5.5;
   const SWORD_UPPER_DURATION = 12;
   const SWORD_UPPER_HANG_TIME = 30;       // ~0.5 second hang time for air combos
   const SWORD_SLAM_DURATION = 18;
@@ -4493,8 +4495,10 @@
       : false;
     const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
     const effectivePower = blackFlash && !blackFlashPowerApplied ? power * BLACK_FLASH_DAMAGE_MUL : power;
-    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
-    if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) {
+    if (!enemy.maxHp) {
+      enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+    }
+    if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) {
       enemy.hp = enemy.maxHp;
     }
     // Power-based damage: scale with attack power (min 1)
@@ -6937,8 +6941,8 @@
   function performSwordStinger() {
     const dir = player.facing;
     const rankIdx = battleRankIndex;
-    const reach = 48 + rankIdx * 4;
-    const power = 2.5 + rankIdx * 0.15;
+    const reach = 32 + rankIdx * 3;
+    const power = 1.8 + rankIdx * 0.12;
 
     swordStingerActive = true;
     swordStingerTimer = SWORD_STINGER_DURATION;
@@ -7015,8 +7019,10 @@
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlap(hitBox, enemy)) continue;
       // Light damage only (1 HP)
-      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
-      if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) enemy.hp = enemy.maxHp;
+      if (!enemy.maxHp) {
+        enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+      }
+      if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
       enemy.hp = Math.max(1, enemy.hp - 1); // Never kill — always leave at least 1 HP
       // Strong upward launch
       enemy.vx = dir * 0.3;
@@ -7258,6 +7264,9 @@
     if (dedicatedGunCooldown > 0) {
       dedicatedGunCooldown -= dt;
     }
+    if (bulletRainCooldown > 0) {
+      bulletRainCooldown -= dt;
+    }
     // Fire on press OR hold (auto-fire when holding K)
     const wantShoot = input.shoot && dedicatedGunCooldown <= 0;
     if (!wantShoot) return;
@@ -7274,24 +7283,44 @@
     // Rank-scaled fire rate: faster at higher ranks
     const rankReload = Math.max(4, DEDICATED_GUN_RELOAD - rankIdx * 1.2);
 
-    // Air + Down + K = Bullet Rain (下方向に弾をばらまく)
-    if (!player.onGround && input.down) {
-      player.vy = Math.min(player.vy, -0.2); // Strong hang in air
-      const bulletCount = 4 + Math.floor(rankIdx * 1.5);
-      for (let i = 0; i < bulletCount; i++) {
-        const spread = (Math.random() - 0.5) * 8.0;
-        stage.playerWaves.push({
-          kind: "bullet", x: px + spread * 6, y: py + 4, w: 6, h: 6,
-          vx: spread * 0.8, vy: 4.0 + Math.random() * 3, ttl: 50, power: 0.4
-        });
+    // Air + Down/S + K = Bullet Rain (真下に弾を打ち込む)
+    // Duration scales with rank; cooldown after use
+    if (!player.onGround && input.down && bulletRainCooldown <= 0) {
+      const maxDuration = 30 + rankIdx * 12; // Rank 0: ~30f(0.5s), Rank 6: ~102f(1.7s)
+      if (bulletRainTimer <= 0) bulletRainTimer = maxDuration;
+      if (bulletRainTimer > 0) {
+        player.vy = 0; // Completely freeze in air
+        const bulletCount = 1 + Math.floor(rankIdx * 0.3); // 1~2 bullets per shot
+        for (let i = 0; i < bulletCount; i++) {
+          const spread = (Math.random() - 0.5) * 0.6; // Almost straight down
+          stage.playerWaves.push({
+            kind: "bullet", x: px + spread * 2, y: py + 6, w: 5, h: 5,
+            vx: spread * 0.15, vy: 6.0 + Math.random() * 1.0, ttl: 35, power: 0.5
+          });
+        }
+        if (seHandgun) playSound(seHandgun, 0.5, 0.9);
+        dedicatedGunCooldown = rankReload;
+        triggerImpact(0.6, px, py + 10, 1.5);
+        battleRankGainByStyle("bullet_rain", 0.8);
+        bulletRainTimer -= dedicatedGunCooldown; // Consume duration per shot
+        if (bulletRainTimer <= 0) {
+          // Duration expired — enter cooldown
+          bulletRainCooldown = 60 + (6 - rankIdx) * 8; // Higher rank = shorter cooldown
+          hudMessage = "RAIN END";
+          hudTimer = 20;
+        } else {
+          hudMessage = "BULLET RAIN!";
+          hudTimer = 8;
+        }
+        return;
       }
-      if (seHandgun) playSound(seHandgun, 0.5, 0.9);
-      dedicatedGunCooldown = rankReload + 2;
-      triggerImpact(1.0, px, py + 10, 2.0);
-      battleRankGainByStyle("bullet_rain", 0.8);
-      hudMessage = "BULLET RAIN!";
-      hudTimer = 25;
-      return;
+    }
+    // Reset bullet rain if not using it (landed or released down)
+    if (player.onGround || !input.down) {
+      if (bulletRainTimer > 0) {
+        bulletRainCooldown = 40 + (6 - rankIdx) * 6; // Partial cooldown on cancel
+      }
+      bulletRainTimer = 0;
     }
 
     // Normal gun: air shooting gives stronger hang time
@@ -7389,8 +7418,11 @@
         // Gun bullets: always deal damage, ignore hitstun/kicked state
         if (isGun) {
           if (!enemy.alive) continue;
-          enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
-          if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) enemy.hp = enemy.maxHp;
+          // Initialize HP only if never set
+          if (!enemy.maxHp) {
+            enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+          }
+          if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
           const gunDmg = Math.max(1, Math.round((wave.power || 0.5) * 0.6));
           enemy.hp = Math.max(0, enemy.hp - gunDmg);
           enemy.flash = Math.max(enemy.flash || 0, 6);
@@ -7400,7 +7432,6 @@
           }
           if (enemy.hp <= 0 && !enemy.kicked) {
             // Finish off with kickEnemy for proper defeat handling
-            enemy.hp = 0;
             kickEnemy(enemy, dir, (wave.power || 0.5) * 0.5, {
               immediateRemove: false,
               flyLifetime: 22,
