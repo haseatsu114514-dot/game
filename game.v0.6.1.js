@@ -6830,6 +6830,8 @@
     }
 
     // Direction-based attack on press (DMC style)
+    // W/↑/Space = up direction (shared with jump key)
+    // A/D = left/right direction (shared with movement keys)
     if (actions.attackPressed) {
       const fwd = (input.right && player.facing > 0) || (input.left && player.facing < 0);
       if (!player.onGround) {
@@ -6840,10 +6842,10 @@
         airComboDisplayTimer = 90;
       } else {
         // --- Ground attacks ---
-        if (input.up) {
-          performSwordUpper();  // Up + J = High Time (打ち上げ)
+        if (input.jump) {
+          performSwordUpper();  // W + J = High Time (打ち上げ)
         } else if (fwd) {
-          performSwordStinger(); // Forward + J = Stinger (突進斬り)
+          performSwordStinger(); // D/A + J = Stinger (突進斬り)
         } else if (input.down) {
           performSwordSlam();   // Down + J = Ground slam
         } else {
