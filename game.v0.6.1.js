@@ -182,7 +182,9 @@
   // --- Royal Guard ---
   let royalGuardEnergy = 0;           // Stored energy from blocking
   let royalGuardBlockTimer = 0;       // Active guard frames
-  const ROYAL_GUARD_BLOCK_WINDOW = 10; // Frames of active guard
+  const ROYAL_GUARD_BLOCK_WINDOW = 16; // Frames of active guard (generous window)
+  let royalGuardFlashTimer = 0;       // Visual flash on successful guard
+  let royalGuardFlashColor = "#22ff88";
   const ROYAL_GUARD_MAX_ENERGY = 100;
   // --- Drive Charge (charged drive = Overdrive, fires multiple waves) ---
   let driveChargeTimer = 0;
@@ -960,8 +962,8 @@
     const prevChargeMul = battleRankChargeMultiplier();
     const maxIndex = BATTLE_RANK_DATA.length - 1;
     const currIndex = clamp(battleRankIndex, 0, maxIndex);
-    const sTierIndex = Math.min(3, maxIndex);
-    const dropSteps = currIndex >= sTierIndex ? 2 : 1;
+    // Always drop exactly 2 ranks on damage (not full reset)
+    const dropSteps = 2;
     const nextIndex = Math.max(0, currIndex - dropSteps);
 
     battleRankIndex = nextIndex;
@@ -8009,23 +8011,26 @@
         }
         // Block mode
         royalGuardBlockTimer = ROYAL_GUARD_BLOCK_WINDOW;
-        damageInvulnTimer = Math.max(damageInvulnTimer, ROYAL_GUARD_BLOCK_WINDOW + 4);
+        damageInvulnTimer = Math.max(damageInvulnTimer, ROYAL_GUARD_BLOCK_WINDOW + 6);
         player.vx *= 0.3;
         hudMessage = "GUARD!";
         hudTimer = 15;
         if (seWhipSwing) playSound(seWhipSwing, 0.3, 0.8);
-        // Absorb nearby damage into energy
+        // Wider guard box — can catch charging enemies too
         const guardBox = {
-          x: player.x - 8, y: player.y - 4,
-          w: player.w + 16, h: player.h + 8,
+          x: player.x - 14, y: player.y - 8,
+          w: player.w + 28, h: player.h + 16,
         };
         let absorbed = false;
+        let absorbCount = 0;
+        // Absorb projectiles
         for (const bullet of stage.hazardBullets) {
           if (bullet.dead) continue;
           if (!overlap(guardBox, bullet)) continue;
           bullet.dead = true;
           royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 25);
           absorbed = true;
+          absorbCount++;
         }
         for (const shot of stage.bossShots) {
           if (shot.dead) continue;
@@ -8033,16 +8038,67 @@
           shot.dead = true;
           royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 35);
           absorbed = true;
+          absorbCount++;
+        }
+        // Guard against charging/attacking enemies (stun them + gain energy)
+        for (const enemy of stage.enemies) {
+          if (!enemy.alive || enemy.kicked) continue;
+          if (!overlap(guardBox, enemy)) continue;
+          // Enemy must be close/active to count as guarded
+          const ex = enemy.x + enemy.w * 0.5;
+          const px2 = player.x + player.w * 0.5;
+          if (Math.abs(ex - px2) < 30) {
+            enemy.hitstun = Math.max(enemy.hitstun || 0, 25);
+            enemy.flash = Math.max(enemy.flash || 0, 12);
+            enemy.vx = (ex > px2 ? 1 : -1) * 2.5; // Push enemy back
+            royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 20);
+            absorbed = true;
+            absorbCount++;
+          }
         }
         if (absorbed) {
           battleRankDodgeChain++;
-          hudMessage = battleRankDodgeChain >= 3 ? "PERFECT GUARD!" : "JUST GUARD!";
-          hudTimer = 30;
-          triggerImpact(2.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 3.0);
-          if (seStrongHit) playSound(seStrongHit, 0.7, 1.2);
-          battleRankGainByStyle("royal_guard", 2.5 + battleRankDodgeChain * 0.4);
+          const guardLevel = battleRankDodgeChain >= 3 ? 3 : battleRankDodgeChain >= 2 ? 2 : 1;
+          hudMessage = guardLevel >= 3 ? "PERFECT GUARD!!" : guardLevel >= 2 ? "JUST GUARD!" : "GUARD SUCCESS!";
+          hudTimer = 40;
+
+          // --- Strong visual feedback ---
+          const gpx = player.x + player.w * 0.5;
+          const gpy = player.y + player.h * 0.5;
+          royalGuardFlashTimer = 15;
+          royalGuardFlashColor = guardLevel >= 3 ? "#ffff00" : guardLevel >= 2 ? "#44ffaa" : "#22ff88";
+
+          // Big impact + hitstop
+          triggerImpact(2.5 + guardLevel * 0.8, gpx, gpy, 3.0 + guardLevel);
+          hitStopTimer = Math.max(hitStopTimer, 3 + guardLevel * 1.5);
+
+          // Shield burst particles
+          for (let i = 0; i < 8 + guardLevel * 4; i++) {
+            const angle = (i / (8 + guardLevel * 4)) * Math.PI * 2;
+            const speed = 2.0 + guardLevel * 0.8;
+            hitSparks.push({
+              x: gpx, y: gpy,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              life: 12 + guardLevel * 4, maxLife: 12 + guardLevel * 4,
+              color: royalGuardFlashColor,
+            });
+          }
+          // Energy sparkle ring
+          for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            hitSparks.push({
+              x: gpx + Math.cos(angle) * 16, y: gpy + Math.sin(angle) * 14,
+              vx: Math.cos(angle) * 0.5, vy: Math.sin(angle) * 0.5,
+              life: 18, maxLife: 18,
+              color: "#ffffff",
+            });
+          }
+
+          if (seStrongHit) playSound(seStrongHit, 0.7 + guardLevel * 0.1, 1.2);
+          battleRankGainByStyle("royal_guard", 2.5 + battleRankDodgeChain * 0.4 + absorbCount * 0.5);
         }
-        combatDashCooldown = 8;
+        combatDashCooldown = 6;
         return true;
       }
 
@@ -8160,50 +8216,41 @@
     const rankReload = Math.max(3, (DEDICATED_GUN_RELOAD - rankIdx * 1.2) * gunslingerBonus);
 
     // Air + Down/S + K = Bullet Rain (真下に弾を打ち込む)
-    // Duration scales with rank; cooldown after use
+    // Continues until player lands — no duration limit
     if (!player.onGround && input.down && bulletRainCooldown <= 0) {
-      const maxDuration = 30 + rankIdx * 12; // Rank 0: ~30f(0.5s), Rank 6: ~102f(1.7s)
-      if (bulletRainTimer <= 0) bulletRainTimer = maxDuration;
-      if (bulletRainTimer > 0) {
-        player.vy = 0; // Completely freeze in air
-        const isGunslinger = playerStyle === "gunslinger";
-        const bulletCount = 1 + Math.floor(rankIdx * 0.5) + (isGunslinger ? 1 : 0); // 1~4 bullets
-        const hSpread = 0.6 + rankIdx * 0.15 + (isGunslinger ? 0.3 : 0); // Wider at high rank
-        for (let i = 0; i < bulletCount; i++) {
-          const spread = (Math.random() - 0.5) * hSpread;
-          stage.playerWaves.push({
-            kind: "bullet", x: px + spread * 6, y: py + 6, w: 5, h: 5,
-            vx: spread * 0.5, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6
-          });
-        }
-        if (seHandgun) playSound(seHandgun, 0.5, 0.9);
-        dedicatedGunCooldown = rankReload;
-        triggerImpact(0.6, px, py + 10, 1.5);
-        battleRankGainByStyle("bullet_rain", 0.8);
-        bulletRainTimer -= dedicatedGunCooldown; // Consume duration per shot
-        if (bulletRainTimer <= 0) {
-          // Duration expired — enter cooldown
-          bulletRainCooldown = 60 + (6 - rankIdx) * 8; // Higher rank = shorter cooldown
-          hudMessage = "RAIN END";
-          hudTimer = 20;
-        } else {
-          hudMessage = "BULLET RAIN!";
-          hudTimer = 8;
-        }
-        return;
+      bulletRainTimer = 1; // Mark as active
+      player.vy = Math.min(player.vy + 0.08, 1.5); // Slow descent (eventually lands)
+      const isGunslinger = playerStyle === "gunslinger";
+      const bulletCount = 1 + Math.floor(rankIdx * 0.5) + (isGunslinger ? 1 : 0);
+      const hSpread = 0.6 + rankIdx * 0.15 + (isGunslinger ? 0.3 : 0);
+      for (let i = 0; i < bulletCount; i++) {
+        const spread = (Math.random() - 0.5) * hSpread;
+        stage.playerWaves.push({
+          kind: "bullet", x: px + spread * 6, y: py + 6, w: 5, h: 5,
+          vx: spread * 0.5, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6
+        });
       }
+      if (seHandgun) playSound(seHandgun, 0.5, 0.9);
+      dedicatedGunCooldown = rankReload;
+      triggerImpact(0.6, px, py + 10, 1.5);
+      battleRankGainByStyle("bullet_rain", 0.8);
+      hudMessage = "BULLET RAIN!";
+      hudTimer = 8;
+      return;
     }
-    // Reset bullet rain if not using it (landed or released down)
-    if (player.onGround || !input.down) {
-      if (bulletRainTimer > 0) {
-        bulletRainCooldown = 40 + (6 - rankIdx) * 6; // Partial cooldown on cancel
-      }
+    // End bullet rain on landing
+    if (player.onGround && bulletRainTimer > 0) {
+      bulletRainCooldown = 30 + (6 - rankIdx) * 4; // Short cooldown after landing
+      bulletRainTimer = 0;
+      hudMessage = "RAIN END";
+      hudTimer = 15;
+    }
+    if (!input.down || player.onGround) {
       bulletRainTimer = 0;
     }
 
-    // Gunslinger: back+K = Twosome Time (fire both directions)
-    const backHeld = (input.left && player.facing > 0) || (input.right && player.facing < 0);
-    if (playerStyle === "gunslinger" && backHeld) {
+    // Gunslinger: ↓+K (ground) = Twosome Time (fire both directions)
+    if (playerStyle === "gunslinger" && input.down && player.onGround) {
       performTwosomeTime();
       dedicatedGunCooldown = rankReload;
       if (!player.onGround) player.vy = Math.min(player.vy, -0.2);
@@ -8227,32 +8274,34 @@
       triggerImpact(0.5, px + dir * 10, py, 1.0);
       battleRankGainByStyle("gun_handgun", 0.6);
     } else if (gunType === 1) {
-      // Shotgun: spread shot, slower fire rate
+      // Shotgun: short-range spread, high stagger
       const pellets = 4 + Math.min(3, Math.floor(rankIdx * 0.6));
-      const spreadBase = 0.5 + rankIdx * 0.1;
+      const spreadBase = 0.6 + rankIdx * 0.12;
       const startAngle = -Math.floor(pellets / 2);
       for (let i = 0; i < pellets; i++) {
         const ang = startAngle + i;
         stage.playerWaves.push({
-          kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5,
-          vx: dir * 7.5, vy: ang * spreadBase, ttl: 20, power: 0.7
+          kind: "shotgun", x: px + dir * 8, y: py, w: 5, h: 5,
+          vx: dir * 5.5, vy: ang * spreadBase, ttl: 12, power: 1.0,
+          stagger: true,  // Flag for hitstun
         });
       }
       if (seShotgun) playSound(seShotgun, 0.7);
       dedicatedGunCooldown = Math.max(8, rankReload * 2.5);
-      triggerImpact(1.2, px + dir * 10, py, 2.0);
+      triggerImpact(1.5, px + dir * 8, py, 2.5);
       battleRankGainByStyle("gun_shotgun", 1.0);
     } else {
-      // Grenade: explosive projectile, slow fire rate
+      // Grenade: arcing projectile, explodes on enemy contact or after time
       const powerBase = 3.0 + rankIdx * 0.3;
-      const sizeBase = 28 + rankIdx * 2;
       stage.playerWaves.push({
-        kind: "bazooka", x: px + dir * 14, y: py - 4, w: sizeBase, h: 10,
-        vx: dir * 4.0, vy: -0.8, ttl: 90, power: powerBase, spin: 0
+        kind: "grenade", x: px + dir * 10, y: py - 6, w: 8, h: 8,
+        vx: dir * 3.5, vy: -4.0, gravity: 0.15,
+        ttl: 120, power: powerBase, spin: 0,
+        exploded: false, bounced: 0,
       });
-      if (seBazooka) playSound(seBazooka, 0.7);
+      if (seBazooka) playSound(seBazooka, 0.6);
       dedicatedGunCooldown = Math.max(12, rankReload * 4);
-      triggerImpact(1.5, px + dir * 14, py, 2.5);
+      triggerImpact(0.8, px + dir * 10, py, 1.5);
       battleRankGainByStyle("gun_grenade", 1.5);
     }
   }
@@ -8281,7 +8330,82 @@
       let parryHits = 0;
       let parryX = wave.x + wave.w * 0.5;
       let parryY = wave.y + wave.h * 0.5;
-      if (wave.kind === "bazooka") {
+      if (wave.kind === "grenade") {
+        // Arc trajectory with gravity
+        wave.x += wave.vx * dt;
+        wave.vy += (wave.gravity || 0.15) * dt;
+        wave.y += wave.vy * dt;
+        wave.spin = (wave.spin || 0) + dt * 0.4;
+        // Bounce off ground
+        const groundY = H - 24;
+        if (wave.y + wave.h > groundY && wave.vy > 0) {
+          wave.y = groundY - wave.h;
+          wave.vy = -wave.vy * 0.4;
+          wave.vx *= 0.7;
+          wave.bounced = (wave.bounced || 0) + 1;
+          if (wave.bounced >= 3 || Math.abs(wave.vy) < 0.3) {
+            // Explode after too many bounces
+            wave.ttl = 0;
+          }
+        }
+        // Check solid collision → bounce
+        const cx = wave.x + wave.w * 0.5;
+        const cy = wave.y + wave.h * 0.5;
+        for (const s of solids) {
+          if (s.kind === "crumble" && s.state === "gone") continue;
+          if (overlap(wave, s)) {
+            if (wave.vy > 0 && wave.y + wave.h > s.y && wave.y < s.y + 4) {
+              wave.y = s.y - wave.h;
+              wave.vy = -wave.vy * 0.35;
+              wave.vx *= 0.7;
+              wave.bounced++;
+            } else {
+              wave.ttl = 0; // Hit wall → explode
+            }
+            break;
+          }
+        }
+        // Check enemy collision → explode on contact
+        let hitEnemy = false;
+        for (const enemy of stage.enemies) {
+          if (!enemy.alive || enemy.kicked) continue;
+          if (overlap(wave, enemy)) { hitEnemy = true; break; }
+        }
+        if (!hitEnemy) {
+          for (const boss of getBossEntities()) {
+            if (boss.hp <= 0) continue;
+            if (overlap(wave, boss)) { hitEnemy = true; break; }
+          }
+        }
+        if (hitEnemy || wave.ttl <= 0) {
+          // EXPLODE! Spawn explosion wave
+          wave.dead = true;
+          const ex = wave.x + wave.w * 0.5;
+          const ey = wave.y + wave.h * 0.5;
+          const blastSize = 36 + battleRankIndex * 3;
+          stage.playerWaves.push({
+            kind: "explosion",
+            x: ex - blastSize * 0.5, y: ey - blastSize * 0.5,
+            w: blastSize, h: blastSize,
+            vx: 0, vy: 0, ttl: 18, power: wave.power * 1.5,
+            anim: 0,
+          });
+          triggerImpact(3.0, ex, ey, 4.0);
+          if (seBazooka) playSound(seBazooka, 0.9, 0.7);
+          // Explosion particles
+          for (let i = 0; i < 10; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1.5 + Math.random() * 3;
+            hitSparks.push({
+              x: ex, y: ey,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed - 1.5,
+              life: 12 + Math.random() * 8, maxLife: 20,
+              color: ["#ff6600", "#ffaa00", "#ff3300", "#ffcc44"][Math.floor(Math.random() * 4)],
+            });
+          }
+        }
+      } else if (wave.kind === "bazooka") {
         wave.x += wave.vx * dt;
         wave.y += wave.vy * dt;
         wave.spin = (wave.spin || 0) + dt * 0.35;
@@ -8369,8 +8493,13 @@
           const gunDmg = Math.max(1, Math.round((wave.power || 0.5) * 0.6));
           enemy.hp = Math.max(0, enemy.hp - gunDmg);
           enemy.flash = Math.max(enemy.flash || 0, 6);
-          // Light flinch but no big knockback — bullets chip away
-          if (!enemy.kicked) {
+          // Shotgun: heavy stagger + pushback
+          if (wave.stagger && !enemy.kicked) {
+            enemy.hitstun = Math.max(enemy.hitstun || 0, 18);
+            enemy.flash = Math.max(enemy.flash || 0, 12);
+            enemy.vx = dir * 2.0; // Knockback
+          } else if (!enemy.kicked) {
+            // Light flinch — bullets chip away
             enemy.hitstun = Math.max(enemy.hitstun || 0, 4);
           }
           if (enemy.hp <= 0 && !enemy.kicked) {
@@ -12966,6 +13095,29 @@
       ctx.fillRect(x, y, wave.w, wave.h);
       return;
     }
+    if (wave.kind === "grenade") {
+      ctx.save();
+      ctx.translate(x + wave.w * 0.5, y + wave.h * 0.5);
+      ctx.rotate(wave.spin || 0);
+      // Grenade body (round)
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#556655";
+      ctx.fill();
+      // Pin/highlight
+      ctx.beginPath();
+      ctx.arc(-1, -1, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#88aa88";
+      ctx.fill();
+      // Fuse spark
+      const sparkAlpha = 0.5 + Math.sin((wave.spin || 0) * 4) * 0.5;
+      ctx.beginPath();
+      ctx.arc(3, -3, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 200, 50, ${sparkAlpha.toFixed(2)})`;
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     if (wave.kind === "bazooka") {
       ctx.save();
       ctx.translate(x + wave.w * 0.5, y + wave.h * 0.5);
@@ -15548,6 +15700,26 @@
       ctx.fillStyle = "#88ffaa";
       ctx.fillText("RG", 58, H - 27);
     }
+    // Royal Guard flash overlay on successful guard
+    if (royalGuardFlashTimer > 0) {
+      royalGuardFlashTimer -= 1;
+      const flashAlpha = clamp(royalGuardFlashTimer / 15, 0, 0.35);
+      ctx.fillStyle = royalGuardFlashColor;
+      ctx.globalAlpha = flashAlpha;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+      // Shield circle around player
+      const spx = player.x + player.w * 0.5 - cameraX;
+      const spy = player.y + player.h * 0.5;
+      const shieldR = 16 + (15 - royalGuardFlashTimer) * 1.5;
+      ctx.strokeStyle = royalGuardFlashColor;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = clamp(royalGuardFlashTimer / 15, 0, 0.8);
+      ctx.beginPath();
+      ctx.arc(spx, spy, shieldR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     // --- Taunt Bonus Indicator ---
     if (tauntBonusTimer > 0) {
       const tbAlpha = clamp(tauntBonusTimer / 60, 0.3, 1.0);
@@ -16771,7 +16943,7 @@
     // ArrowUp/W also sets "up" direction for attack combos
     if (keyAlsoUp[e.code]) input.up = true;
 
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(e.code)) {
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
       e.preventDefault();
     }
   });
