@@ -137,6 +137,10 @@
   let battleRankLastStyle = "";
   let battleRankStyleStreak = 0;
   let battleRankRecentStyles = [];
+  let battleRankUniqueCount = 0;      // Unique styles in recent window
+  let battleRankComboVariety = 0;     // Variety combo counter
+  let battleRankDodgeChain = 0;       // Consecutive successful dodges without getting hit
+  let battleRankLastDodgeTime = 0;    // Frame of last dodge
   let battleRankFlashTimer = 0;
   let battleRankBreakFlashTimer = 0;
   let hammerTimer = 0;
@@ -207,6 +211,11 @@
   let gunType = 0; // 0=handgun, 1=shotgun, 2=grenade
   const GUN_TYPE_NAMES = ["HANDGUN", "SHOTGUN", "GRENADE"];
   let gunSwitchFlashTimer = 0;
+  // --- Style Cut-in ---
+  let styleCutInTimer = 0;
+  let styleCutInName = "";
+  let styleCutInColor = "#ffffff";
+  const STYLE_CUT_IN_DURATION = 45;  // ~0.75 seconds
   let swordStingerActive = false;
   let swordStingerTimer = 0;
   let stingerCaughtEnemies = []; // Enemies being dragged by stinger
@@ -836,24 +845,55 @@
   function battleRankGainByStyle(styleKey, power = 1) {
     const style = styleKey || "impact";
     const p = clamp(power, 0.8, 4.8);
-    let gain = 20 + p * 6.2;
+    // Base gain reduced — raw hits give less; variety gives more
+    let gain = 12 + p * 4.0;
 
     const sameStyle = style === battleRankLastStyle;
     if (sameStyle) {
       battleRankStyleStreak += 1;
-      gain *= Math.max(0.42, 0.92 - battleRankStyleStreak * 0.12);
+      // Heavy penalty for spamming the same move
+      gain *= Math.max(0.2, 0.75 - battleRankStyleStreak * 0.15);
+      battleRankComboVariety = Math.max(0, battleRankComboVariety - 1);
     } else {
       const seenRecent = battleRankRecentStyles.includes(style);
       battleRankStyleStreak = 0;
-      gain *= seenRecent ? 1.08 : 1.45;
-      if (!seenRecent && battleRankRecentStyles.length >= 2) {
-        gain *= 1.1;
+      if (!seenRecent) {
+        // Brand new move in the window — BIG bonus
+        battleRankComboVariety++;
+        const varietyMul = 1.5 + battleRankComboVariety * 0.25;
+        gain *= Math.min(3.5, varietyMul);
+      } else {
+        // Seen recently but not spammed — moderate bonus
+        gain *= 1.2;
       }
+    }
+
+    // Count unique styles in recent window
+    const uniqueSet = new Set(battleRankRecentStyles);
+    battleRankUniqueCount = uniqueSet.size;
+    // Diversity bonus: more unique moves = higher multiplier
+    if (battleRankUniqueCount >= 5) gain *= 1.6;       // 5+ unique moves
+    else if (battleRankUniqueCount >= 4) gain *= 1.35;  // 4 unique
+    else if (battleRankUniqueCount >= 3) gain *= 1.15;  // 3 unique
+
+    // Category mixing bonus (sword + gun + dodge = extra)
+    const categories = new Set();
+    for (const s of battleRankRecentStyles) {
+      if (s.startsWith("gun_") || s === "bullet_rain" || s === "gun_handgun" || s === "gun_shotgun" || s === "gun_grenade") categories.add("gun");
+      else if (s === "trickster" || s === "emergency_dodge" || s === "royal_guard" || s === "dodge_success") categories.add("dodge");
+      else categories.add("melee");
+    }
+    if (categories.size >= 3) gain *= 1.4;  // Using all 3 categories
+    else if (categories.size >= 2) gain *= 1.15;
+
+    // Dodge chain bonus
+    if (battleRankDodgeChain > 0) {
+      gain *= 1 + battleRankDodgeChain * 0.1;
     }
 
     battleRankLastStyle = style;
     battleRankRecentStyles.push(style);
-    if (battleRankRecentStyles.length > 5) {
+    if (battleRankRecentStyles.length > 8) {
       battleRankRecentStyles.shift();
     }
 
@@ -866,7 +906,7 @@
     gain *= BATTLE_RANK_GAIN_MULT;
     gain *= blackFlashRankGainMultiplier();
     if (tauntBonusTimer > 0) gain *= TAUNT_RANK_MULTIPLIER;
-    return Math.max(8, gain);
+    return Math.max(6, gain);
   }
 
   function rescaleRankDrivenState(prevChargeMul, nextChargeMul) {
@@ -889,6 +929,9 @@
     battleRankLastStyle = "";
     battleRankStyleStreak = 0;
     battleRankRecentStyles = [];
+    battleRankUniqueCount = 0;
+    battleRankComboVariety = 0;
+    battleRankDodgeChain = 0;
     battleRankFlashTimer = 0;
     battleRankBreakFlashTimer = showBreak ? 30 : 0;
 
@@ -927,6 +970,9 @@
     battleRankLastStyle = "";
     battleRankStyleStreak = 0;
     battleRankRecentStyles = [];
+    battleRankUniqueCount = 0;
+    battleRankComboVariety = 0;
+    battleRankDodgeChain = 0;
     battleRankFlashTimer = 0;
     if (showBreak) {
       battleRankBreakFlashTimer = Math.max(battleRankBreakFlashTimer, 30);
@@ -4692,6 +4738,9 @@
       if (!burstRankGuard) {
         dropBattleRankOnDamage(true);
       }
+      // Reset stylish play chains on damage
+      battleRankDodgeChain = 0;
+      battleRankComboVariety = 0;
       playerHearts = Math.max(0, playerHearts - 1);
       damageInvulnTimer = 84;
       hurtFlashTimer = 24;
@@ -6982,6 +7031,14 @@
       const fwd = movingFwd && directionHoldTimer < 6;
       const hasDirection = fwd || input.jump || input.down;
       if (!player.onGround) {
+        // Swordmaster: ↓+J in air = Prop Shredder (multi-hit spin)
+        if (playerStyle === "swordmaster" && input.down) {
+          performPropShredder();
+          airComboCount++;
+          airComboDisplayTimer = 90;
+          attackChargeTimer = 0;
+          return;
+        }
         // --- Aerial Rave: 4-stage air combo (DMC style) ---
         // Stage 0,1: horizontal slashes with hang time
         // Stage 2: upward slash (keeps enemies airborne)
@@ -7513,10 +7570,193 @@
 
     triggerImpact(1.5, nx, py, 2.0);
     if (seWhipSwing) playSound(seWhipSwing, 0.5, 1.4);
-    hudMessage = "TRICK!";
-    hudTimer = 20;
-    battleRankGainByStyle("trickster", 0.8);
+
+    // Check if dodging near enemies/projectiles — reward stylish dodges
+    let nearDanger = false;
+    const dodgeBox = { x: Math.min(oldX, player.x), y: player.y - 8, w: Math.abs(player.x - oldX) + player.w, h: player.h + 16 };
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive) continue;
+      if (overlap(dodgeBox, enemy)) { nearDanger = true; break; }
+    }
+    if (!nearDanger) {
+      for (const bullet of stage.hazardBullets) {
+        if (bullet.dead) continue;
+        if (overlap(dodgeBox, bullet)) { nearDanger = true; break; }
+      }
+    }
+    if (!nearDanger) {
+      for (const shot of stage.bossShots) {
+        if (shot.dead) continue;
+        if (overlap(dodgeBox, shot)) { nearDanger = true; break; }
+      }
+    }
+
+    if (nearDanger) {
+      battleRankDodgeChain++;
+      const dodgePower = 1.5 + battleRankDodgeChain * 0.3;
+      battleRankGainByStyle("dodge_success", Math.min(dodgePower, 4.0));
+      hudMessage = battleRankDodgeChain >= 3 ? "CRAZY DODGE!" : battleRankDodgeChain >= 2 ? "STYLISH DODGE!" : "TRICK!";
+      hudTimer = 30;
+    } else {
+      battleRankGainByStyle("trickster", 0.8);
+      hudMessage = "TRICK!";
+      hudTimer = 20;
+    }
     return true;
+  }
+
+  // --- Trickster: Air Trick (teleport to nearest enemy in air) ---
+  function performAirTrick() {
+    if (tricksterCooldown > 0) return false;
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.5;
+    const maxDist = 120;
+    let nearest = null;
+    let nearDist = maxDist;
+
+    // Find nearest enemy
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      const ex = enemy.x + enemy.w * 0.5;
+      const ey = enemy.y + enemy.h * 0.5;
+      const d = Math.sqrt((ex - px) ** 2 + (ey - py) ** 2);
+      if (d < nearDist) { nearDist = d; nearest = { x: ex, y: ey, entity: enemy }; }
+    }
+    // Check boss
+    if (stage.boss && stage.boss.active) {
+      for (const boss of getBossEntities()) {
+        if (boss.hp <= 0) continue;
+        const bx = boss.x + boss.w * 0.5;
+        const by = boss.y + boss.h * 0.5;
+        const d = Math.sqrt((bx - px) ** 2 + (by - py) ** 2);
+        if (d < nearDist) { nearDist = d; nearest = { x: bx, y: by, entity: boss }; }
+      }
+    }
+
+    if (!nearest) return false;
+
+    // Teleport near the target
+    const oldX = player.x;
+    const oldY = player.y;
+    const dir = nearest.x > px ? 1 : -1;
+    player.x = nearest.x - dir * (player.w + 4);
+    player.y = nearest.y - player.h * 0.5;
+    player.x = clamp(player.x, 0, stage.width - player.w);
+    player.facing = dir;
+    player.vy = Math.min(player.vy, -1.0); // Slight upward momentum
+    player.onGround = false;
+
+    tricksterCooldown = TRICKSTER_COOLDOWN;
+    damageInvulnTimer = Math.max(damageInvulnTimer, 12);
+
+    // Trail particles from old to new position
+    const nx = player.x + player.w * 0.5;
+    const ny = player.y + player.h * 0.5;
+    for (let i = 0; i < 6; i++) {
+      const t = i / 6;
+      hitSparks.push({
+        x: oldX + player.w * 0.5 + (nx - oldX - player.w * 0.5) * t,
+        y: oldY + player.h * 0.5 + (ny - oldY - player.h * 0.5) * t,
+        vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2,
+        life: 10, maxLife: 10, color: "#66ccff",
+      });
+    }
+
+    triggerImpact(2.0, nx, ny, 2.5);
+    if (seWhipSwing) playSound(seWhipSwing, 0.6, 1.5);
+    hudMessage = "AIR TRICK!";
+    hudTimer = 25;
+    battleRankGainByStyle("air_trick", 1.5);
+    return true;
+  }
+
+  // --- Swordmaster: Prop Shredder (空中回転斬り) ---
+  function performPropShredder() {
+    const dir = player.facing;
+    const dtActive = isDevilTriggerActive();
+    const rankIdx = battleRankIndex;
+    const power = (2.0 + rankIdx * 0.12) * dtPowerMul();
+    player.vy = -0.5; // Hover during shred
+
+    const reach = Math.floor(22 * dtReachMul());
+    // 360-degree hitbox (all around player)
+    const hitBox = {
+      x: player.x - reach * 0.3,
+      y: player.y - 4,
+      w: player.w + reach * 0.6,
+      h: player.h + 8,
+    };
+
+    const crisisMul = pinchAttackMultiplier();
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlap(hitBox, enemy)) continue;
+      if (!enemy.maxHp) enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : 7));
+      if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
+      const dmg = Math.max(1, Math.round(power * 0.4 * crisisMul * counterAttackMul()));
+      enemy.hp = Math.max(0, enemy.hp - dmg);
+      if (enemy.hp <= 0) {
+        kickEnemy(enemy, dir, power * crisisMul, {
+          immediateRemove: false, flyLifetime: 30, rankStyle: "prop_shredder",
+        });
+      } else {
+        enemy.vy = Math.min(enemy.vy, -1.0);
+        enemy.onGround = false;
+        enemy.hitstun = Math.max(enemy.hitstun || 0, 15);
+        enemy.flash = Math.max(enemy.flash || 0, 6);
+      }
+      spawnWaveBurst(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 0.4);
+      if (devilTriggerTimer > 0) devilTriggerHitCount++;
+    }
+    swordHitBoss(hitBox, dir, power);
+
+    // Spinning slash particles
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.5;
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 + (attackEffectTimer * 0.3);
+      hitSparks.push({
+        x: px + Math.cos(angle) * 10,
+        y: py + Math.sin(angle) * 8,
+        vx: Math.cos(angle) * 2.5,
+        vy: Math.sin(angle) * 2,
+        life: 8, maxLife: 8,
+        color: dtActive ? "#ff8844" : "#88ccff",
+      });
+    }
+
+    triggerImpact(1.5, px, py, 2.0);
+    if (seWhipSwing) playSound(seWhipSwing, 0.7, 1.3);
+    swordAttackCooldown = Math.max(3, 6 - rankIdx * 0.3);
+    attackEffectTimer = 8;
+    attackEffectMode = "sword";
+    hudMessage = dtActive ? "DT PROP!" : "PROP SHREDDER!";
+    hudTimer = 20;
+    battleRankGainByStyle("prop_shredder", 1.2);
+  }
+
+  // --- Gunslinger: Twosome Time (shoot both directions) ---
+  function performTwosomeTime() {
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.45;
+    const rankIdx = battleRankIndex;
+    const speed = 5.0 + rankIdx * 0.8;
+
+    // Fire left and right simultaneously
+    stage.playerWaves.push({
+      kind: "bullet", x: px + 6, y: py, w: 7, h: 4,
+      vx: speed, vy: (Math.random() - 0.5) * 0.3, ttl: 55, power: 0.7
+    });
+    stage.playerWaves.push({
+      kind: "bullet", x: px - 6, y: py, w: 7, h: 4,
+      vx: -speed, vy: (Math.random() - 0.5) * 0.3, ttl: 55, power: 0.7
+    });
+
+    if (seHandgun) playSound(seHandgun, 0.55, 1.0);
+    triggerImpact(0.8, px, py, 1.5);
+    hudMessage = "TWOSOME TIME!";
+    hudTimer = 15;
+    battleRankGainByStyle("twosome_time", 1.0);
   }
 
   function performAirSlash(stage_) {
@@ -7795,11 +8035,12 @@
           absorbed = true;
         }
         if (absorbed) {
-          hudMessage = "JUST GUARD!";
+          battleRankDodgeChain++;
+          hudMessage = battleRankDodgeChain >= 3 ? "PERFECT GUARD!" : "JUST GUARD!";
           hudTimer = 30;
           triggerImpact(2.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 3.0);
           if (seStrongHit) playSound(seStrongHit, 0.7, 1.2);
-          battleRankGainByStyle("royal_guard", 2.0);
+          battleRankGainByStyle("royal_guard", 2.5 + battleRankDodgeChain * 0.4);
         }
         combatDashCooldown = 8;
         return true;
@@ -7811,9 +8052,16 @@
       if (input.right) dashDir = 1;
       const isBackDash = (dashDir !== player.facing);
 
-      // Trickster style: enhanced teleport (longer range, shorter cooldown)
+      // Trickster style: Air Trick (no direction in air) or enhanced teleport
       const isTrickster = playerStyle === "trickster";
       if (isTrickster && tricksterCooldown <= 0) {
+        // Air Trick: if in air and no direction held, teleport to nearest enemy
+        if (!player.onGround && !input.left && !input.right) {
+          if (performAirTrick()) {
+            combatDashCooldown = Math.floor(COMBAT_DASH_COOLDOWN * 0.4);
+            return true;
+          }
+        }
         performTricksterDodge(dashDir);
         combatDashCooldown = Math.floor(COMBAT_DASH_COOLDOWN * 0.5);
         return true;
@@ -7951,6 +8199,15 @@
         bulletRainCooldown = 40 + (6 - rankIdx) * 6; // Partial cooldown on cancel
       }
       bulletRainTimer = 0;
+    }
+
+    // Gunslinger: back+K = Twosome Time (fire both directions)
+    const backHeld = (input.left && player.facing > 0) || (input.right && player.facing < 0);
+    if (playerStyle === "gunslinger" && backHeld) {
+      performTwosomeTime();
+      dedicatedGunCooldown = rankReload;
+      if (!player.onGround) player.vy = Math.min(player.vy, -0.2);
+      return;
     }
 
     // Normal gun: air shooting gives stronger hang time
@@ -10037,9 +10294,10 @@
           enemy.flash = Math.max(enemy.flash || 0, 20);
         }
       }
-      hudMessage = "緊急回避成功! COUNTER READY!";
+      battleRankDodgeChain++;
+      hudMessage = battleRankDodgeChain >= 3 ? "SMOKIN SEXY DODGE!" : "緊急回避成功! COUNTER READY!";
       hudTimer = 80;
-      battleRankGainByStyle("emergency_dodge", 2.5);
+      battleRankGainByStyle("emergency_dodge", 2.5 + battleRankDodgeChain * 0.5);
       playPowerupSfx();
       return false;
     }
@@ -15313,6 +15571,57 @@
     }
   }
 
+  function drawStyleCutIn() {
+    if (styleCutInTimer <= 0) return;
+    const ratio = clamp(styleCutInTimer / STYLE_CUT_IN_DURATION, 0, 1);
+    const slideIn = clamp((1 - ratio) * 4, 0, 1);   // 0→1 fast
+    const fadeOut = clamp(ratio * 2, 0, 1);           // 1→0 slow
+
+    // Background flash band
+    const bandY = H * 0.35;
+    const bandH = 28;
+    const bandAlpha = fadeOut * 0.6;
+    ctx.fillStyle = `rgba(0, 0, 0, ${bandAlpha.toFixed(2)})`;
+    ctx.fillRect(0, bandY - 2, W, bandH + 4);
+
+    // Colored accent line
+    ctx.fillStyle = styleCutInColor;
+    ctx.globalAlpha = fadeOut * 0.8;
+    ctx.fillRect(0, bandY - 2, W, 2);
+    ctx.fillRect(0, bandY + bandH + 2, W, 2);
+
+    // Style name text - slide in from right
+    const textX = W * 0.5 + (1 - slideIn) * W * 0.4;
+    ctx.font = "bold 16px monospace";
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+
+    // Text shadow
+    ctx.fillStyle = `rgba(0, 0, 0, ${(fadeOut * 0.9).toFixed(2)})`;
+    ctx.fillText(styleCutInName, textX + 1, bandY + bandH * 0.5 + 1);
+
+    // Main text
+    ctx.fillStyle = styleCutInColor;
+    ctx.globalAlpha = fadeOut;
+    ctx.fillText(styleCutInName, textX, bandY + bandH * 0.5);
+
+    // Style-specific icon hint (small text below)
+    const styleHints = {
+      swordmaster: "J=Sword  ↓J=Drive  charge=Overdrive",
+      trickster: "L=Teleport  L+back=Dodge  Air L=Air Trick",
+      gunslinger: "K=Gun++  ↓K=Bullet Rain++  I=Switch",
+      royalguard: "L=Guard  L+J=Release  Just Guard=Energy",
+    };
+    const hint = styleHints[playerStyle] || "";
+    ctx.font = "7px monospace";
+    ctx.fillStyle = `rgba(200, 200, 200, ${(fadeOut * 0.7).toFixed(2)})`;
+    ctx.fillText(hint, W * 0.5, bandY + bandH + 10);
+
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+  }
+
   function drawDeadOverlay() {
     const flashRatio = clamp(deathFlashTimer / 34, 0, 1);
     const blink = Math.floor((deadTimer + 12) / 5) % 2 === 0;
@@ -16208,6 +16517,7 @@
       drawPlayerTrueColorPass();
     }
     drawHUD();
+    drawStyleCutIn();
 
     if (gameState === STATE.DEAD) {
       drawDeadOverlay();
@@ -16564,42 +16874,81 @@
       scheduleBGM();
       const actions = sampleActions();
 
-      // DMC Style Change (V key)
+      // DMC Style Change (V key + direction = direct select)
+      // ↑+V = Swordmaster, →+V = Trickster, ↓+V = Gunslinger, ←+V = Royal Guard
+      // V alone = cycle
       if (actions.styleChangePressed) {
-        const styles = ["swordmaster", "trickster", "gunslinger", "royalguard"];
-        const styleNames = {
-          swordmaster: "SWORDMASTER!",
-          trickster: "TRICKSTER!",
-          gunslinger: "GUNSLINGER!",
-          royalguard: "ROYAL GUARD!",
+        const styleColors = {
+          swordmaster: "#ff4422", trickster: "#22aaff",
+          gunslinger: "#ffcc22", royalguard: "#22ff88",
         };
-        const idx = styles.indexOf(playerStyle);
-        playerStyle = styles[(idx + 1) % styles.length];
+        const styleNames = {
+          swordmaster: "SWORDMASTER!", trickster: "TRICKSTER!",
+          gunslinger: "GUNSLINGER!", royalguard: "ROYAL GUARD!",
+        };
+        let newStyle;
+        if (input.up || input.jump) newStyle = "swordmaster";
+        else if (input.right) newStyle = "trickster";
+        else if (input.down) newStyle = "gunslinger";
+        else if (input.left) newStyle = "royalguard";
+        else {
+          // Cycle
+          const styles = ["swordmaster", "trickster", "gunslinger", "royalguard"];
+          const idx = styles.indexOf(playerStyle);
+          newStyle = styles[(idx + 1) % styles.length];
+        }
 
-        hudMessage = styleNames[playerStyle] || playerStyle.toUpperCase();
-        hudTimer = 60;
+        if (newStyle !== playerStyle) {
+          playerStyle = newStyle;
 
-        // Flash effect
-        triggerImpact(1.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 2.0);
-        if (seWhipSwing) playSound(seWhipSwing, 0.5, 1.6);
+          // Cut-in effect
+          styleCutInTimer = STYLE_CUT_IN_DURATION;
+          styleCutInName = styleNames[playerStyle];
+          styleCutInColor = styleColors[playerStyle] || "#ffffff";
 
-        // Reset timers to prevent jams
-        shotReloadTimer = 0;
-        attackCooldown = 0;
-        attackChargeTimer = 0;
-        swordComboStage = 0;
-        swordComboTimer = 0;
-        swordChargeTimer = 0;
-        swordChargeReadyPlayed = false;
-        swordStingerActive = false;
-        swordStingerTimer = 0;
-        swordUpperActive = false;
-        swordUpperHangTimer = 0;
-        swordSlamActive = false;
-        swordAttackCooldown = 0;
+          hudMessage = styleCutInName;
+          hudTimer = 60;
 
-        updateStyleUI();
+          // Impact flash
+          triggerImpact(2.0, player.x + player.w * 0.5, player.y + player.h * 0.5, 3.0);
+          if (seWhipSwing) playSound(seWhipSwing, 0.6, 1.6);
+
+          // Style switch sparks
+          const px = player.x + player.w * 0.5;
+          const py = player.y + player.h * 0.5;
+          for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            hitSparks.push({
+              x: px, y: py,
+              vx: Math.cos(angle) * 3,
+              vy: Math.sin(angle) * 3,
+              life: 14, maxLife: 14,
+              color: styleCutInColor,
+            });
+          }
+
+          // Reset timers
+          shotReloadTimer = 0;
+          attackCooldown = 0;
+          attackChargeTimer = 0;
+          swordComboStage = 0;
+          swordComboTimer = 0;
+          swordChargeTimer = 0;
+          swordChargeReadyPlayed = false;
+          swordStingerActive = false;
+          swordStingerTimer = 0;
+          swordUpperActive = false;
+          swordUpperHangTimer = 0;
+          swordSlamActive = false;
+          swordAttackCooldown = 0;
+          driveChargeActive = false;
+          driveChargeTimer = 0;
+
+          updateStyleUI();
+        }
       }
+      // Decrement cut-in timer
+      if (styleCutInTimer > 0) styleCutInTimer -= rawDt;
 
       if (inCombat) {
         const dodgeFrozen = updateEmergencyDodge(rawDt, actions);
