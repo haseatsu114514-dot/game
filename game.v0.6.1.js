@@ -46,6 +46,7 @@
     burst: false,
     special: false,
     special2: false,
+    taunt: false,
     start: false,
   };
 
@@ -61,6 +62,7 @@
     styleChange: false,
     special: false,
     special2: false,
+    taunt: false,
     start: false,
   };
 
@@ -165,6 +167,34 @@
   let swordComboStage = 0; // 0-2 for three-hit combo
   let swordComboTimer = 0; // Window to chain next hit
   let swordDoubleJumpUsed = false;
+  let directionHoldTimer = 0; // How long direction key has been held (for Stinger input)
+  // --- Taunt System ---
+  let tauntTimer = 0;        // Active taunt animation duration
+  let tauntBonusTimer = 0;   // Post-taunt rank gain bonus window
+  let tauntFlashTimer = 0;   // Visual flash effect
+  const TAUNT_DURATION = 40;        // ~0.67 seconds taunt animation
+  const TAUNT_BONUS_DURATION = 180; // 3 seconds of bonus after taunt
+  const TAUNT_RANK_MULTIPLIER = 2.5; // Rank gain multiplier during bonus
+  // --- Round Trip (sword throw) ---
+  let roundTripActive = false;
+  let roundTripTimer = 0;
+  let roundTripX = 0;
+  let roundTripY = 0;
+  let roundTripVx = 0;
+  let roundTripVy = 0;
+  let roundTripReturning = false;
+  let roundTripHitCooldown = 0;
+  const ROUND_TRIP_SPEED = 6.0;
+  const ROUND_TRIP_DURATION = 120;      // 2 seconds max flight
+  const ROUND_TRIP_TURN_AT = 40;        // Start returning after 40 frames
+  // --- Trickster Dodge ---
+  let tricksterCooldown = 0;
+  const TRICKSTER_COOLDOWN = 30;
+  const TRICKSTER_DISTANCE = 60;        // Teleport distance
+  // --- Gun Type Switch ---
+  let gunType = 0; // 0=handgun, 1=shotgun, 2=grenade
+  const GUN_TYPE_NAMES = ["HANDGUN", "SHOTGUN", "GRENADE"];
+  let gunSwitchFlashTimer = 0;
   let swordStingerActive = false;
   let swordStingerTimer = 0;
   let stingerCaughtEnemies = []; // Enemies being dragged by stinger
@@ -201,6 +231,7 @@
   let airComboCount = 0;
   let airComboMaxHits = 6;
   let airComboDisplayTimer = 0;
+  let airComboStage = 0; // 0=hit1, 1=hit2, 2=slam (3-stage air combo)
   let airGunHangTime = 8; // Frames of reduced gravity when shooting in air
 
   // --- Dedicated Gun (always available) ---
@@ -339,7 +370,7 @@
   const BOSS_HIT_INVULN_FRAMES = 60;
   const BLACK_FLASH_RESULT_DURATION = 120;
   const POLE_BREAK_MIN_RANK_INDEX = 3;
-  const BATTLE_RANK_GAIN_MULT = 1.8;
+  const BATTLE_RANK_GAIN_MULT = 1.0; // Reduced from 1.8 — rank is harder to gain
   const BATTLE_RANK_DATA = [
     { short: "Danger", long: "Danger", threshold: 0, chargeMul: 0.7, color: "#8db2d9" },
     { short: "Badass", long: "Badass", threshold: 120, chargeMul: 0.9, color: "#79d9ff" },
@@ -393,10 +424,11 @@
 
   const VOICE_VOL = 0.7;
 
-  const EMERGENCY_DODGE_WINDOW = 90;
-  const EMERGENCY_DODGE_SLOWMO_SCALE = 0.12;
-  const EMERGENCY_DODGE_INVULN_DURATION = 60;
-  const EMERGENCY_DODGE_CHANCE = [0, 0.08, 0.15, 0.22, 0.30, 0.40, 0.50];
+  const EMERGENCY_DODGE_WINDOW = 120;
+  const EMERGENCY_DODGE_SLOWMO_SCALE = 0.08;
+  const EMERGENCY_DODGE_INVULN_DURATION = 120;
+  const EMERGENCY_DODGE_CHANCE = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65];
+  let emergencyDodgeCounterTimer = 0; // Post-dodge attack bonus window
   const SHOT_CHARGE_MAX = 120;
   const SHOT_TIER2_THRESHOLD = 60; // Medium charge (Shotgun)
   const SHOT_TIER1_THRESHOLD = 20; // Small charge (Machinegun)
@@ -821,6 +853,7 @@
     gain *= Math.max(0.8, highRankDamp);
     gain *= BATTLE_RANK_GAIN_MULT;
     gain *= blackFlashRankGainMultiplier();
+    if (tauntBonusTimer > 0) gain *= TAUNT_RANK_MULTIPLIER;
     return Math.max(8, gain);
   }
 
@@ -3118,6 +3151,50 @@
           hudTimer = 28;
         }
       }
+    }
+  }
+
+  function updateTaunt(dt, actions) {
+    if (tauntTimer > 0) {
+      tauntTimer -= dt;
+      player.vx *= 0.8; // Slow down during taunt
+      if (tauntTimer <= 0) {
+        tauntTimer = 0;
+        tauntBonusTimer = TAUNT_BONUS_DURATION;
+        hudMessage = "TAUNT BONUS!";
+        hudTimer = 60;
+      }
+      return;
+    }
+    if (tauntBonusTimer > 0) {
+      tauntBonusTimer -= dt;
+      if (tauntBonusTimer <= 0) tauntBonusTimer = 0;
+    }
+    if (tauntFlashTimer > 0) {
+      tauntFlashTimer -= dt;
+      if (tauntFlashTimer <= 0) tauntFlashTimer = 0;
+    }
+    if (actions.tauntPressed && player.onGround && tauntTimer <= 0) {
+      tauntTimer = TAUNT_DURATION;
+      tauntFlashTimer = TAUNT_DURATION;
+      player.vx = 0;
+      hudMessage = "COME ON!";
+      hudTimer = 40;
+      triggerImpact(1.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 2.0);
+      // Spawn taunt flash particles
+      const px = player.x + player.w * 0.5;
+      const py = player.y + player.h * 0.4;
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.PI * 2 * i / 6;
+        hitSparks.push({
+          x: px, y: py,
+          vx: Math.cos(angle) * 2.5,
+          vy: Math.sin(angle) * 2.5,
+          life: 18, maxLife: 18,
+          color: "#ffdd44",
+        });
+      }
+      if (seWhipSwing) playSound(seWhipSwing, 0.5, 0.8);
     }
   }
 
@@ -6831,6 +6908,14 @@
       }
     }
 
+    // Track direction hold time for Stinger input (simultaneous press only)
+    const movingFwd = (input.right && player.facing > 0) || (input.left && player.facing < 0);
+    if (movingFwd) {
+      directionHoldTimer += dt;
+    } else {
+      directionHoldTimer = 0;
+    }
+
     // Block attacks during stinger rush / million stab (handled in physics loop)
     if (swordStingerActive || millionStabActive) return;
 
@@ -6844,14 +6929,24 @@
     // W/↑/Space = up direction (shared with jump key)
     // A/D = left/right direction (shared with movement keys)
     if (actions.attackPressed) {
-      const fwd = (input.right && player.facing > 0) || (input.left && player.facing < 0);
+      // Stinger requires near-simultaneous direction+attack (direction held < 6 frames)
+      const fwd = movingFwd && directionHoldTimer < 6;
       const hasDirection = fwd || input.jump || input.down;
       if (!player.onGround) {
-        // --- Air attacks ---
-        // Brief hang before attack for better air control
-        player.vy = Math.min(player.vy, 0.2);
-        // Air + J = Helm Breaker (叩き落とし) — always slam down in air
-        performSwordSlam();
+        // --- Air attacks: 3-stage combo ---
+        // Stage 0,1: horizontal slashes with hang time
+        // Stage 2: slam down (Helm Breaker)
+        if (airComboStage >= 2) {
+          // 3rd hit: slam down
+          player.vy = Math.min(player.vy, 0.2);
+          performSwordSlam();
+          airComboStage = 0;
+        } else {
+          // 1st/2nd hit: air slash
+          player.vy = Math.min(player.vy, -0.3); // Hang in air
+          performAirSlash(airComboStage);
+          airComboStage++;
+        }
         airComboCount++;
         airComboDisplayTimer = 90;
         attackChargeTimer = 0;
@@ -6864,7 +6959,7 @@
         } else if (fwd) {
           performSwordStinger(); // D/A + J = Stinger (突進斬り)
         } else if (input.down) {
-          performSwordSlam();   // Down + J = Ground slam
+          performDrive();       // Down + J = Drive (衝撃波)
         }
         attackChargeTimer = 0;
         attackChargeReadyPlayed = false;
@@ -6874,7 +6969,7 @@
       attackChargeTimer = 1; // Start charge
     }
 
-    // Charge accumulation while J is held (no direction)
+    // Charge accumulation while J is held (can move while charging)
     if (input.attack && attackChargeTimer > 0) {
       const chargeMul = battleRankChargeMultiplier();
       attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt * chargeMul);
@@ -6883,12 +6978,16 @@
         attackChargeReadyPlayed = true;
         playChargeReadySfx();
       }
-      return;
+      // Allow movement while charging (don't return — let movement code run)
+      // But block other attack processing
     }
 
     // J released — check charge level
     if (actions.attackReleased && attackChargeTimer > 0) {
-      if (attackChargeTimer >= ATTACK_MORNINGSTAR_SPIN_MIN) {
+      if (attackChargeTimer >= ATTACK_CHARGE_MAX - 1) {
+        // Max charge → Round Trip (sword throw)
+        launchRoundTrip();
+      } else if (attackChargeTimer >= ATTACK_MORNINGSTAR_SPIN_MIN) {
         // Charged enough → spin attack (ぐるっと回す)
         releaseChargeAttack(attackChargeTimer);
       } else {
@@ -6911,8 +7010,8 @@
     const dir = player.facing;
     const rankIdx = battleRankIndex;
     const stage_ = swordComboStage;
-    const reach = SWORD_COMBO_REACH[stage_] + rankIdx * 2;
-    const power = SWORD_COMBO_POWER[stage_] * (1 + rankIdx * 0.06);
+    const reach = Math.floor((SWORD_COMBO_REACH[stage_] + rankIdx * 2) * dtReachMul());
+    const power = SWORD_COMBO_POWER[stage_] * (1 + rankIdx * 0.06) * dtPowerMul();
     const hitH = stage_ === 2 ? 18 : 14;
     const cooldown = Math.max(5, 12 - rankIdx * 0.8);
 
@@ -6923,11 +7022,12 @@
       h: hitH,
     };
 
-    swordHitEnemies(hitBox, dir, power, stage_ === 2 ? 1.2 : 0.8);
+    swordHitEnemies(hitBox, dir, power, (stage_ === 2 ? 1.2 : 0.8) * dtKnockMul());
     swordHitBoss(hitBox, dir, power);
 
-    triggerImpact(0.8 + stage_ * 0.4, player.x + player.w * 0.5 + dir * reach * 0.5, player.y + 10, 1.5 + stage_ * 0.5);
-    spawnSwordSlash(dir, stage_);
+    const impactPow = (0.8 + stage_ * 0.4) * dtPowerMul();
+    triggerImpact(impactPow, player.x + player.w * 0.5 + dir * reach * 0.5, player.y + 10, 1.5 + stage_ * 0.5);
+    spawnSwordSlash(dir, stage_ + dtSparkCount());
 
     if (seWhipSwing) playSound(seWhipSwing, 0.6 + stage_ * 0.1, 1.2 - stage_ * 0.1);
 
@@ -6941,8 +7041,8 @@
   function performSwordStinger() {
     const dir = player.facing;
     const rankIdx = battleRankIndex;
-    const reach = 32 + rankIdx * 3;
-    const power = 1.8 + rankIdx * 0.12;
+    const reach = Math.floor((32 + rankIdx * 3) * dtReachMul());
+    const power = (1.8 + rankIdx * 0.12) * dtPowerMul();
 
     swordStingerActive = true;
     swordStingerTimer = SWORD_STINGER_DURATION;
@@ -6983,8 +7083,8 @@
       if (devilTriggerTimer > 0) devilTriggerHitCount++;
     }
     swordHitBoss(hitBox, dir, power);
-    triggerImpact(2.5, player.x + dir * reach, player.y + 10, 4);
-    spawnSwordSlash(dir, 3);
+    triggerImpact(2.5 * dtPowerMul(), player.x + dir * reach, player.y + 10, 4);
+    spawnSwordSlash(dir, 3 + dtSparkCount());
 
     if (seStrongHit) playSound(seStrongHit, 0.8);
     swordAttackCooldown = 12;
@@ -6992,69 +7092,73 @@
     swordComboTimer = 0;
     attackEffectTimer = 12;
     attackEffectMode = "sword";
-    hudMessage = "STINGER!";
+    hudMessage = isDevilTriggerActive() ? "DT STINGER!" : "STINGER!";
     hudTimer = 30;
   }
 
   function performSwordUpper() {
     const dir = player.facing;
     const rankIdx = battleRankIndex;
-    const reach = 24 + rankIdx * 2;
-    const power = 1.0 + rankIdx * 0.06; // Low damage — purpose is launch, not kill
+    const reach = Math.floor((24 + rankIdx * 2) * dtReachMul());
+    const power = (1.0 + rankIdx * 0.06) * dtPowerMul();
+    const dtActive = isDevilTriggerActive();
 
     // Launch player and enemies upward
-    player.vy = -7;
+    player.vy = dtActive ? -8.5 : -7;
     player.onGround = false;
 
     const hitBox = {
       x: dir > 0 ? player.x + player.w - 4 : player.x - reach + 4,
-      y: player.y - 10,
+      y: player.y - 14,
       w: reach,
-      h: 28,
+      h: 34,
     };
 
     // Direct launch: skip kickEnemy damage, manually launch enemies
     const crisisMul = pinchAttackMultiplier();
+    const launchVy = dtActive ? -(12.0 + power * 1.2) : -(9.0 + power * 0.8);
+    const launchHistun = dtActive ? 60 : 40;
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlap(hitBox, enemy)) continue;
-      // Light damage only (1 HP)
       if (!enemy.maxHp) {
         enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
       }
       if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
-      enemy.hp = Math.max(1, enemy.hp - 1); // Never kill — always leave at least 1 HP
-      // Strong upward launch
+      enemy.hp = Math.max(1, enemy.hp - 1);
+      // Strong upward launch — fixed: ensure enemies actually go airborne
       enemy.vx = dir * 0.3;
-      enemy.vy = -(9.0 + power * 0.8);
+      enemy.vy = launchVy;
+      enemy.y -= 4; // Lift enemy off ground to prevent immediate re-grounding
       enemy.onGround = false;
-      enemy.hitstun = Math.max(enemy.hitstun || 0, 40); // Long hitstun for air combos
+      enemy.hitstun = Math.max(enemy.hitstun || 0, launchHistun);
       enemy.flash = 14;
       const hx = enemy.x + enemy.w * 0.5;
       const hy = enemy.y + enemy.h * 0.4;
-      spawnWaveBurst(hx, hy, 0.8);
+      spawnWaveBurst(hx, hy, dtActive ? 1.4 : 0.8);
       if (devilTriggerTimer > 0) devilTriggerHitCount++;
     }
     swordHitBoss(hitBox, dir, power, true);
     swordUpperHangTimer = SWORD_UPPER_HANG_TIME;
-    triggerImpact(2.2, player.x + player.w * 0.5, player.y, 4);
-    spawnSwordSlash(dir, 4);
+    triggerImpact(dtActive ? 3.5 : 2.2, player.x + player.w * 0.5, player.y, 4);
+    spawnSwordSlash(dir, 4 + dtSparkCount());
 
     if (seStrongHit) playSound(seStrongHit, 0.8, 0.8);
     swordAttackCooldown = 6;
     swordComboStage = 0;
-    swordComboTimer = SWORD_COMBO_WINDOW + 30; // Extended window for air combos
+    swordComboTimer = SWORD_COMBO_WINDOW + 30;
     attackEffectTimer = 14;
     attackEffectMode = "sword";
-    hudMessage = "HIGH TIME!";
+    hudMessage = dtActive ? "DT HIGH TIME!" : "HIGH TIME!";
     hudTimer = 40;
   }
 
   function performSwordSlam() {
     const dir = player.facing;
     const rankIdx = battleRankIndex;
-    const reach = SWORD_SLAM_REACH + rankIdx * 3;
-    const power = 3.0 + rankIdx * 0.15;
+    const dtActive = isDevilTriggerActive();
+    const reach = Math.floor((SWORD_SLAM_REACH + rankIdx * 3) * dtReachMul());
+    const power = (3.0 + rankIdx * 0.15) * dtPowerMul();
 
     // Large vertical hitbox (top-to-diagonal swing)
     const hitBox = {
@@ -7064,20 +7168,20 @@
       h: SWORD_SLAM_HEIGHT + 10,
     };
 
-    swordHitEnemies(hitBox, dir, power, 1.8);
+    swordHitEnemies(hitBox, dir, power, 1.8 * dtKnockMul());
     swordHitBoss(hitBox, dir, power * 1.2);
-    triggerImpact(3.5, player.x + dir * reach * 0.5, player.y, 5);
+    triggerImpact(dtActive ? 5.0 : 3.5, player.x + dir * reach * 0.5, player.y, 5);
 
-    // Spawn ground shockwave
+    // Spawn ground shockwave (bigger in DT)
     stage.playerWaves.push({
       kind: "swordwave",
       x: player.x + dir * 8,
       y: player.y + player.h * 0.3,
-      w: reach * 1.2,
-      h: 16,
-      vx: dir * 2,
+      w: reach * (dtActive ? 1.6 : 1.2),
+      h: dtActive ? 22 : 16,
+      vx: dir * (dtActive ? 3 : 2),
       vy: 0,
-      ttl: 20,
+      ttl: dtActive ? 28 : 20,
       phase: 0,
       spin: 0,
       power: power * 0.6,
@@ -7090,13 +7194,299 @@
     swordComboTimer = 0;
     attackEffectTimer = 18;
     attackEffectMode = "sword";
-    hudMessage = "HELM BREAKER!";
+    hudMessage = dtActive ? "DT HELM BREAKER!" : "HELM BREAKER!";
     hudTimer = 40;
+  }
+
+  // --- Drive: forward shockwave (↓+J on ground) ---
+  function performDrive() {
+    const dir = player.facing;
+    const rankIdx = battleRankIndex;
+    const dtActive = isDevilTriggerActive();
+    const power = (2.5 + rankIdx * 0.15) * dtPowerMul();
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.4;
+
+    // Close-range slash hitbox
+    const reach = Math.floor(30 * dtReachMul());
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 4 : player.x - reach + 4,
+      y: player.y + 2,
+      w: reach,
+      h: 18,
+    };
+    swordHitEnemies(hitBox, dir, power * 0.8, 1.2 * dtKnockMul());
+    swordHitBoss(hitBox, dir, power * 0.8);
+
+    // Launch shockwave projectile
+    const waveW = dtActive ? 22 : 16;
+    const waveH = dtActive ? 16 : 12;
+    const waveSpeed = (4.5 + rankIdx * 0.5) * (dtActive ? 1.4 : 1);
+    const waveTtl = dtActive ? 80 : 55;
+    stage.playerWaves.push({
+      kind: "drive",
+      x: px + dir * 12,
+      y: py - waveH * 0.5,
+      w: waveW,
+      h: waveH,
+      vx: dir * waveSpeed,
+      vy: 0,
+      ttl: waveTtl,
+      phase: 0,
+      spin: 0,
+      power: power,
+    });
+    // DT: spawn a second wave slightly offset
+    if (dtActive) {
+      stage.playerWaves.push({
+        kind: "drive",
+        x: px + dir * 20,
+        y: py - waveH * 0.5 - 6,
+        w: waveW * 0.8,
+        h: waveH * 0.8,
+        vx: dir * waveSpeed * 1.15,
+        vy: 0,
+        ttl: waveTtl - 10,
+        phase: 0,
+        spin: Math.PI * 0.5,
+        power: power * 0.6,
+      });
+    }
+
+    triggerImpact(dtActive ? 4.0 : 2.5, px + dir * 15, py, 4);
+    spawnSwordSlash(dir, 3 + dtSparkCount());
+    if (seStrongHit) playSound(seStrongHit, 0.8, 0.9);
+    if (seWhipSwing) playSound(seWhipSwing, 0.7, 0.7);
+
+    swordAttackCooldown = 18;
+    swordComboStage = 0;
+    swordComboTimer = 0;
+    attackEffectTimer = 14;
+    attackEffectMode = "sword";
+    hudMessage = dtActive ? "DT DRIVE!" : "DRIVE!";
+    hudTimer = 40;
+    battleRankGainByStyle("drive", 1.5);
+  }
+
+  // --- Round Trip: throw sword that boomerangs back ---
+  function launchRoundTrip() {
+    if (roundTripActive) return;
+    const dir = player.facing;
+    const dtActive = isDevilTriggerActive();
+    roundTripActive = true;
+    roundTripTimer = ROUND_TRIP_DURATION;
+    roundTripX = player.x + player.w * 0.5 + dir * 10;
+    roundTripY = player.y + player.h * 0.4;
+    roundTripVx = dir * ROUND_TRIP_SPEED * (dtActive ? 1.4 : 1);
+    roundTripVy = 0;
+    roundTripReturning = false;
+    roundTripHitCooldown = 0;
+
+    triggerImpact(2.0, roundTripX, roundTripY, 3);
+    spawnSwordSlash(dir, 4 + dtSparkCount());
+    if (seWhipSwing) playSound(seWhipSwing, 0.8, 0.6);
+    hudMessage = dtActive ? "DT ROUND TRIP!" : "ROUND TRIP!";
+    hudTimer = 40;
+    swordAttackCooldown = 10;
+    battleRankGainByStyle("round_trip", 1.8);
+  }
+
+  function updateRoundTrip(dt) {
+    if (!roundTripActive) return;
+    roundTripTimer -= dt;
+    if (roundTripHitCooldown > 0) roundTripHitCooldown -= dt;
+
+    // Movement
+    if (!roundTripReturning && roundTripTimer < ROUND_TRIP_DURATION - ROUND_TRIP_TURN_AT) {
+      roundTripReturning = true;
+    }
+
+    if (roundTripReturning) {
+      // Home back to player
+      const tx = player.x + player.w * 0.5;
+      const ty = player.y + player.h * 0.4;
+      const dx = tx - roundTripX;
+      const dy = ty - roundTripY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 12 || roundTripTimer <= 0) {
+        // Caught!
+        roundTripActive = false;
+        return;
+      }
+      const returnSpeed = ROUND_TRIP_SPEED * 1.3;
+      roundTripVx = (dx / dist) * returnSpeed;
+      roundTripVy = (dy / dist) * returnSpeed;
+    }
+
+    roundTripX += roundTripVx * dt;
+    roundTripY += roundTripVy * dt;
+
+    // Hit detection (pierces enemies — doesn't stop on hit)
+    if (roundTripHitCooldown <= 0) {
+      const rtBox = { x: roundTripX - 8, y: roundTripY - 8, w: 16, h: 16 };
+      const power = (1.5 + battleRankIndex * 0.1) * dtPowerMul();
+      const crisisMul = pinchAttackMultiplier();
+      const dir = roundTripVx >= 0 ? 1 : -1;
+      let hitSomething = false;
+
+      for (const enemy of stage.enemies) {
+        if (!enemy.alive || enemy.kicked) continue;
+        if (!overlap(rtBox, enemy)) continue;
+        kickEnemy(enemy, dir, power * crisisMul * counterAttackMul(), {
+          immediateRemove: false, flyLifetime: 30, rankStyle: "round_trip",
+        });
+        const hx = enemy.x + enemy.w * 0.5;
+        const hy = enemy.y + enemy.h * 0.4;
+        spawnWaveBurst(hx, hy, 0.6);
+        hitSomething = true;
+        if (devilTriggerTimer > 0) devilTriggerHitCount++;
+      }
+      // Boss hit
+      if (stage.boss && stage.boss.active) {
+        for (const boss of getBossEntities()) {
+          if (boss.hp <= 0 || boss.invuln > 0) continue;
+          if (!overlap(rtBox, boss)) continue;
+          const hx = boss.x + boss.w * 0.5;
+          const hy = boss.y + boss.h * 0.4;
+          const bossDmg = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul * counterAttackMul()));
+          boss.hp = Math.max(0, boss.hp - bossDmg);
+          boss.invuln = BOSS_HIT_INVULN_FRAMES;
+          boss.vx += dir * 0.3;
+          triggerImpact(1.5, hx, hy, 2);
+          spawnWaveBurst(hx, hy, 0.8);
+          handleBossHpZero();
+          hitSomething = true;
+          if (devilTriggerTimer > 0) devilTriggerHitCount++;
+          break;
+        }
+      }
+      if (hitSomething) {
+        roundTripHitCooldown = 8; // Don't hit same target too fast
+        triggerImpact(1.0, roundTripX, roundTripY, 1.5);
+      }
+    }
+
+    // Timeout
+    if (roundTripTimer <= 0) {
+      roundTripActive = false;
+    }
+  }
+
+  // --- Trickster Dodge (L+direction = teleport dodge) ---
+  function performTricksterDodge(dir) {
+    if (tricksterCooldown > 0) return false;
+
+    const dtActive = isDevilTriggerActive();
+    const dist = TRICKSTER_DISTANCE * (dtActive ? 1.5 : 1);
+
+    // Teleport
+    const oldX = player.x;
+    player.x += dir * dist;
+    player.x = clamp(player.x, 0, stage.width - player.w);
+    if (gameState === STATE.BOSS) {
+      player.x = clamp(player.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
+    }
+
+    tricksterCooldown = TRICKSTER_COOLDOWN;
+    damageInvulnTimer = Math.max(damageInvulnTimer, 18);
+
+    // Afterimage particles at old position
+    const px = oldX + player.w * 0.5;
+    const py = player.y + player.h * 0.5;
+    for (let i = 0; i < 5; i++) {
+      hitSparks.push({
+        x: px + (Math.random() - 0.5) * 10,
+        y: py + (Math.random() - 0.5) * 14,
+        vx: -dir * (1 + Math.random() * 2),
+        vy: (Math.random() - 0.5) * 2,
+        life: 12, maxLife: 12,
+        color: dtActive ? "#ff66aa" : "#66ccff",
+      });
+    }
+    // Arrival particles
+    const nx = player.x + player.w * 0.5;
+    for (let i = 0; i < 4; i++) {
+      hitSparks.push({
+        x: nx + (Math.random() - 0.5) * 8,
+        y: py + (Math.random() - 0.5) * 10,
+        vx: dir * (0.5 + Math.random()),
+        vy: (Math.random() - 0.5) * 1.5,
+        life: 10, maxLife: 10,
+        color: dtActive ? "#ffaa66" : "#aaddff",
+      });
+    }
+
+    triggerImpact(1.5, nx, py, 2.0);
+    if (seWhipSwing) playSound(seWhipSwing, 0.5, 1.4);
+    hudMessage = "TRICK!";
+    hudTimer = 20;
+    battleRankGainByStyle("trickster", 0.8);
+    return true;
+  }
+
+  function performAirSlash(stage_) {
+    const dir = player.facing;
+    const rankIdx = battleRankIndex;
+    const reach = Math.floor((24 + rankIdx * 2 + stage_ * 4) * dtReachMul());
+    const power = (1.2 + stage_ * 0.4 + rankIdx * 0.06) * dtPowerMul();
+    const hitH = 16;
+
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 2 : player.x - reach + 2,
+      y: player.y + 2,
+      w: reach,
+      h: hitH,
+    };
+
+    // Keep enemies airborne during air combo — don't knock away
+    const crisisMul = pinchAttackMultiplier();
+    const effectivePower = power * crisisMul * counterAttackMul();
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlap(hitBox, enemy)) continue;
+      const bf = rollBlackFlashHit(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 1.1 + power * 0.5);
+      if (!enemy.maxHp) {
+        enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+      }
+      if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
+      const dmg = Math.max(1, Math.round(effectivePower * 0.6 * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
+      enemy.hp = Math.max(0, enemy.hp - dmg);
+      if (enemy.hp <= 0) {
+        kickEnemy(enemy, dir, effectivePower * (bf ? BLACK_FLASH_DAMAGE_MUL : 1), {
+          immediateRemove: false, flyLifetime: 38, rankStyle: "air_slash", blackFlash: bf, blackFlashPowerApplied: true,
+        });
+      } else {
+        // Keep in air — slight upward push
+        enemy.vx = dir * 0.8;
+        enemy.vy = Math.min(enemy.vy, -1.5);
+        enemy.onGround = false;
+        enemy.hitstun = Math.max(enemy.hitstun || 0, 20);
+        enemy.flash = Math.max(enemy.flash || 0, 8);
+      }
+      const hx = enemy.x + enemy.w * 0.5;
+      const hy = enemy.y + enemy.h * 0.4;
+      spawnWaveBurst(hx, hy, 0.5 + power * 0.3);
+      if (devilTriggerTimer > 0) devilTriggerHitCount++;
+    }
+    swordHitBoss(hitBox, dir, power);
+
+    const impactPow = (0.8 + stage_ * 0.3) * dtPowerMul();
+    triggerImpact(impactPow, player.x + player.w * 0.5 + dir * reach * 0.5, player.y + 10, 1.5);
+    spawnSwordSlash(dir, stage_ + 1 + dtSparkCount());
+
+    if (seWhipSwing) playSound(seWhipSwing, 0.6 + stage_ * 0.15, 1.1 - stage_ * 0.1);
+
+    swordAttackCooldown = Math.max(4, 8 - rankIdx * 0.5);
+    attackEffectTimer = 8 + stage_ * 2;
+    attackEffectMode = "sword";
+    battleRankGainByStyle("air_slash", 0.8 + stage_ * 0.3);
+    hudMessage = stage_ === 0 ? "AIR SLASH!" : "AIR SLASH 2!";
+    hudTimer = 20;
   }
 
   function swordHitEnemies(hitBox, dir, power, knockMul, launchUp) {
     const crisisMul = pinchAttackMultiplier();
-    const effectivePower = power * crisisMul;
+    const effectivePower = power * crisisMul * counterAttackMul();
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlap(hitBox, enemy)) continue;
@@ -7127,7 +7517,7 @@
 
   function swordHitBoss(hitBox, dir, power, launchUp) {
     if (!stage.boss || !stage.boss.active) return;
-    const crisisMul = pinchAttackMultiplier();
+    const crisisMul = pinchAttackMultiplier() * counterAttackMul();
     for (const boss of getBossEntities()) {
       if (boss.hp <= 0) continue;
       // Devil Trigger ignores boss invulnerability
@@ -7209,6 +7599,14 @@
     return devilTriggerTimer > 0;
   }
 
+  // Devil Trigger power multipliers
+  function dtPowerMul() { return devilTriggerTimer > 0 ? 1.5 : 1; }
+  function dtReachMul() { return devilTriggerTimer > 0 ? 1.25 : 1; }
+  function dtKnockMul() { return devilTriggerTimer > 0 ? 1.3 : 1; }
+  function dtSparkCount() { return devilTriggerTimer > 0 ? 3 : 0; }
+  // Counter-attack bonus after emergency dodge
+  function counterAttackMul() { return emergencyDodgeCounterTimer > 0 ? 2.0 : 1; }
+
   function resetSwordmasterState() {
     swordComboStage = 0;
     swordComboTimer = 0;
@@ -7228,10 +7626,18 @@
     devilTriggerHitCount = 0;
     devilTriggerResultTimer = 0;
     devilTriggerResultCount = 0;
+    roundTripActive = false;
+    roundTripTimer = 0;
+    tricksterCooldown = 0;
+    tauntTimer = 0;
+    tauntBonusTimer = 0;
+    tauntFlashTimer = 0;
+    airComboStage = 0;
   }
 
   // ========== COMBAT DASH / DODGE SYSTEM ==========
   function updateCombatDash(dt, actions) {
+    if (tricksterCooldown > 0) tricksterCooldown -= dt;
     if (combatDashTimer > 0) {
       combatDashTimer -= dt;
       player.vx = combatDashDir * COMBAT_DASH_SPEED;
@@ -7244,13 +7650,26 @@
     }
     if (combatDashCooldown > 0) combatDashCooldown -= dt;
     if (actions.dashPressed && combatDashCooldown <= 0) {
-      combatDashDir = player.facing;
+      // Determine direction
+      let dashDir = player.facing;
+      if (input.left) dashDir = -1;
+      if (input.right) dashDir = 1;
+      const isBackDash = (dashDir !== player.facing);
+
+      // Back-dash or air-dash with direction = Trickster teleport
+      if ((isBackDash || !player.onGround) && tricksterCooldown <= 0) {
+        performTricksterDodge(dashDir);
+        combatDashCooldown = COMBAT_DASH_COOLDOWN;
+        return true;
+      }
+
+      // Forward ground dash = normal combat dash
+      combatDashDir = dashDir;
       combatDashTimer = COMBAT_DASH_DURATION;
       damageInvulnTimer = Math.max(damageInvulnTimer, COMBAT_DASH_INVULN);
       if (seWhipSwing) playSound(seWhipSwing, 0.4, 1.5);
       hudMessage = "DODGE!";
       hudTimer = 20;
-      // Air dash: slight upward boost to maintain height
       if (!player.onGround) {
         player.vy = Math.min(player.vy, 0.3);
       }
@@ -7295,7 +7714,7 @@
           const spread = (Math.random() - 0.5) * 0.6; // Almost straight down
           stage.playerWaves.push({
             kind: "bullet", x: px + spread * 2, y: py + 6, w: 5, h: 5,
-            vx: spread * 0.15, vy: 6.0 + Math.random() * 1.0, ttl: 35, power: 0.5
+            vx: spread * 0.3, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6
           });
         }
         if (seHandgun) playSound(seHandgun, 0.5, 0.9);
@@ -7328,21 +7747,57 @@
       player.vy = Math.min(player.vy, -0.1);
     }
 
-    // Fire handgun
-    const speed = 5.5 + rankIdx * 1.0;
-    stage.playerWaves.push({
-      kind: "bullet", x: px + dir * 6, y: py, w: 8, h: 4,
-      vx: dir * speed, vy: (Math.random() - 0.5) * 0.3, ttl: 65, power: 0.6
-    });
-    if (seHandgun) playSound(seHandgun, 0.45);
-    dedicatedGunCooldown = rankReload;
-    triggerImpact(0.5, px + dir * 10, py, 1.0);
-    battleRankGainByStyle("gun_shot", 0.6);
+    if (gunType === 0) {
+      // Handgun: fast, single shot
+      const speed = 5.5 + rankIdx * 1.0;
+      stage.playerWaves.push({
+        kind: "bullet", x: px + dir * 6, y: py, w: 8, h: 4,
+        vx: dir * speed, vy: (Math.random() - 0.5) * 0.3, ttl: 65, power: 0.6
+      });
+      if (seHandgun) playSound(seHandgun, 0.45);
+      dedicatedGunCooldown = rankReload;
+      triggerImpact(0.5, px + dir * 10, py, 1.0);
+      battleRankGainByStyle("gun_handgun", 0.6);
+    } else if (gunType === 1) {
+      // Shotgun: spread shot, slower fire rate
+      const pellets = 4 + Math.min(3, Math.floor(rankIdx * 0.6));
+      const spreadBase = 0.5 + rankIdx * 0.1;
+      const startAngle = -Math.floor(pellets / 2);
+      for (let i = 0; i < pellets; i++) {
+        const ang = startAngle + i;
+        stage.playerWaves.push({
+          kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5,
+          vx: dir * 7.5, vy: ang * spreadBase, ttl: 20, power: 0.7
+        });
+      }
+      if (seShotgun) playSound(seShotgun, 0.7);
+      dedicatedGunCooldown = Math.max(8, rankReload * 2.5);
+      triggerImpact(1.2, px + dir * 10, py, 2.0);
+      battleRankGainByStyle("gun_shotgun", 1.0);
+    } else {
+      // Grenade: explosive projectile, slow fire rate
+      const powerBase = 3.0 + rankIdx * 0.3;
+      const sizeBase = 28 + rankIdx * 2;
+      stage.playerWaves.push({
+        kind: "bazooka", x: px + dir * 14, y: py - 4, w: sizeBase, h: 10,
+        vx: dir * 4.0, vy: -0.8, ttl: 90, power: powerBase, spin: 0
+      });
+      if (seBazooka) playSound(seBazooka, 0.7);
+      dedicatedGunCooldown = Math.max(12, rankReload * 4);
+      triggerImpact(1.5, px + dir * 14, py, 2.5);
+      battleRankGainByStyle("gun_grenade", 1.5);
+    }
   }
 
-  // ========== WEAPON SWITCH (I KEY - reserved for future use) ==========
+  // ========== WEAPON SWITCH (I KEY - gun type toggle) ==========
   function handleWeaponSwitch(actions) {
-    // Style system disabled - always swordmaster with full combat kit
+    if (gunSwitchFlashTimer > 0) gunSwitchFlashTimer -= 1;
+    if (!actions.weaponSwitchPressed) return;
+    gunType = (gunType + 1) % 3;
+    gunSwitchFlashTimer = 30;
+    hudMessage = "GUN: " + GUN_TYPE_NAMES[gunType];
+    hudTimer = 40;
+    if (seWhipSwing) playSound(seWhipSwing, 0.3, 1.8);
   }
 
   function updatePlayerWaves(dt, solids) {
@@ -7389,6 +7844,26 @@
         wave.phase += dt;
         wave.x += wave.vx * dt;
         wave.w += dt * 2.5; // Expand hitbox
+      } else if (wave.kind === "drive") {
+        // Drive shockwave - flies forward
+        wave.phase += dt;
+        wave.spin = (wave.spin || 0) + dt * 0.4;
+        wave.x += wave.vx * dt;
+        wave.y += Math.sin(wave.phase * 0.25) * 0.3;
+        // Check solid collision
+        const cx = wave.x + wave.w * 0.5;
+        const cy = wave.y + wave.h * 0.5;
+        if (cx >= screenLeft - 40 && cx <= screenRight + 40) {
+          for (const s of solids) {
+            if (s.kind === "crumble" && s.state === "gone") continue;
+            if (Math.abs(s.x + s.w * 0.5 - cx) > s.w * 0.5 + 20) continue;
+            if (overlap(wave, s)) {
+              wave.dead = true;
+              triggerImpact(1.5, cx, cy, 2.5);
+              break;
+            }
+          }
+        }
       } else {
         // Original Wave
         wave.phase += dt;
@@ -7467,7 +7942,7 @@
         if (wave.kind === "bazooka") {
           spawnExplosion(wave.x + wave.w / 2, wave.y + wave.h / 2, wave.power || 2);
         }
-        if (wave.kind !== "swordwave" && wave.kind !== "explosion") {
+        if (wave.kind !== "swordwave" && wave.kind !== "explosion" && wave.kind !== "drive") {
           wave.dead = true;
           break;
         }
@@ -9293,6 +9768,7 @@
       startPressed: input.start && !prevInput.start,
       styleChangePressed: input.styleChange && !prevInput.styleChange,
       burstPressed: input.burst && !prevInput.burst,
+      tauntPressed: input.taunt && !prevInput.taunt,
     };
 
     prevInput.jump = input.jump;
@@ -9308,6 +9784,7 @@
     prevInput.start = input.start;
     prevInput.styleChange = input.styleChange;
     prevInput.burst = input.burst;
+    prevInput.taunt = input.taunt;
 
     return actions;
   }
@@ -9315,6 +9792,9 @@
   function updateEmergencyDodge(rawDt, actions) {
     if (emergencyDodgeInvulnTimer > 0) {
       emergencyDodgeInvulnTimer = Math.max(0, emergencyDodgeInvulnTimer - rawDt);
+    }
+    if (emergencyDodgeCounterTimer > 0) {
+      emergencyDodgeCounterTimer = Math.max(0, emergencyDodgeCounterTimer - rawDt);
     }
     // Always decrement flash timer even when dodge is inactive
     if (emergencyDodgeFlashTimer > 0) {
@@ -9332,11 +9812,23 @@
       emergencyDodgeActive = false;
       emergencyDodgeTimer = 0;
       emergencyDodgeInvulnTimer = EMERGENCY_DODGE_INVULN_DURATION;
-      emergencyDodgeFlashTimer = 12;
-      damageInvulnTimer = Math.max(damageInvulnTimer, 30);
-      triggerImpact(2.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 3.0);
-      hudMessage = "緊急回避成功!";
-      hudTimer = 60;
+      emergencyDodgeFlashTimer = 18;
+      emergencyDodgeCounterTimer = 90; // Counter-attack window: 1.5 sec
+      damageInvulnTimer = Math.max(damageInvulnTimer, 60);
+      triggerImpact(3.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 5.0);
+      // Nearby enemies get stunned
+      for (const enemy of stage.enemies) {
+        if (!enemy.alive || enemy.kicked) continue;
+        const dx = Math.abs((enemy.x + enemy.w * 0.5) - (player.x + player.w * 0.5));
+        const dy = Math.abs((enemy.y + enemy.h * 0.5) - (player.y + player.h * 0.5));
+        if (dx < 80 && dy < 60) {
+          enemy.hitstun = Math.max(enemy.hitstun || 0, 45);
+          enemy.flash = Math.max(enemy.flash || 0, 20);
+        }
+      }
+      hudMessage = "緊急回避成功! COUNTER READY!";
+      hudTimer = 80;
+      battleRankGainByStyle("emergency_dodge", 2.5);
       playPowerupSfx();
       return false;
     }
@@ -9355,6 +9847,7 @@
     if (hudTimer > 0) hudTimer -= dt;
     updateImpactEffects(dt);
     consumeBurstIfPressed(actions);
+    updateTaunt(dt, actions);
     const worldDt = dt * (isTimeBurstActive() ? timeBurstDtScale() : 1);
 
     if (hitStopTimer > 0) {
@@ -9417,7 +9910,8 @@
       }
       if (swordStingerActive && swordStingerTimer > 0) {
         swordStingerTimer -= dt;
-        player.vx = player.facing * SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08);
+        const stingerSpd = SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08) * (devilTriggerTimer > 0 ? 1.3 : 1);
+        player.vx = player.facing * stingerSpd;
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
         // Drag caught enemies along with player
         for (const enemy of stingerCaughtEnemies) {
@@ -9431,18 +9925,17 @@
         // J pressed during stinger -> Million Stab
         if (actions.attackPressed && !millionStabActive) {
           millionStabActive = true;
-          millionStabTimer = MILLION_STAB_DURATION;
+          millionStabTimer = 12; // Short initial duration — mash to extend
           millionStabHitTimer = 0;
           swordStingerTimer = 0; // End stinger rush
           player.vx = 0; // Stop moving
-          swordAttackCooldown = 0; // Allow immediate hits
+          swordAttackCooldown = 0;
           hudMessage = "MILLION STAB!";
           hudTimer = 40;
           if (seStrongHit) playSound(seStrongHit, 0.7);
         }
         if (swordStingerTimer <= 0 && !millionStabActive) {
           swordStingerActive = false;
-          // Release caught enemies with knockback
           const dir = player.facing;
           for (const enemy of stingerCaughtEnemies) {
             if (!enemy.alive) continue;
@@ -9457,23 +9950,25 @@
         millionStabTimer -= dt;
         millionStabHitTimer -= dt;
         player.vx = 0; // Stay in place
+        // Keep player visible — clamp to stage bounds
+        player.x = clamp(player.x, 0, stage.width - player.w);
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
         swordAttackCooldown = 0;
         // Rapid hits
         if (millionStabHitTimer <= 0) {
           millionStabHitTimer = MILLION_STAB_HIT_INTERVAL;
           const dir = player.facing;
-          const reach = 28;
-          const power = 0.8 + battleRankIndex * 0.08;
+          const reach = Math.floor(28 * dtReachMul());
+          const power = (0.8 + battleRankIndex * 0.08) * dtPowerMul();
           const hitBox = {
             x: dir > 0 ? player.x + player.w : player.x - reach,
             y: player.y + 2,
             w: reach,
             h: 14,
           };
-          swordHitEnemies(hitBox, dir, power, 0.1); // Very low knockback
+          swordHitEnemies(hitBox, dir, power, 0.1);
           swordHitBoss(hitBox, dir, power);
-          hitStopTimer = 0; // No freeze during rapid stabs
+          hitStopTimer = 0;
           // Keep caught enemies locked in place
           for (const enemy of stingerCaughtEnemies) {
             if (!enemy.alive) continue;
@@ -9484,13 +9979,13 @@
             enemy.flash = Math.max(enemy.flash, 3);
           }
           triggerImpact(0.8, player.x + dir * 20, player.y + 8, 1.5);
-          spawnSwordSlash(dir, 1);
+          spawnSwordSlash(dir, 1 + dtSparkCount());
           if (seHandgun) playSound(seHandgun, 0.3, 1.2 + Math.random() * 0.4);
           battleRankGainByStyle("million_stab", 0.5);
         }
-        // Extending: if J is held/mashed, extend duration
-        if (input.attack && millionStabTimer > 4) {
-          millionStabTimer = Math.min(millionStabTimer + dt * 0.5, MILLION_STAB_DURATION);
+        // Extending: if J is pressed/mashed, extend duration (mash-based)
+        if (actions.attackPressed && millionStabTimer < MILLION_STAB_DURATION) {
+          millionStabTimer = Math.min(millionStabTimer + 8, MILLION_STAB_DURATION);
         }
         if (millionStabTimer <= 0) {
           millionStabActive = false;
@@ -9499,14 +9994,14 @@
           const dir = player.facing;
           for (const enemy of stingerCaughtEnemies) {
             if (!enemy.alive) continue;
-            enemy.vx = dir * 6;
+            enemy.vx = dir * 6 * dtKnockMul();
             enemy.vy = -3;
           }
           stingerCaughtEnemies = [];
           swordAttackCooldown = 10;
           attackEffectTimer = 8;
           attackEffectMode = "sword";
-          triggerImpact(2.0, player.x + dir * 20, player.y + 8, 3);
+          triggerImpact(2.0 * dtPowerMul(), player.x + dir * 20, player.y + 8, 3);
           if (seStrongHit) playSound(seStrongHit, 0.9);
         }
       }
@@ -9535,10 +10030,12 @@
     updateLifeUpItems(worldDt);
     updateBikes(worldDt);
     updateCheckpointTokens(worldDt);
-    // --- Combat Dash ---
+    // --- Combat Dash / Trickster ---
     if (!bursting) {
       updateCombatDash(dt, actions);
     }
+    // --- Round Trip update ---
+    updateRoundTrip(dt);
     // --- Dedicated Gun (K key, always available) ---
     updateDedicatedGun(dt, actions);
     // --- Weapon Switch (I key) ---
@@ -9551,6 +10048,7 @@
         battleRankGainByStyle("air_combo_finish", airComboCount * 0.5);
       }
       airComboCount = 0;
+      airComboStage = 0;
     }
     if (airComboDisplayTimer > 0) airComboDisplayTimer -= dt;
 
@@ -9571,6 +10069,7 @@
     if (hudTimer > 0) hudTimer -= dt;
     updateImpactEffects(dt);
     consumeBurstIfPressed(actions);
+    updateTaunt(dt, actions);
     const worldDt = dt * (isTimeBurstActive() ? timeBurstDtScale() : 1);
 
     if (hitStopTimer > 0) {
@@ -9632,7 +10131,8 @@
       }
       if (swordStingerActive && swordStingerTimer > 0) {
         swordStingerTimer -= dt;
-        player.vx = player.facing * SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08);
+        const stingerSpd2 = SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08) * (devilTriggerTimer > 0 ? 1.3 : 1);
+        player.vx = player.facing * stingerSpd2;
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
         for (const enemy of stingerCaughtEnemies) {
           if (!enemy.alive) continue;
@@ -9644,7 +10144,7 @@
         }
         if (actions.attackPressed && !millionStabActive) {
           millionStabActive = true;
-          millionStabTimer = MILLION_STAB_DURATION;
+          millionStabTimer = 12; // Short initial — mash to extend
           millionStabHitTimer = 0;
           swordStingerTimer = 0;
           player.vx = 0;
@@ -9668,13 +10168,14 @@
         millionStabTimer -= dt;
         millionStabHitTimer -= dt;
         player.vx = 0;
+        player.x = clamp(player.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
         swordAttackCooldown = 0;
         if (millionStabHitTimer <= 0) {
           millionStabHitTimer = MILLION_STAB_HIT_INTERVAL;
           const dir = player.facing;
-          const reach = 28;
-          const power = 0.8 + battleRankIndex * 0.08;
+          const reach = Math.floor(28 * dtReachMul());
+          const power = (0.8 + battleRankIndex * 0.08) * dtPowerMul();
           const hitBox = {
             x: dir > 0 ? player.x + player.w : player.x - reach,
             y: player.y + 2,
@@ -9683,7 +10184,7 @@
           };
           swordHitEnemies(hitBox, dir, power, 0.1);
           swordHitBoss(hitBox, dir, power);
-          hitStopTimer = 0; // No freeze during rapid stabs
+          hitStopTimer = 0;
           for (const enemy of stingerCaughtEnemies) {
             if (!enemy.alive) continue;
             enemy.x = player.x + dir * (player.w + 2);
@@ -9693,12 +10194,12 @@
             enemy.flash = Math.max(enemy.flash, 3);
           }
           triggerImpact(0.8, player.x + dir * 20, player.y + 8, 1.5);
-          spawnSwordSlash(dir, 1);
+          spawnSwordSlash(dir, 1 + dtSparkCount());
           if (seHandgun) playSound(seHandgun, 0.3, 1.2 + Math.random() * 0.4);
           battleRankGainByStyle("million_stab", 0.5);
         }
-        if (input.attack && millionStabTimer > 4) {
-          millionStabTimer = Math.min(millionStabTimer + dt * 0.5, MILLION_STAB_DURATION);
+        if (actions.attackPressed && millionStabTimer < MILLION_STAB_DURATION) {
+          millionStabTimer = Math.min(millionStabTimer + 8, MILLION_STAB_DURATION);
         }
         if (millionStabTimer <= 0) {
           millionStabActive = false;
@@ -9706,14 +10207,14 @@
           const dir = player.facing;
           for (const enemy of stingerCaughtEnemies) {
             if (!enemy.alive) continue;
-            enemy.vx = dir * 6;
+            enemy.vx = dir * 6 * dtKnockMul();
             enemy.vy = -3;
           }
           stingerCaughtEnemies = [];
           swordAttackCooldown = 10;
           attackEffectTimer = 8;
           attackEffectMode = "sword";
-          triggerImpact(2.0, player.x + dir * 20, player.y + 8, 3);
+          triggerImpact(2.0 * dtPowerMul(), player.x + dir * 20, player.y + 8, 3);
           if (seStrongHit) playSound(seStrongHit, 0.9);
         }
       }
@@ -9743,6 +10244,7 @@
     updateHazardBullets(worldDt, solids);
     // --- Combat systems (Boss battle) ---
     updateCombatDash(dt, actions);
+    updateRoundTrip(dt);
     updateDedicatedGun(dt, actions);
     handleWeaponSwitch(actions);
     if (player.onGround && airComboCount > 0) {
@@ -9752,6 +10254,7 @@
         battleRankGainByStyle("air_combo_finish", airComboCount * 0.5);
       }
       airComboCount = 0;
+      airComboStage = 0;
     }
     if (airComboDisplayTimer > 0) airComboDisplayTimer -= dt;
     if (proteinBurstTimer <= 0) {
@@ -12024,6 +12527,27 @@
       ctx.fill();
       return;
     }
+    if (wave.kind === "drive") {
+      const alpha = clamp(wave.ttl / 30, 0, 1);
+      const dtActive = devilTriggerTimer > 0;
+      const pulse = 0.5 + Math.sin((wave.spin || 0) * 3) * 0.5;
+      // Outer glow
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 50, 30, ${0.3 * alpha * pulse})`
+        : `rgba(100, 180, 255, ${0.25 * alpha * pulse})`;
+      ctx.fillRect(x - 4, y - 4, wave.w + 8, wave.h + 8);
+      // Core
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 140, 60, ${0.7 * alpha})`
+        : `rgba(180, 220, 255, ${0.6 * alpha})`;
+      ctx.fillRect(x, y, wave.w, wave.h);
+      // Bright center
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 230, 120, ${0.8 * alpha})`
+        : `rgba(230, 245, 255, ${0.7 * alpha})`;
+      ctx.fillRect(x + 2, y + Math.floor(wave.h * 0.3), wave.w - 4, Math.max(2, Math.floor(wave.h * 0.4)));
+      return;
+    }
     if (wave.kind === "swordwave") {
       const alpha = clamp(wave.ttl / 20, 0, 1);
       const dtActive = devilTriggerTimer > 0;
@@ -13290,6 +13814,33 @@
       drawPlayerWave(wave);
     }
 
+    // Draw Round Trip sword
+    if (roundTripActive) {
+      const rtx = roundTripX - cameraX;
+      const rty = roundTripY;
+      const spin = (ROUND_TRIP_DURATION - roundTripTimer) * 0.4;
+      const dtActive = devilTriggerTimer > 0;
+      ctx.save();
+      ctx.translate(rtx, rty);
+      ctx.rotate(spin);
+      // Glow
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = dtActive ? "#ff4444" : "#4488ff";
+      ctx.beginPath();
+      ctx.arc(0, 0, 12, 0, Math.PI * 2);
+      ctx.fill();
+      // Blade
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = dtActive ? "#ff8866" : "#aaddff";
+      ctx.fillRect(-8, -2, 16, 4);
+      ctx.fillStyle = dtActive ? "#ffcc88" : "#ddeeff";
+      ctx.fillRect(-6, -1, 12, 2);
+      // Guard
+      ctx.fillStyle = "#ffdd44";
+      ctx.fillRect(-2, -4, 4, 8);
+      ctx.restore();
+    }
+
     drawWaveBursts();
     drawHitSparks();
     drawInvincibleBonusPops();
@@ -13318,6 +13869,35 @@
       return;
     }
     drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+    // Taunt glow effect
+    if (tauntFlashTimer > 0 || tauntBonusTimer > 0) {
+      const px = player.x - cameraX + player.w * 0.5;
+      const py = player.y + player.h * 0.5;
+      const alpha = tauntFlashTimer > 0
+        ? 0.4 + 0.3 * Math.sin(tauntFlashTimer * 0.5)
+        : Math.min(0.25, tauntBonusTimer / TAUNT_BONUS_DURATION * 0.25);
+      const radius = tauntFlashTimer > 0 ? 18 + Math.sin(tauntFlashTimer * 0.4) * 4 : 14;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = tauntFlashTimer > 0 ? "#ffdd44" : "#ffaa22";
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    // Counter-attack ready glow
+    if (emergencyDodgeCounterTimer > 0) {
+      const px = player.x - cameraX + player.w * 0.5;
+      const py = player.y + player.h * 0.5;
+      const alpha = 0.3 + 0.2 * Math.sin(emergencyDodgeCounterTimer * 0.3);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#44ffdd";
+      ctx.beginPath();
+      ctx.arc(px, py, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   function drawTextPanel(lines, y = 136) {
@@ -14399,6 +14979,29 @@
       ctx.fillRect(W - 28, H - 10, 24, 3);
       ctx.fillStyle = `rgba(120, 200, 255, ${0.5 + dashRatio * 0.5})`;
       ctx.fillRect(W - 28, H - 10, Math.floor(24 * dashRatio), 3);
+    }
+    // --- Gun Type Indicator ---
+    {
+      const gunColors = ["#aaddff", "#ffaa44", "#ff6644"];
+      const gunName = GUN_TYPE_NAMES[gunType];
+      const flashAlpha = gunSwitchFlashTimer > 0 ? 0.3 + 0.4 * (gunSwitchFlashTimer / 30) : 0;
+      ctx.font = "7px monospace";
+      ctx.textBaseline = "top";
+      const gx = 6;
+      const gy = H - 12;
+      if (flashAlpha > 0) {
+        ctx.fillStyle = `rgba(255, 255, 200, ${flashAlpha})`;
+        ctx.fillRect(gx - 2, gy - 1, 60, 10);
+      }
+      ctx.fillStyle = gunColors[gunType];
+      ctx.fillText("GUN:" + gunName, gx, gy);
+    }
+    // --- Taunt Bonus Indicator ---
+    if (tauntBonusTimer > 0) {
+      const tbAlpha = clamp(tauntBonusTimer / 60, 0.3, 1.0);
+      ctx.font = "7px monospace";
+      ctx.fillStyle = `rgba(255, 220, 60, ${tbAlpha})`;
+      ctx.fillText("TAUNT x" + TAUNT_RANK_MULTIPLIER.toFixed(1), 6, H - 22);
     }
   }
 
@@ -15530,6 +16133,7 @@
     KeyI: "weaponSwitch",
     KeyU: "burst",
     KeyS: "down",
+    KeyT: "taunt",
     Enter: "start",
   };
   // Keys that also set "up" direction (ArrowUp and W)
@@ -15577,6 +16181,7 @@
     input.styleChange = false;
     input.special = false;
     input.special2 = false;
+    input.taunt = false;
     input.start = false;
   });
   window.addEventListener("pagehide", () => {
