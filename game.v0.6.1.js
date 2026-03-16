@@ -316,11 +316,12 @@
   let swordAttackCooldown = 0;
   let swordChargeTimer = 0;
   let swordChargeReadyPlayed = false;
-  // Devil Trigger (Swordmaster Burst)
+  // Devil Trigger (Style-specific Burst)
   let devilTriggerTimer = 0;
   let devilTriggerDuration = 0;
   let devilTriggerHitCount = 0;
   let devilTriggerResultTimer = 0;
+  let devilTriggerStyle = "swordmaster"; // Style that activated DT
   let devilTriggerResultCount = 0;
 
   // --- Combat Dash/Dodge System ---
@@ -3296,58 +3297,13 @@
           hudMessage = `BURST: ATTACK ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
           hudTimer = 28;
         }
-      } else if (playerStyle === "swordmaster") {
+      } else if (playerStyle === "swordmaster" || playerStyle === "trickster"
+              || playerStyle === "gunslinger" || playerStyle === "royalguard") {
+        // All 4 main styles use Devil Trigger with style-specific effects
+        const dtNames = { swordmaster: "DEVIL", trickster: "QUICK", gunslinger: "WILD", royalguard: "DREAD" };
         if (!triggerDevilTrigger()) {
           if (devilTriggerTimer > 0 || isTimeBurstActive() || proteinBurstTimer > 0) return;
-          hudMessage = `BURST: DEVIL ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
-          hudTimer = 28;
-        }
-      } else if (playerStyle === "royalguard") {
-        // Royal Guard Burst: damage ALL enemies on screen
-        if (proteinBurstGauge1 >= PROTEIN_BURST_MIN) {
-          const gpx = player.x + player.w * 0.5;
-          const gpy = player.y + player.h * 0.5;
-          const gaugeRatio = clamp(proteinBurstGauge1 / PROTEIN_BURST_REQUIRE, 0, 1);
-          const burstPower = 3.0 + gaugeRatio * 5.0;
-          proteinBurstGauge1 = 0;
-          proteinBurstGauge2 = 0;
-
-          // Damage all enemies
-          for (const enemy of stage.enemies) {
-            if (!enemy.alive || enemy.kicked) continue;
-            const dir = enemy.x + enemy.w * 0.5 > gpx ? 1 : -1;
-            kickEnemy(enemy, dir, burstPower, {
-              immediateRemove: false, flyLifetime: 40, rankStyle: "royal_burst",
-            });
-          }
-          // Damage boss
-          for (const boss of getBossEntities()) {
-            if (boss.hp <= 0) continue;
-            const bossDmg = Math.max(2, Math.round((2 + bossDamageBonus()) * (1 + gaugeRatio * 2)));
-            boss.hp = Math.max(0, boss.hp - bossDmg);
-            boss.invuln = Math.max(boss.invuln || 0, 8);
-            boss.flash = Math.max(boss.flash || 0, 20);
-            const bdir = boss.x + boss.w * 0.5 > gpx ? 1 : -1;
-            boss.vx += bdir * 1.5;
-          }
-          // Big burst effect
-          triggerImpact(5.0, gpx, gpy, 6.0);
-          hitStopTimer = Math.max(hitStopTimer, 8);
-          royalGuardFlashTimer = 20;
-          royalGuardFlashColor = "#ffff44";
-          for (let i = 0; i < 20; i++) {
-            const angle = (i / 20) * Math.PI * 2;
-            const speed = 3 + Math.random() * 3;
-            hitSparks.push({ x: gpx, y: gpy, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-              life: 20, maxLife: 20, color: ["#22ff88", "#44ffaa", "#ffff44", "#ffffff"][i % 4] });
-          }
-          if (seBurst1Max) playSound(seBurst1Max, 1.0);
-          hudMessage = "ROYAL BURST!!";
-          hudTimer = 80;
-          battleRankGainByStyle("royal_burst", 4.0);
-          damageInvulnTimer = Math.max(damageInvulnTimer, 40);
-        } else {
-          hudMessage = `BURST: ROYAL ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
+          hudMessage = `BURST: ${dtNames[playerStyle]} ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
           hudTimer = 28;
         }
       } else {
@@ -4853,8 +4809,16 @@
     if (devilTriggerTimer > 0 && !ignoreInvincible && !instantGameOver) {
       if (invincibleHitCooldown > 0) return;
       invincibleHitCooldown = 6;
-      hudMessage = "SUPER ARMOR!";
+      // Royal Guard DT: counter-damage on hit absorb
+      if (devilTriggerStyle === "royalguard") {
+        hudMessage = "DREADNAUGHT!";
+        royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 15);
+        devilTriggerHitCount++;
+      } else {
+        hudMessage = "SUPER ARMOR!";
+      }
       hudTimer = 20;
+      const colors = DT_STYLE_COLORS[devilTriggerStyle] || DT_STYLE_COLORS.swordmaster;
       triggerImpact(0.7, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.0);
       return;
     }
@@ -6951,7 +6915,7 @@
           if (tier === 0) {
             const rankIdx = battleRankIndex;
             const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
-            shotReloadTimer = reloadBase;
+            shotReloadTimer = Math.floor(reloadBase * dtShotReloadMul());
           }
         } else {
           // Not enough ammo - prompt reload
@@ -7021,7 +6985,7 @@
         for (let i = 0; i < actualFire; i++) {
           const ang = startAngle + i;
           stage.playerWaves.push({
-            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.85
+            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.85 * dtShotPowerMul()
           });
         }
         if (seShotgun) playSound(seShotgun, 0.7);
@@ -7053,11 +7017,10 @@
     const dir = player.facing;
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.45;
+    const sPow = dtShotPowerMul();
 
     if (tier === 3) { // Bazooka / Grenade
-      // Fixed power (no rank scaling) - costs 15 ammo
-      const powerBase = 5.5;
-      // Fixed size
+      const powerBase = 5.5 * sPow;
       const sizeBase = 36;
       stage.playerWaves.push({
         kind: "bazooka", x: px + dir * 20, y: py - 4, w: sizeBase, h: 12, vx: dir * 4.5, vy: 0, ttl: 120, power: powerBase, spin: 0
@@ -7066,18 +7029,26 @@
       // Handled in fireRangedWeapon
     } else if (tier === 1) { // Machine Gun
       const rankIdx = battleRankIndex;
-      // Slower speed: 4.8 start (reduced from 6.0)
       const speed = 4.8 + rankIdx * 1.3;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 55, power: 0.4
+        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 55, power: 0.4 * sPow
       });
     } else { // Handgun
       const rankIdx = battleRankIndex;
-      // Slower speed: 4.5 start (reduced from 5.5)
       const speed = 4.5 + rankIdx * 1.2;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 65, power: 0.5
+        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 65, power: 0.5 * sPow
       });
+      // Gunslinger DT: extra angled shot
+      if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") {
+        stage.playerWaves.push({
+          kind: "bullet", x: px + dir * 15, y: py - 4, w: 6, h: 4, vx: dir * speed, vy: -1.2, ttl: 50, power: 0.35 * sPow
+        });
+        stage.playerWaves.push({
+          kind: "bullet", x: px + dir * 15, y: py + 4, w: 6, h: 4, vx: dir * speed, vy: 1.2, ttl: 50, power: 0.35 * sPow
+        });
+        if (devilTriggerTimer > 0) devilTriggerHitCount++;
+      }
     }
   }
 
@@ -7111,6 +7082,11 @@
     // Devil Trigger update
     if (devilTriggerTimer > 0) {
       devilTriggerTimer -= dt;
+      // Royal Guard DT: maintain auto-block aura & energy regen
+      if (devilTriggerStyle === "royalguard") {
+        royalGuardBlockTimer = Math.max(royalGuardBlockTimer, 8);
+        royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 0.15 * dt);
+      }
       if (devilTriggerTimer <= 0) {
         endDevilTrigger();
       }
@@ -7697,7 +7673,7 @@
       player.x = clamp(player.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
     }
 
-    tricksterCooldown = TRICKSTER_COOLDOWN;
+    tricksterCooldown = Math.floor(TRICKSTER_COOLDOWN * dtTricksterCooldownMul());
     damageInvulnTimer = Math.max(damageInvulnTimer, 18);
 
     // Afterimage particles at old position
@@ -7806,7 +7782,7 @@
     player.onGround = false;
     stompChainGuardTimer = Math.max(stompChainGuardTimer, 12); // Assist stomp window
 
-    tricksterCooldown = TRICKSTER_COOLDOWN;
+    tricksterCooldown = Math.floor(TRICKSTER_COOLDOWN * dtTricksterCooldownMul());
     damageInvulnTimer = Math.max(damageInvulnTimer, 12);
 
     // Trail particles from old to new position
@@ -8062,7 +8038,20 @@
     }
   }
 
-  // --- Devil Trigger (Swordmaster Burst) ---
+  // --- Devil Trigger (Style-specific Burst) ---
+  const DT_STYLE_NAMES = {
+    swordmaster: "DEVIL TRIGGER!",
+    trickster:   "QUICKSILVER!!",
+    gunslinger:  "WILD TRIGGER!",
+    royalguard:  "DREADNAUGHT!!",
+  };
+  const DT_STYLE_COLORS = {
+    swordmaster: { tint: [180, 20, 0], vignette: [120, 0, 0], bar: "#ff3300", flash: "#ff4400" },
+    trickster:   { tint: [0, 60, 200], vignette: [0, 20, 140], bar: "#4488ff", flash: "#44ccff" },
+    gunslinger:  { tint: [180, 140, 0], vignette: [120, 80, 0], bar: "#ffcc00", flash: "#ffdd44" },
+    royalguard:  { tint: [0, 140, 60], vignette: [0, 80, 30], bar: "#22ff88", flash: "#44ffaa" },
+  };
+
   function triggerDevilTrigger() {
     if (devilTriggerTimer > 0) return false;
     if (isTimeBurstActive() || proteinBurstTimer > 0) return false;
@@ -8073,12 +8062,38 @@
     devilTriggerDuration = seconds * 60;
     devilTriggerTimer = devilTriggerDuration;
     devilTriggerHitCount = 0;
+    devilTriggerStyle = playerStyle;
     proteinBurstGauge1 = 0;
     proteinBurstGauge2 = 0;
 
-    hudMessage = "DEVIL TRIGGER!";
+    // Style-specific activation effects
+    const gpx = player.x + player.w * 0.5;
+    const gpy = player.y + player.h * 0.5;
+    hudMessage = DT_STYLE_NAMES[playerStyle] || "DEVIL TRIGGER!";
     hudTimer = 80;
-    triggerImpact(4, player.x + player.w * 0.5, player.y + player.h * 0.5, 5);
+    triggerImpact(4, gpx, gpy, 5);
+
+    // Royal Guard DT: start with full energy
+    if (playerStyle === "royalguard") {
+      royalGuardEnergy = ROYAL_GUARD_MAX_ENERGY;
+    }
+    // Trickster DT: reset cooldown instantly
+    if (playerStyle === "trickster") {
+      tricksterCooldown = 0;
+      combatDashCooldown = 0;
+    }
+
+    // Style-colored activation burst
+    const colors = DT_STYLE_COLORS[playerStyle] || DT_STYLE_COLORS.swordmaster;
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      hitSparks.push({
+        x: gpx, y: gpy,
+        vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4,
+        life: 18, maxLife: 18, color: colors.flash,
+      });
+    }
+
     if (seBurst1Max) playSound(seBurst1Max, 0.9);
     return true;
   }
@@ -8094,19 +8109,54 @@
     return devilTriggerTimer > 0;
   }
 
-  // Devil Trigger power multipliers
+  // Devil Trigger power multipliers — vary by DT style
   function dtPowerMul() {
-    let m = devilTriggerTimer > 0 ? 1.5 : 1;
-    if (playerStyle === "swordmaster") m *= 1.15; // Swordmaster damage bonus
-    return m;
+    if (devilTriggerTimer <= 0) {
+      return playerStyle === "swordmaster" ? 1.15 : 1;
+    }
+    // DT active: style-specific damage bonus
+    switch (devilTriggerStyle) {
+      case "swordmaster": return 1.5 * 1.15; // Best melee damage
+      case "gunslinger":  return 1.3;         // Moderate (gun bonus elsewhere)
+      case "royalguard":  return 1.2;         // Defensive focus
+      case "trickster":   return 1.25;        // Speed focus
+      default:            return 1.5;
+    }
   }
   function dtReachMul() {
-    let m = devilTriggerTimer > 0 ? 1.25 : 1;
-    if (playerStyle === "swordmaster") m *= 1.1; // Swordmaster reach bonus
-    return m;
+    if (devilTriggerTimer <= 0) {
+      return playerStyle === "swordmaster" ? 1.1 : 1;
+    }
+    switch (devilTriggerStyle) {
+      case "swordmaster": return 1.25 * 1.1;
+      case "trickster":   return 1.15;
+      default:            return 1.1;
+    }
   }
   function dtKnockMul() { return devilTriggerTimer > 0 ? 1.3 : 1; }
   function dtSparkCount() { return devilTriggerTimer > 0 ? 3 : 0; }
+  // Gunslinger DT: shot power & fire rate
+  function dtShotPowerMul() {
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") return 2.0;
+    return 1;
+  }
+  function dtShotReloadMul() {
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") return 0.4;
+    return 1;
+  }
+  // Trickster DT: speed & cooldown
+  function dtTricksterCooldownMul() {
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "trickster") return 0.3;
+    return 1;
+  }
+  function dtMovementSpeedMul() {
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "trickster") return 1.5;
+    return 1;
+  }
+  // Royal Guard DT: auto-guard aura
+  function dtRoyalGuardAutoBlock() {
+    return devilTriggerTimer > 0 && devilTriggerStyle === "royalguard";
+  }
   // Counter-attack bonus after emergency dodge
   function counterAttackMul() { return emergencyDodgeCounterTimer > 0 ? 2.0 : 1; }
 
@@ -10621,7 +10671,7 @@
         player.vx *= Math.pow(friction, dt);
       }
 
-      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
+      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1) * dtMovementSpeedMul();
       player.vx = clamp(player.vx, -speedCap, speedCap);
 
       if (actions.jumpPressed && player.onGround) {
@@ -10843,7 +10893,7 @@
         player.vx *= Math.pow(friction, dt);
       }
 
-      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
+      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1) * dtMovementSpeedMul();
       player.vx = clamp(player.vx, -speedCap, speedCap);
 
       if (actions.jumpPressed && player.onGround) {
@@ -16660,39 +16710,59 @@
       const alpha = clamp(devilTriggerResultTimer / 60, 0, 1);
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#ff3300";
+      const resultColors = DT_STYLE_COLORS[devilTriggerStyle] || DT_STYLE_COLORS.swordmaster;
+      ctx.fillStyle = resultColors.bar;
       ctx.font = "bold 12px monospace";
       ctx.textAlign = "center";
-      ctx.fillText(`DEVIL TRIGGER RESULT: ${devilTriggerResultCount} HITS!`, W * 0.5, H * 0.35);
+      const resultName = (DT_STYLE_NAMES[devilTriggerStyle] || "DEVIL TRIGGER!").replace(/!+$/, "");
+      ctx.fillText(`${resultName} RESULT: ${devilTriggerResultCount} HITS!`, W * 0.5, H * 0.35);
       ctx.restore();
     }
 
     if (devilTriggerTimer <= 0) return;
 
-    // Red world tint
+    // Style-specific tint colors
+    const colors = DT_STYLE_COLORS[devilTriggerStyle] || DT_STYLE_COLORS.swordmaster;
+    const [tr, tg, tb] = colors.tint;
+    const [vr, vg, vb] = colors.vignette;
+
     const ratio = clamp(devilTriggerTimer / devilTriggerDuration, 0, 1);
     const pulse = 0.5 + Math.sin(performance.now() * 0.004) * 0.15;
     const intensity = 0.12 + pulse * 0.06;
 
-    ctx.fillStyle = `rgba(180, 20, 0, ${intensity * ratio})`;
+    // World tint (style-colored)
+    ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${intensity * ratio})`;
     ctx.fillRect(0, 0, W, H);
 
     // Vignette edges
     const grad = ctx.createRadialGradient(W * 0.5, H * 0.5, W * 0.2, W * 0.5, H * 0.5, W * 0.7);
     grad.addColorStop(0, "rgba(0, 0, 0, 0)");
-    grad.addColorStop(1, `rgba(120, 0, 0, ${0.15 * ratio})`);
+    grad.addColorStop(1, `rgba(${vr}, ${vg}, ${vb}, ${0.15 * ratio})`);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // DT timer bar
+    // DT timer bar (style-colored)
     const barW = 60;
     const barH = 3;
     const barX = Math.floor(W * 0.5 - barW * 0.5);
     const barY = 18;
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-    ctx.fillStyle = `rgba(255, ${Math.floor(50 + pulse * 50)}, 0, 0.9)`;
+    ctx.fillStyle = colors.bar;
+    ctx.globalAlpha = 0.8 + pulse * 0.2;
     ctx.fillRect(barX, barY, Math.floor(barW * ratio), barH);
+    ctx.globalAlpha = 1;
+
+    // Style name label
+    const dtLabel = DT_STYLE_NAMES[devilTriggerStyle] || "DEVIL TRIGGER!";
+    if (ratio > 0.9) {
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = colors.flash;
+      ctx.globalAlpha = clamp((ratio - 0.9) * 10, 0, 1);
+      ctx.fillText(dtLabel.replace("!", "").replace("!", ""), W * 0.5, barY + barH + 9);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawProteinBurstLaserOverlay() {
