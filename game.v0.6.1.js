@@ -154,7 +154,7 @@
   let attackMashCount = 0;
   let attackMashTimer = 0;
   let shotChargeTimer = 0;
-  let playerStyle = "swordmaster"; // "swordmaster" (default), "berserker" or "gunner"
+  let playerStyle = "swordmaster"; // "swordmaster", "trickster", "gunslinger", "royalguard"
   let shotReloadTimer = 0;
 
   // Gunner Ammo System
@@ -175,6 +175,18 @@
   const TAUNT_DURATION = 40;        // ~0.67 seconds taunt animation
   const TAUNT_BONUS_DURATION = 180; // 3 seconds of bonus after taunt
   const TAUNT_RANK_MULTIPLIER = 2.5; // Rank gain multiplier during bonus
+  // --- Royal Guard ---
+  let royalGuardEnergy = 0;           // Stored energy from blocking
+  let royalGuardBlockTimer = 0;       // Active guard frames
+  const ROYAL_GUARD_BLOCK_WINDOW = 10; // Frames of active guard
+  const ROYAL_GUARD_MAX_ENERGY = 100;
+  // --- Drive Charge (charged drive = Overdrive, fires multiple waves) ---
+  let driveChargeTimer = 0;
+  let driveChargeActive = false;
+  let overdriveBurstCount = 0;        // Remaining burst waves
+  let overdriveBurstDelay = 0;
+  const DRIVE_CHARGE_TIME = 30;       // ~0.5s charge for Overdrive
+  const OVERDRIVE_WAVES = 5;
   // --- Round Trip (sword throw) ---
   let roundTripActive = false;
   let roundTripTimer = 0;
@@ -6908,6 +6920,43 @@
       }
     }
 
+    // --- Drive charge / Overdrive burst ---
+    if (overdriveBurstCount > 0) {
+      overdriveBurstDelay -= dt;
+      if (overdriveBurstDelay <= 0) {
+        overdriveBurstDelay = 4;
+        overdriveBurstCount--;
+        fireOverdriveWave(overdriveBurstCount);
+      }
+      return; // Block other attacks during Overdrive burst
+    }
+    if (driveChargeActive) {
+      if (input.attack && input.down && player.onGround) {
+        driveChargeTimer += dt;
+        player.vx *= 0.7; // Slow during charge
+        if (driveChargeTimer >= DRIVE_CHARGE_TIME && !attackChargeReadyPlayed) {
+          hudMessage = "OVERDRIVE READY!";
+          hudTimer = 30;
+          attackChargeReadyPlayed = true;
+          triggerImpact(1.0, player.x + player.w * 0.5, player.y + player.h * 0.5, 2.0);
+        }
+      } else {
+        // Released or conditions changed
+        if (driveChargeTimer >= DRIVE_CHARGE_TIME) {
+          // OVERDRIVE!
+          overdriveBurstCount = OVERDRIVE_WAVES;
+          overdriveBurstDelay = 0;
+          hudMessage = isDevilTriggerActive() ? "DT OVERDRIVE!" : "OVERDRIVE!";
+          hudTimer = 50;
+          battleRankGainByStyle("overdrive", 3.0);
+          if (seStrongHit) playSound(seStrongHit, 1.0, 0.7);
+        }
+        driveChargeActive = false;
+        driveChargeTimer = 0;
+        attackChargeReadyPlayed = false;
+      }
+    }
+
     // Track direction hold time for Stinger input (simultaneous press only)
     const movingFwd = (input.right && player.facing > 0) || (input.left && player.facing < 0);
     if (movingFwd) {
@@ -6933,16 +6982,25 @@
       const fwd = movingFwd && directionHoldTimer < 6;
       const hasDirection = fwd || input.jump || input.down;
       if (!player.onGround) {
-        // --- Air attacks: 3-stage combo ---
+        // --- Aerial Rave: 4-stage air combo (DMC style) ---
         // Stage 0,1: horizontal slashes with hang time
-        // Stage 2: slam down (Helm Breaker)
-        if (airComboStage >= 2) {
-          // 3rd hit: slam down
+        // Stage 2: upward slash (keeps enemies airborne)
+        // Stage 3: slam down (Helm Breaker)
+        const maxAirStage = playerStyle === "swordmaster" ? 4 : 3;
+        if (airComboStage >= maxAirStage) {
+          // Final hit: slam down (Helm Breaker)
           player.vy = Math.min(player.vy, 0.2);
           performSwordSlam();
           airComboStage = 0;
+        } else if (airComboStage === maxAirStage - 1) {
+          // Penultimate: upward slash (Aerial Rave finisher before Helm Breaker)
+          player.vy = Math.min(player.vy, -2.5); // Pop up higher
+          performAirSlash(airComboStage);
+          airComboStage++;
+          hudMessage = "AERIAL RAVE!";
+          hudTimer = 25;
         } else {
-          // 1st/2nd hit: air slash
+          // Regular air slashes
           player.vy = Math.min(player.vy, -0.3); // Hang in air
           performAirSlash(airComboStage);
           airComboStage++;
@@ -6959,7 +7017,10 @@
         } else if (fwd) {
           performSwordStinger(); // D/A + J = Stinger (突進斬り)
         } else if (input.down) {
-          performDrive();       // Down + J = Drive (衝撃波)
+          // Start Drive charge
+          driveChargeActive = true;
+          driveChargeTimer = 0;
+          performDrive();       // Down + J = instant Drive (衝撃波)
         }
         attackChargeTimer = 0;
         attackChargeReadyPlayed = false;
@@ -7126,8 +7187,8 @@
       }
       if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
       enemy.hp = Math.max(1, enemy.hp - 1);
-      // Strong upward launch — fixed: ensure enemies actually go airborne
-      enemy.vx = dir * 0.3;
+      // Strong upward launch (DMC style) — near-vertical with minimal horizontal push
+      enemy.vx = dir * 0.08;
       enemy.vy = launchVy;
       enemy.y -= 4; // Lift enemy off ground to prevent immediate re-grounding
       enemy.onGround = false;
@@ -7269,6 +7330,40 @@
   }
 
   // --- Round Trip: throw sword that boomerangs back ---
+  // --- Overdrive: fire a single wave in a burst of 5 ---
+  function fireOverdriveWave(index) {
+    const dir = player.facing;
+    const dtActive = isDevilTriggerActive();
+    const rankIdx = battleRankIndex;
+    const power = (1.8 + rankIdx * 0.1) * dtPowerMul();
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.4;
+
+    const spread = (index - 2) * 0.6; // Fan pattern: -1.2 to 1.2
+    const waveSpeed = (5.0 + rankIdx * 0.4) * (dtActive ? 1.3 : 1);
+    const waveW = dtActive ? 18 : 14;
+    const waveH = dtActive ? 14 : 10;
+
+    stage.playerWaves.push({
+      kind: "drive",
+      x: px + dir * (8 + index * 3),
+      y: py - waveH * 0.5,
+      w: waveW,
+      h: waveH,
+      vx: dir * waveSpeed,
+      vy: spread * 0.8,
+      ttl: dtActive ? 70 : 50,
+      phase: 0,
+      spin: index * 0.5,
+      power: power,
+    });
+
+    triggerImpact(1.5, px + dir * 12, py, 2.0);
+    spawnSwordSlash(dir, 2 + dtSparkCount());
+    if (seWhipSwing) playSound(seWhipSwing, 0.5, 1.0 + index * 0.1);
+    swordAttackCooldown = 4;
+  }
+
   function launchRoundTrip() {
     if (roundTripActive) return;
     const dir = player.facing;
@@ -7600,8 +7695,16 @@
   }
 
   // Devil Trigger power multipliers
-  function dtPowerMul() { return devilTriggerTimer > 0 ? 1.5 : 1; }
-  function dtReachMul() { return devilTriggerTimer > 0 ? 1.25 : 1; }
+  function dtPowerMul() {
+    let m = devilTriggerTimer > 0 ? 1.5 : 1;
+    if (playerStyle === "swordmaster") m *= 1.15; // Swordmaster damage bonus
+    return m;
+  }
+  function dtReachMul() {
+    let m = devilTriggerTimer > 0 ? 1.25 : 1;
+    if (playerStyle === "swordmaster") m *= 1.1; // Swordmaster reach bonus
+    return m;
+  }
   function dtKnockMul() { return devilTriggerTimer > 0 ? 1.3 : 1; }
   function dtSparkCount() { return devilTriggerTimer > 0 ? 3 : 0; }
   // Counter-attack bonus after emergency dodge
@@ -7629,15 +7732,21 @@
     roundTripActive = false;
     roundTripTimer = 0;
     tricksterCooldown = 0;
+    royalGuardEnergy = 0;
+    royalGuardBlockTimer = 0;
+    driveChargeActive = false;
+    driveChargeTimer = 0;
+    overdriveBurstCount = 0;
     tauntTimer = 0;
     tauntBonusTimer = 0;
     tauntFlashTimer = 0;
     airComboStage = 0;
   }
 
-  // ========== COMBAT DASH / DODGE SYSTEM ==========
+  // ========== COMBAT DASH / DODGE / ROYAL GUARD SYSTEM ==========
   function updateCombatDash(dt, actions) {
     if (tricksterCooldown > 0) tricksterCooldown -= dt;
+    if (royalGuardBlockTimer > 0) royalGuardBlockTimer -= dt;
     if (combatDashTimer > 0) {
       combatDashTimer -= dt;
       player.vx = combatDashDir * COMBAT_DASH_SPEED;
@@ -7650,11 +7759,65 @@
     }
     if (combatDashCooldown > 0) combatDashCooldown -= dt;
     if (actions.dashPressed && combatDashCooldown <= 0) {
+      // Royal Guard style: L = block, L+attack = Release
+      if (playerStyle === "royalguard") {
+        if (input.attack && royalGuardEnergy > 0) {
+          // RELEASE! — unleash stored energy as a massive counter
+          performRoyalRelease();
+          combatDashCooldown = COMBAT_DASH_COOLDOWN;
+          return true;
+        }
+        // Block mode
+        royalGuardBlockTimer = ROYAL_GUARD_BLOCK_WINDOW;
+        damageInvulnTimer = Math.max(damageInvulnTimer, ROYAL_GUARD_BLOCK_WINDOW + 4);
+        player.vx *= 0.3;
+        hudMessage = "GUARD!";
+        hudTimer = 15;
+        if (seWhipSwing) playSound(seWhipSwing, 0.3, 0.8);
+        // Absorb nearby damage into energy
+        const guardBox = {
+          x: player.x - 8, y: player.y - 4,
+          w: player.w + 16, h: player.h + 8,
+        };
+        let absorbed = false;
+        for (const bullet of stage.hazardBullets) {
+          if (bullet.dead) continue;
+          if (!overlap(guardBox, bullet)) continue;
+          bullet.dead = true;
+          royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 25);
+          absorbed = true;
+        }
+        for (const shot of stage.bossShots) {
+          if (shot.dead) continue;
+          if (!overlap(guardBox, shot)) continue;
+          shot.dead = true;
+          royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 35);
+          absorbed = true;
+        }
+        if (absorbed) {
+          hudMessage = "JUST GUARD!";
+          hudTimer = 30;
+          triggerImpact(2.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 3.0);
+          if (seStrongHit) playSound(seStrongHit, 0.7, 1.2);
+          battleRankGainByStyle("royal_guard", 2.0);
+        }
+        combatDashCooldown = 8;
+        return true;
+      }
+
       // Determine direction
       let dashDir = player.facing;
       if (input.left) dashDir = -1;
       if (input.right) dashDir = 1;
       const isBackDash = (dashDir !== player.facing);
+
+      // Trickster style: enhanced teleport (longer range, shorter cooldown)
+      const isTrickster = playerStyle === "trickster";
+      if (isTrickster && tricksterCooldown <= 0) {
+        performTricksterDodge(dashDir);
+        combatDashCooldown = Math.floor(COMBAT_DASH_COOLDOWN * 0.5);
+        return true;
+      }
 
       // Back-dash or air-dash with direction = Trickster teleport
       if ((isBackDash || !player.onGround) && tricksterCooldown <= 0) {
@@ -7678,6 +7841,51 @@
     return false;
   }
 
+  // --- Royal Guard Release ---
+  function performRoyalRelease() {
+    const dir = player.facing;
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.4;
+    const energy = royalGuardEnergy;
+    const power = 3.0 + energy * 0.08;
+    royalGuardEnergy = 0;
+
+    // Massive shockwave
+    const reach = 40 + Math.floor(energy * 0.4);
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 4 : player.x - reach + 4,
+      y: player.y - 10,
+      w: reach,
+      h: player.h + 20,
+    };
+    swordHitEnemies(hitBox, dir, power, 2.5);
+    swordHitBoss(hitBox, dir, power * 1.5);
+
+    // Release wave
+    stage.playerWaves.push({
+      kind: "swordwave",
+      x: px + dir * 4,
+      y: py - 10,
+      w: reach,
+      h: 20,
+      vx: dir * 3,
+      vy: 0,
+      ttl: 25,
+      phase: 0,
+      spin: 0,
+      power: power,
+    });
+
+    triggerImpact(5.0 + energy * 0.05, px, py, 5.0);
+    spawnWaveBurst(px + dir * 10, py, 2.0);
+    if (seBazooka) playSound(seBazooka, 0.9, 0.8);
+    if (seStrongHit) playSound(seStrongHit, 1.0, 0.6);
+    hudMessage = energy >= 80 ? "ROYAL RELEASE MAX!" : "ROYAL RELEASE!";
+    hudTimer = 50;
+    swordAttackCooldown = 20;
+    battleRankGainByStyle("royal_release", 3.0 + energy * 0.03);
+  }
+
   // ========== DEDICATED GUN (K KEY - always available) ==========
   function updateDedicatedGun(dt, actions) {
     if (dedicatedGunCooldown > 0) {
@@ -7699,8 +7907,9 @@
     const py = player.y + player.h * 0.45;
     const rankIdx = battleRankIndex;
 
-    // Rank-scaled fire rate: faster at higher ranks
-    const rankReload = Math.max(4, DEDICATED_GUN_RELOAD - rankIdx * 1.2);
+    // Rank-scaled fire rate: faster at higher ranks (Gunslinger gets bonus)
+    const gunslingerBonus = playerStyle === "gunslinger" ? 0.7 : 1.0;
+    const rankReload = Math.max(3, (DEDICATED_GUN_RELOAD - rankIdx * 1.2) * gunslingerBonus);
 
     // Air + Down/S + K = Bullet Rain (真下に弾を打ち込む)
     // Duration scales with rank; cooldown after use
@@ -7709,12 +7918,14 @@
       if (bulletRainTimer <= 0) bulletRainTimer = maxDuration;
       if (bulletRainTimer > 0) {
         player.vy = 0; // Completely freeze in air
-        const bulletCount = 1 + Math.floor(rankIdx * 0.3); // 1~2 bullets per shot
+        const isGunslinger = playerStyle === "gunslinger";
+        const bulletCount = 1 + Math.floor(rankIdx * 0.5) + (isGunslinger ? 1 : 0); // 1~4 bullets
+        const hSpread = 0.6 + rankIdx * 0.15 + (isGunslinger ? 0.3 : 0); // Wider at high rank
         for (let i = 0; i < bulletCount; i++) {
-          const spread = (Math.random() - 0.5) * 0.6; // Almost straight down
+          const spread = (Math.random() - 0.5) * hSpread;
           stage.playerWaves.push({
-            kind: "bullet", x: px + spread * 2, y: py + 6, w: 5, h: 5,
-            vx: spread * 0.3, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6
+            kind: "bullet", x: px + spread * 6, y: py + 6, w: 5, h: 5,
+            vx: spread * 0.5, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6
           });
         }
         if (seHandgun) playSound(seHandgun, 0.5, 0.9);
@@ -12530,22 +12741,51 @@
     if (wave.kind === "drive") {
       const alpha = clamp(wave.ttl / 30, 0, 1);
       const dtActive = devilTriggerTimer > 0;
-      const pulse = 0.5 + Math.sin((wave.spin || 0) * 3) * 0.5;
-      // Outer glow
-      ctx.fillStyle = dtActive
-        ? `rgba(255, 50, 30, ${0.3 * alpha * pulse})`
-        : `rgba(100, 180, 255, ${0.25 * alpha * pulse})`;
-      ctx.fillRect(x - 4, y - 4, wave.w + 8, wave.h + 8);
-      // Core
-      ctx.fillStyle = dtActive
-        ? `rgba(255, 140, 60, ${0.7 * alpha})`
-        : `rgba(180, 220, 255, ${0.6 * alpha})`;
-      ctx.fillRect(x, y, wave.w, wave.h);
-      // Bright center
-      ctx.fillStyle = dtActive
-        ? `rgba(255, 230, 120, ${0.8 * alpha})`
-        : `rgba(230, 245, 255, ${0.7 * alpha})`;
-      ctx.fillRect(x + 2, y + Math.floor(wave.h * 0.3), wave.w - 4, Math.max(2, Math.floor(wave.h * 0.4)));
+      const spin = wave.spin || 0;
+      const pulse = 0.6 + Math.sin(spin * 3) * 0.4;
+      const waveDir = wave.vx >= 0 ? 1 : -1;
+      const cx_ = x + wave.w * 0.5;
+      const cy_ = y + wave.h * 0.5;
+      const crSize = wave.w * 1.2;
+
+      ctx.save();
+      ctx.translate(cx_, cy_);
+      // Outer glow (crescent aura)
+      ctx.globalAlpha = 0.2 * alpha * pulse;
+      ctx.fillStyle = dtActive ? "#ff4422" : "#4488ff";
+      ctx.beginPath();
+      ctx.arc(0, 0, crSize * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Crescent slash shape (三日月)
+      ctx.globalAlpha = 0.65 * alpha;
+      ctx.fillStyle = dtActive ? "#ff8844" : "#aaddff";
+      ctx.beginPath();
+      const arcR = crSize * 0.5;
+      const innerR = arcR * 0.55;
+      // Outer arc
+      ctx.arc(0, 0, arcR, -Math.PI * 0.5, Math.PI * 0.5, false);
+      // Inner arc (reverse to create crescent)
+      ctx.arc(waveDir * arcR * 0.25, 0, innerR, Math.PI * 0.5, -Math.PI * 0.5, true);
+      ctx.closePath();
+      ctx.fill();
+
+      // Bright edge
+      ctx.globalAlpha = 0.8 * alpha;
+      ctx.strokeStyle = dtActive ? "#ffcc66" : "#ddeeff";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, arcR, -Math.PI * 0.4, Math.PI * 0.4, false);
+      ctx.stroke();
+
+      // Core glow
+      ctx.globalAlpha = 0.5 * alpha * pulse;
+      ctx.fillStyle = dtActive ? "#ffee88" : "#eef8ff";
+      ctx.beginPath();
+      ctx.arc(waveDir * 2, 0, arcR * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
       return;
     }
     if (wave.kind === "swordwave") {
@@ -12738,7 +12978,7 @@
     if (!inPlayableState) return;
 
     const cx = Math.floor(player.x - cameraX + player.w * 0.5);
-    const cy = Math.floor(player.y + 11);
+    const cy = Math.floor(player.y + player.h * 0.55);
     const dir = player.facing;
 
     const showingChargeReach = input.attack && attackCooldown <= 0 && attackChargeTimer > ATTACK_COMBO_TAP_MAX;
@@ -12941,51 +13181,77 @@
       return;
     }
     if (isSword) {
-      // Draw sword slash arc
+      // Draw proper sword blade with slash trail (DMC style)
       const swing = clamp(1 - ratio, 0, 1);
-      const bladeLen = Math.floor(20 + visualPower * 12 + swing * 4);
-      const anchorX = dir > 0 ? cx + 4 : cx - 4;
-      const anchorY = cy - 6;
+      const bladeLen = Math.floor(22 + visualPower * 14 + swing * 5);
+      const anchorX = dir > 0 ? cx + 3 : cx - 3;
+      const anchorY = cy + 2;
       const dtActive = devilTriggerTimer > 0;
+      // Wider swing arc for more dramatic slash
       const baseAngle = dir > 0
-        ? -0.8 + swing * 1.6
-        : Math.PI + 0.8 - swing * 1.6;
+        ? -1.2 + swing * 2.0
+        : Math.PI + 1.2 - swing * 2.0;
       const tipX = Math.round(anchorX + Math.cos(baseAngle) * bladeLen);
       const tipY = Math.round(anchorY + Math.sin(baseAngle) * bladeLen);
 
-      // Blade segments
-      const segments = 8;
-      for (let i = 0; i <= segments; i++) {
-        const t = i / segments;
-        const lx = Math.round(anchorX + (tipX - anchorX) * t);
-        const ly = Math.round(anchorY + (tipY - anchorY) * t);
-        const alpha = (1 - t * 0.4) * ratio;
-        ctx.fillStyle = dtActive
-          ? `rgba(255, ${Math.floor(80 + t * 120)}, ${Math.floor(40 + t * 60)}, ${alpha.toFixed(2)})`
-          : `rgba(${Math.floor(180 + t * 75)}, ${Math.floor(210 + t * 45)}, 255, ${alpha.toFixed(2)})`;
-        ctx.fillRect(lx - 1, ly - 1, 3, 2);
-      }
-
-      // Bright tip
-      const tipAlpha = ratio * 0.8;
-      ctx.fillStyle = dtActive
-        ? `rgba(255, 100, 60, ${tipAlpha.toFixed(2)})`
-        : `rgba(255, 255, 255, ${tipAlpha.toFixed(2)})`;
-      ctx.fillRect(tipX - 2, tipY - 2, 4, 4);
-
-      // Trail arc
-      if (swing > 0.2) {
-        const trailAlpha = (swing - 0.2) * 0.6 * ratio;
-        ctx.strokeStyle = dtActive
-          ? `rgba(255, 60, 30, ${trailAlpha.toFixed(2)})`
-          : `rgba(160, 200, 255, ${trailAlpha.toFixed(2)})`;
+      // Slash trail arc (wide crescent)
+      if (swing > 0.1) {
+        const trailAlpha = (swing - 0.1) * 0.7 * ratio;
+        ctx.save();
+        ctx.globalAlpha = trailAlpha;
+        ctx.strokeStyle = dtActive ? "#ff4422" : "#88bbff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const startA = dir > 0 ? -1.2 : Math.PI + 1.2;
+        const endA = baseAngle;
+        ctx.arc(anchorX, anchorY, bladeLen * 0.85, startA, endA, dir < 0);
+        ctx.stroke();
+        // Inner brighter trail
+        ctx.strokeStyle = dtActive ? "#ffaa66" : "#cceeff";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        const startA = dir > 0 ? -0.8 : Math.PI + 0.8;
-        const endA = baseAngle;
-        ctx.arc(anchorX, anchorY, bladeLen * 0.8, startA, endA, dir < 0);
+        ctx.arc(anchorX, anchorY, bladeLen * 0.75, startA, endA, dir < 0);
         ctx.stroke();
+        ctx.restore();
       }
+
+      // Blade body: tapered sword shape
+      ctx.save();
+      ctx.translate(anchorX, anchorY);
+      ctx.rotate(baseAngle);
+      // Blade outline
+      ctx.fillStyle = dtActive
+        ? `rgba(200, 60, 30, ${(ratio * 0.5).toFixed(2)})`
+        : `rgba(140, 170, 220, ${(ratio * 0.45).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(0, -2);
+      ctx.lineTo(bladeLen * 0.85, -1);
+      ctx.lineTo(bladeLen, 0);
+      ctx.lineTo(bladeLen * 0.85, 1);
+      ctx.lineTo(0, 2);
+      ctx.closePath();
+      ctx.fill();
+      // Blade core (bright edge)
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 200, 120, ${(ratio * 0.7).toFixed(2)})`
+        : `rgba(220, 240, 255, ${(ratio * 0.65).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(2, -1);
+      ctx.lineTo(bladeLen * 0.8, 0);
+      ctx.lineTo(2, 1);
+      ctx.closePath();
+      ctx.fill();
+      // Guard crosspiece
+      ctx.fillStyle = dtActive ? "#cc8844" : "#8899aa";
+      ctx.fillRect(-1, -3, 3, 6);
+      ctx.restore();
+
+      // Tip sparkle
+      const tipAlpha = ratio * 0.9;
+      ctx.fillStyle = dtActive
+        ? `rgba(255, 180, 80, ${tipAlpha.toFixed(2)})`
+        : `rgba(255, 255, 255, ${tipAlpha.toFixed(2)})`;
+      ctx.fillRect(tipX - 1, tipY - 1, 3, 3);
       return;
     }
     if (isMorningStarSpin) {
@@ -14996,12 +15262,54 @@
       ctx.fillStyle = gunColors[gunType];
       ctx.fillText("GUN:" + gunName, gx, gy);
     }
+    // --- Style Indicator ---
+    {
+      const styleColors = {
+        swordmaster: "#ff6644", trickster: "#44aaff",
+        gunslinger: "#ffcc44", royalguard: "#44ff88",
+      };
+      const styleShort = {
+        swordmaster: "SM", trickster: "TR",
+        gunslinger: "GS", royalguard: "RG",
+      };
+      ctx.font = "bold 7px monospace";
+      ctx.textBaseline = "top";
+      const sx = 72;
+      const sy = H - 12;
+      ctx.fillStyle = styleColors[playerStyle] || "#ffffff";
+      ctx.fillText(styleShort[playerStyle] || "??", sx, sy);
+    }
+    // --- Royal Guard Energy ---
+    if (playerStyle === "royalguard" && royalGuardEnergy > 0) {
+      const rgRatio = royalGuardEnergy / ROYAL_GUARD_MAX_ENERGY;
+      ctx.fillStyle = "rgba(10, 20, 10, 0.5)";
+      ctx.fillRect(6, H - 26, 50, 4);
+      ctx.fillStyle = `rgba(${Math.floor(60 + rgRatio * 195)}, 255, ${Math.floor(100 + (1 - rgRatio) * 100)}, 0.8)`;
+      ctx.fillRect(6, H - 26, Math.floor(50 * rgRatio), 4);
+      ctx.font = "6px monospace";
+      ctx.fillStyle = "#88ffaa";
+      ctx.fillText("RG", 58, H - 27);
+    }
     // --- Taunt Bonus Indicator ---
     if (tauntBonusTimer > 0) {
       const tbAlpha = clamp(tauntBonusTimer / 60, 0.3, 1.0);
       ctx.font = "7px monospace";
       ctx.fillStyle = `rgba(255, 220, 60, ${tbAlpha})`;
-      ctx.fillText("TAUNT x" + TAUNT_RANK_MULTIPLIER.toFixed(1), 6, H - 22);
+      ctx.fillText("TAUNT x" + TAUNT_RANK_MULTIPLIER.toFixed(1), 6, H - 34);
+    }
+    // --- Overdrive Charge ---
+    if (driveChargeActive && driveChargeTimer > 0) {
+      const chargeRatio = clamp(driveChargeTimer / DRIVE_CHARGE_TIME, 0, 1);
+      ctx.fillStyle = "rgba(10, 10, 20, 0.5)";
+      ctx.fillRect(W * 0.5 - 25, H - 16, 50, 4);
+      const ready = chargeRatio >= 1;
+      ctx.fillStyle = ready ? "#ffaa00" : "#6688cc";
+      ctx.fillRect(W * 0.5 - 25, H - 16, Math.floor(50 * chargeRatio), 4);
+      if (ready) {
+        ctx.font = "7px monospace";
+        ctx.fillStyle = "#ffcc44";
+        ctx.fillText("OVERDRIVE!", W * 0.5 - 22, H - 24);
+      }
     }
   }
 
@@ -16134,6 +16442,7 @@
     KeyU: "burst",
     KeyS: "down",
     KeyT: "taunt",
+    KeyV: "styleChange",
     Enter: "start",
   };
   // Keys that also set "up" direction (ArrowUp and W)
@@ -16255,16 +16564,24 @@
       scheduleBGM();
       const actions = sampleActions();
 
-      // Style system disabled - always swordmaster with gun on K
-      if (false && actions.styleChangePressed) {
-        if (playerStyle === "berserker") playerStyle = "gunner";
-        else if (playerStyle === "gunner") playerStyle = "swordmaster";
-        else playerStyle = "berserker";
+      // DMC Style Change (V key)
+      if (actions.styleChangePressed) {
+        const styles = ["swordmaster", "trickster", "gunslinger", "royalguard"];
+        const styleNames = {
+          swordmaster: "SWORDMASTER!",
+          trickster: "TRICKSTER!",
+          gunslinger: "GUNSLINGER!",
+          royalguard: "ROYAL GUARD!",
+        };
+        const idx = styles.indexOf(playerStyle);
+        playerStyle = styles[(idx + 1) % styles.length];
 
-        hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE"
-          : playerStyle === "gunner" ? "GUNNER STYLE"
-          : "SWORDMASTER STYLE";
+        hudMessage = styleNames[playerStyle] || playerStyle.toUpperCase();
         hudTimer = 60;
+
+        // Flash effect
+        triggerImpact(1.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 2.0);
+        if (seWhipSwing) playSound(seWhipSwing, 0.5, 1.6);
 
         // Reset timers to prevent jams
         shotReloadTimer = 0;
