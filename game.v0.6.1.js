@@ -411,7 +411,7 @@
   const SWORD_STINGER_DURATION = 20;
   const SWORD_STINGER_SPEED = 7.0;
   const SWORD_UPPER_DURATION = 12;
-  const SWORD_UPPER_HANG_TIME = 20;       // ~0.33 second hang time (reduced from 60)
+  const SWORD_UPPER_HANG_TIME = 30;       // ~0.5 second hang time for air combos
   const SWORD_SLAM_DURATION = 18;
   const SWORD_SLAM_REACH = 38;
   const SWORD_SLAM_HEIGHT = 40;
@@ -6460,9 +6460,7 @@
 
     if (shotReloadTimer > 0) shotReloadTimer -= dt;
 
-    // --- Always use Swordmaster attack processing (style system disabled) ---
-    attackChargeTimer = 0;
-    attackChargeReadyPlayed = false;
+    // --- Swordmaster + charge spin attack ---
     updateSwordmasterAttack(dt, actions);
     return;
 
@@ -6843,27 +6841,65 @@
     // A/D = left/right direction (shared with movement keys)
     if (actions.attackPressed) {
       const fwd = (input.right && player.facing > 0) || (input.left && player.facing < 0);
+      const hasDirection = fwd || input.jump || input.down;
       if (!player.onGround) {
         // --- Air attacks ---
+        // Brief hang before attack for better air control
+        player.vy = Math.min(player.vy, 0.2);
         // Air + J = Helm Breaker (叩き落とし) — always slam down in air
         performSwordSlam();
         airComboCount++;
         airComboDisplayTimer = 90;
-      } else {
-        // --- Ground attacks ---
+        attackChargeTimer = 0;
+        attackChargeReadyPlayed = false;
+        return;
+      } else if (hasDirection) {
+        // --- Direction attacks (instant on press) ---
         if (input.jump) {
           performSwordUpper();  // W + J = High Time (打ち上げ)
         } else if (fwd) {
           performSwordStinger(); // D/A + J = Stinger (突進斬り)
         } else if (input.down) {
           performSwordSlam();   // Down + J = Ground slam
-        } else {
-          performSwordCombo();   // J = Normal combo (通常コンボ)
         }
+        attackChargeTimer = 0;
+        attackChargeReadyPlayed = false;
+        return;
       }
-      swordChargeTimer = 0;
-      swordChargeReadyPlayed = false;
+      // No direction: start charging for spin attack (or quick tap combo)
+      attackChargeTimer = 1; // Start charge
+    }
+
+    // Charge accumulation while J is held (no direction)
+    if (input.attack && attackChargeTimer > 0) {
+      const chargeMul = battleRankChargeMultiplier();
+      attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt * chargeMul);
+      // Play ready SFX when spin threshold is reached
+      if (!attackChargeReadyPlayed && attackChargeTimer >= ATTACK_MORNINGSTAR_SPIN_MIN) {
+        attackChargeReadyPlayed = true;
+        playChargeReadySfx();
+      }
       return;
+    }
+
+    // J released — check charge level
+    if (actions.attackReleased && attackChargeTimer > 0) {
+      if (attackChargeTimer >= ATTACK_MORNINGSTAR_SPIN_MIN) {
+        // Charged enough → spin attack (ぐるっと回す)
+        releaseChargeAttack(attackChargeTimer);
+      } else {
+        // Quick tap → normal combo
+        performSwordCombo();
+      }
+      attackChargeTimer = 0;
+      attackChargeReadyPlayed = false;
+      return;
+    }
+
+    // Reset charge if attack not held
+    if (!input.attack) {
+      attackChargeTimer = 0;
+      attackChargeReadyPlayed = false;
     }
   }
 
@@ -6960,7 +6996,7 @@
     const dir = player.facing;
     const rankIdx = battleRankIndex;
     const reach = 24 + rankIdx * 2;
-    const power = 2.0 + rankIdx * 0.12;
+    const power = 1.0 + rankIdx * 0.06; // Low damage — purpose is launch, not kill
 
     // Launch player and enemies upward
     player.vy = -7;
@@ -6973,7 +7009,26 @@
       h: 28,
     };
 
-    swordHitEnemies(hitBox, dir, power, 0.3, true); // true = launch enemies up
+    // Direct launch: skip kickEnemy damage, manually launch enemies
+    const crisisMul = pinchAttackMultiplier();
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlap(hitBox, enemy)) continue;
+      // Light damage only (1 HP)
+      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
+      if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) enemy.hp = enemy.maxHp;
+      enemy.hp = Math.max(1, enemy.hp - 1); // Never kill — always leave at least 1 HP
+      // Strong upward launch
+      enemy.vx = dir * 0.3;
+      enemy.vy = -(9.0 + power * 0.8);
+      enemy.onGround = false;
+      enemy.hitstun = Math.max(enemy.hitstun || 0, 40); // Long hitstun for air combos
+      enemy.flash = 14;
+      const hx = enemy.x + enemy.w * 0.5;
+      const hy = enemy.y + enemy.h * 0.4;
+      spawnWaveBurst(hx, hy, 0.8);
+      if (devilTriggerTimer > 0) devilTriggerHitCount++;
+    }
     swordHitBoss(hitBox, dir, power, true);
     swordUpperHangTimer = SWORD_UPPER_HANG_TIME;
     triggerImpact(2.2, player.x + player.w * 0.5, player.y, 4);
@@ -7216,19 +7271,22 @@
     const py = player.y + player.h * 0.45;
     const rankIdx = battleRankIndex;
 
+    // Rank-scaled fire rate: faster at higher ranks
+    const rankReload = Math.max(4, DEDICATED_GUN_RELOAD - rankIdx * 1.2);
+
     // Air + Down + K = Bullet Rain (下方向に弾をばらまく)
     if (!player.onGround && input.down) {
-      player.vy = Math.min(player.vy, 0.3); // Hang in air
-      const bulletCount = 2 + Math.floor(rankIdx * 0.5);
+      player.vy = Math.min(player.vy, -0.2); // Strong hang in air
+      const bulletCount = 4 + Math.floor(rankIdx * 1.5);
       for (let i = 0; i < bulletCount; i++) {
-        const spread = (Math.random() - 0.5) * 3.0;
+        const spread = (Math.random() - 0.5) * 8.0;
         stage.playerWaves.push({
-          kind: "bullet", x: px + spread * 4, y: py + 4, w: 6, h: 6,
-          vx: spread, vy: 5.0 + Math.random() * 2, ttl: 40, power: 0.5
+          kind: "bullet", x: px + spread * 6, y: py + 4, w: 6, h: 6,
+          vx: spread * 0.8, vy: 4.0 + Math.random() * 3, ttl: 50, power: 0.4
         });
       }
       if (seHandgun) playSound(seHandgun, 0.5, 0.9);
-      dedicatedGunCooldown = DEDICATED_GUN_RELOAD + 4;
+      dedicatedGunCooldown = rankReload + 2;
       triggerImpact(1.0, px, py + 10, 2.0);
       battleRankGainByStyle("bullet_rain", 0.8);
       hudMessage = "BULLET RAIN!";
@@ -7236,9 +7294,9 @@
       return;
     }
 
-    // Normal gun: air shooting gives hang time
+    // Normal gun: air shooting gives stronger hang time
     if (!player.onGround) {
-      player.vy = Math.min(player.vy, 0.5);
+      player.vy = Math.min(player.vy, -0.1);
     }
 
     // Fire handgun
@@ -7248,7 +7306,7 @@
       vx: dir * speed, vy: (Math.random() - 0.5) * 0.3, ttl: 65, power: 0.6
     });
     if (seHandgun) playSound(seHandgun, 0.45);
-    dedicatedGunCooldown = DEDICATED_GUN_RELOAD;
+    dedicatedGunCooldown = rankReload;
     triggerImpact(0.5, px + dir * 10, py, 1.0);
     battleRankGainByStyle("gun_shot", 0.6);
   }
@@ -9352,6 +9410,7 @@
           };
           swordHitEnemies(hitBox, dir, power, 0.1); // Very low knockback
           swordHitBoss(hitBox, dir, power);
+          hitStopTimer = 0; // No freeze during rapid stabs
           // Keep caught enemies locked in place
           for (const enemy of stingerCaughtEnemies) {
             if (!enemy.alive) continue;
@@ -9366,9 +9425,9 @@
           if (seHandgun) playSound(seHandgun, 0.3, 1.2 + Math.random() * 0.4);
           battleRankGainByStyle("million_stab", 0.5);
         }
-        // Extending: if J is held/pressed again, extend duration slightly
-        if (actions.attackPressed && millionStabTimer > 4) {
-          millionStabTimer = Math.min(millionStabTimer + 6, MILLION_STAB_DURATION);
+        // Extending: if J is held/mashed, extend duration
+        if (input.attack && millionStabTimer > 4) {
+          millionStabTimer = Math.min(millionStabTimer + dt * 0.5, MILLION_STAB_DURATION);
         }
         if (millionStabTimer <= 0) {
           millionStabActive = false;
@@ -9561,6 +9620,7 @@
           };
           swordHitEnemies(hitBox, dir, power, 0.1);
           swordHitBoss(hitBox, dir, power);
+          hitStopTimer = 0; // No freeze during rapid stabs
           for (const enemy of stingerCaughtEnemies) {
             if (!enemy.alive) continue;
             enemy.x = player.x + dir * (player.w + 2);
@@ -9574,8 +9634,8 @@
           if (seHandgun) playSound(seHandgun, 0.3, 1.2 + Math.random() * 0.4);
           battleRankGainByStyle("million_stab", 0.5);
         }
-        if (actions.attackPressed && millionStabTimer > 4) {
-          millionStabTimer = Math.min(millionStabTimer + 6, MILLION_STAB_DURATION);
+        if (input.attack && millionStabTimer > 4) {
+          millionStabTimer = Math.min(millionStabTimer + dt * 0.5, MILLION_STAB_DURATION);
         }
         if (millionStabTimer <= 0) {
           millionStabActive = false;
@@ -13188,7 +13248,7 @@
   }
 
   function drawPlayerTrueColorPass() {
-    const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
+    const hurtBlink = damageInvulnTimer > 0 && !swordStingerActive && !millionStabActive && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (hurtBlink) return;
     if (invincibleTimer > 0) {
       drawInvincibleBikeRide();
@@ -15406,7 +15466,7 @@
     KeyL: "dash",
     KeyI: "weaponSwitch",
     KeyU: "burst",
-    KeyS: "styleChange",
+    KeyS: "down",
     Enter: "start",
   };
   // Keys that also set "up" direction (ArrowUp and W)
