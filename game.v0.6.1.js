@@ -182,7 +182,91 @@
   // --- Royal Guard ---
   let royalGuardEnergy = 0;           // Stored energy from blocking
   let royalGuardBlockTimer = 0;       // Active guard frames
-  const ROYAL_GUARD_BLOCK_WINDOW = 10; // Frames of active guard
+  const ROYAL_GUARD_BLOCK_WINDOW_BASE = 16; // Base frames of active guard
+  const ROYAL_GUARD_JUST_WINDOW = 6;       // First 6 frames = Just Guard
+  let royalGuardFlashTimer = 0;       // Visual flash on successful guard
+  let royalGuardFlashColor = "#22ff88";
+  // Royal Guard scales with battle rank
+  function royalGuardBlockWindow() {
+    // Base 16f → up to 28f at max rank
+    return ROYAL_GUARD_BLOCK_WINDOW_BASE + battleRankIndex * 2;
+  }
+  function royalGuardBoxScale() {
+    // Guard box grows with rank: 1.0 → 1.6 at rank 6
+    return 1.0 + battleRankIndex * 0.1;
+  }
+  // Just Guard timing: returns guard quality 0-2
+  // 2 = Just Guard (first 6f), 1 = Normal Guard (rest of window), 0 = not guarding
+  function royalGuardQuality() {
+    if (royalGuardBlockTimer <= 0) return 0;
+    const window = royalGuardBlockWindow();
+    const elapsed = window - royalGuardBlockTimer;
+    if (elapsed <= ROYAL_GUARD_JUST_WINDOW) return 2; // Just Guard
+    return 1; // Normal Guard
+  }
+  // Unified Royal Guard success effect — called from all guard locations
+  function applyRoyalGuardSuccess(energyGain, rankPower, label) {
+    const quality = royalGuardQuality();
+    const isJust = quality >= 2;
+    const gpx = player.x + player.w * 0.5;
+    const gpy = player.y + player.h * 0.5;
+
+    // Just Guard: much more energy, rank, effects
+    const energyMul = isJust ? 2.0 : 1.0;
+    const rankMul = isJust ? 2.0 : 1.0;
+    royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + energyGain * energyMul);
+    battleRankDodgeChain++;
+
+    // Guard level from chain
+    const chainLevel = battleRankDodgeChain >= 4 ? 3 : battleRankDodgeChain >= 2 ? 2 : 1;
+    const effectLevel = isJust ? Math.max(chainLevel, 2) : chainLevel;
+
+    // HUD message
+    if (isJust) {
+      hudMessage = effectLevel >= 3 ? "PERFECT JUST GUARD!!" : "JUST GUARD!!";
+    } else {
+      hudMessage = effectLevel >= 3 ? "PERFECT GUARD!" : label || "GUARD!";
+    }
+    hudTimer = isJust ? 50 : 35;
+
+    // Visual feedback — Just Guard is bigger
+    royalGuardFlashTimer = isJust ? 20 : 12;
+    royalGuardFlashColor = isJust
+      ? (effectLevel >= 3 ? "#ffff00" : "#00ffff")
+      : (effectLevel >= 3 ? "#ffff00" : effectLevel >= 2 ? "#44ffaa" : "#22ff88");
+
+    const impactStr = isJust ? 4.0 + effectLevel : 2.5 + effectLevel * 0.5;
+    triggerImpact(impactStr, gpx, gpy, impactStr + 1);
+    hitStopTimer = Math.max(hitStopTimer, isJust ? 6 + effectLevel * 2 : 3 + effectLevel);
+
+    // Particles — Just Guard spawns more and brighter
+    const particleCount = isJust ? 12 + effectLevel * 4 : 6 + effectLevel * 2;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2;
+      const speed = (isJust ? 3.0 : 2.0) + effectLevel * 0.5;
+      hitSparks.push({
+        x: gpx, y: gpy,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        life: 12 + effectLevel * 3, maxLife: 12 + effectLevel * 3,
+        color: royalGuardFlashColor,
+      });
+    }
+    // Just Guard: extra sparkle ring
+    if (isJust) {
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        hitSparks.push({
+          x: gpx + Math.cos(angle) * 18, y: gpy + Math.sin(angle) * 16,
+          vx: Math.cos(angle) * 0.8, vy: Math.sin(angle) * 0.8,
+          life: 20, maxLife: 20, color: "#ffffff",
+        });
+      }
+    }
+
+    if (seStrongHit) playSound(seStrongHit, isJust ? 1.0 : 0.7, isJust ? 1.0 : 1.2);
+    battleRankGainByStyle("royal_guard", rankPower * rankMul + battleRankDodgeChain * 0.4);
+    damageInvulnTimer = Math.max(damageInvulnTimer, isJust ? 30 : 15);
+  }
   const ROYAL_GUARD_MAX_ENERGY = 100;
   // --- Drive Charge (charged drive = Overdrive, fires multiple waves) ---
   let driveChargeTimer = 0;
@@ -232,11 +316,12 @@
   let swordAttackCooldown = 0;
   let swordChargeTimer = 0;
   let swordChargeReadyPlayed = false;
-  // Devil Trigger (Swordmaster Burst)
+  // Devil Trigger (Style-specific Burst)
   let devilTriggerTimer = 0;
   let devilTriggerDuration = 0;
   let devilTriggerHitCount = 0;
   let devilTriggerResultTimer = 0;
+  let devilTriggerStyle = "swordmaster"; // Style that activated DT
   let devilTriggerResultCount = 0;
 
   // --- Combat Dash/Dodge System ---
@@ -842,18 +927,34 @@
     return clamp((battleRankGauge - curr.threshold) / span, 0, 1);
   }
 
+  // Style-specific signature moves — no spam penalty for your current style's moves
+  const STYLE_SIGNATURE_MOVES = {
+    swordmaster: ["prop_shredder", "overdrive", "drive", "air_slash"],
+    trickster: ["trickster", "air_trick", "dodge_success"],
+    gunslinger: ["twosome_time", "bullet_rain", "gun_handgun", "gun_shotgun", "gun_grenade"],
+    royalguard: ["royal_guard", "royal_release"],
+  };
+
   function battleRankGainByStyle(styleKey, power = 1) {
     const style = styleKey || "impact";
     const p = clamp(power, 0.8, 4.8);
     // Base gain reduced — raw hits give less; variety gives more
     let gain = 12 + p * 4.0;
 
+    // Check if this is a signature move for the current style — exempt from spam penalty
+    const sigMoves = STYLE_SIGNATURE_MOVES[playerStyle] || [];
+    const isSignature = sigMoves.includes(style);
+
     const sameStyle = style === battleRankLastStyle;
-    if (sameStyle) {
+    if (sameStyle && !isSignature) {
       battleRankStyleStreak += 1;
       // Heavy penalty for spamming the same move
       gain *= Math.max(0.2, 0.75 - battleRankStyleStreak * 0.15);
       battleRankComboVariety = Math.max(0, battleRankComboVariety - 1);
+    } else if (sameStyle && isSignature) {
+      // Signature moves: mild diminishing returns instead of penalty
+      battleRankStyleStreak += 1;
+      gain *= Math.max(0.6, 1.0 - battleRankStyleStreak * 0.05);
     } else {
       const seenRecent = battleRankRecentStyles.includes(style);
       battleRankStyleStreak = 0;
@@ -960,8 +1061,8 @@
     const prevChargeMul = battleRankChargeMultiplier();
     const maxIndex = BATTLE_RANK_DATA.length - 1;
     const currIndex = clamp(battleRankIndex, 0, maxIndex);
-    const sTierIndex = Math.min(3, maxIndex);
-    const dropSteps = currIndex >= sTierIndex ? 2 : 1;
+    // Always drop exactly 2 ranks on damage (not full reset)
+    const dropSteps = 2;
     const nextIndex = Math.max(0, currIndex - dropSteps);
 
     battleRankIndex = nextIndex;
@@ -3196,10 +3297,13 @@
           hudMessage = `BURST: ATTACK ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
           hudTimer = 28;
         }
-      } else if (playerStyle === "swordmaster") {
+      } else if (playerStyle === "swordmaster" || playerStyle === "trickster"
+              || playerStyle === "gunslinger" || playerStyle === "royalguard") {
+        // All 4 main styles use Devil Trigger with style-specific effects
+        const dtNames = { swordmaster: "DEVIL", trickster: "QUICK", gunslinger: "WILD", royalguard: "DREAD" };
         if (!triggerDevilTrigger()) {
           if (devilTriggerTimer > 0 || isTimeBurstActive() || proteinBurstTimer > 0) return;
-          hudMessage = `BURST: DEVIL ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
+          hudMessage = `BURST: ${dtNames[playerStyle]} ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
           hudTimer = 28;
         }
       } else {
@@ -4705,8 +4809,16 @@
     if (devilTriggerTimer > 0 && !ignoreInvincible && !instantGameOver) {
       if (invincibleHitCooldown > 0) return;
       invincibleHitCooldown = 6;
-      hudMessage = "SUPER ARMOR!";
+      // Royal Guard DT: counter-damage on hit absorb
+      if (devilTriggerStyle === "royalguard") {
+        hudMessage = "DREADNAUGHT!";
+        royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 15);
+        devilTriggerHitCount++;
+      } else {
+        hudMessage = "SUPER ARMOR!";
+      }
       hudTimer = 20;
+      const colors = DT_STYLE_COLORS[devilTriggerStyle] || DT_STYLE_COLORS.swordmaster;
       triggerImpact(0.7, player.x + player.w * 0.5, player.y + player.h * 0.5, 1.0);
       return;
     }
@@ -4717,7 +4829,9 @@
       if (emergencyDodgeActive) return;
 
       if (!emergencyDodgeSkipNext) {
-        const dodgeChance = EMERGENCY_DODGE_CHANCE[clamp(battleRankIndex, 0, EMERGENCY_DODGE_CHANCE.length - 1)] || 0;
+        let dodgeChance = EMERGENCY_DODGE_CHANCE[clamp(battleRankIndex, 0, EMERGENCY_DODGE_CHANCE.length - 1)] || 0;
+        // Trickster: +20% emergency dodge chance
+        if (playerStyle === "trickster") dodgeChance = Math.min(0.9, dodgeChance + 0.2);
         if (dodgeChance > 0 && Math.random() < dodgeChance) {
           emergencyDodgeActive = true;
           emergencyDodgeTimer = EMERGENCY_DODGE_WINDOW;
@@ -5386,6 +5500,12 @@
         : bullet;
       const touchingPlayer = overlap(player, hit);
       if (touchingPlayer) {
+        // Royal Guard: absorb hazard bullets during block (Just Guard aware)
+        if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+          bullet.dead = true;
+          applyRoyalGuardSuccess(20, 1.5, "GUARD!");
+          continue;
+        }
         killPlayer(bullet.reason || "飛び道具に被弾");
       } else {
         tryRegisterProjectileGraze(bullet, hit, bullet.kind === "cannon" ? 1.08 : 0.92);
@@ -6795,7 +6915,7 @@
           if (tier === 0) {
             const rankIdx = battleRankIndex;
             const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
-            shotReloadTimer = reloadBase;
+            shotReloadTimer = Math.floor(reloadBase * dtShotReloadMul());
           }
         } else {
           // Not enough ammo - prompt reload
@@ -6865,7 +6985,7 @@
         for (let i = 0; i < actualFire; i++) {
           const ang = startAngle + i;
           stage.playerWaves.push({
-            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.85
+            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.85 * dtShotPowerMul()
           });
         }
         if (seShotgun) playSound(seShotgun, 0.7);
@@ -6897,11 +7017,10 @@
     const dir = player.facing;
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.45;
+    const sPow = dtShotPowerMul();
 
     if (tier === 3) { // Bazooka / Grenade
-      // Fixed power (no rank scaling) - costs 15 ammo
-      const powerBase = 5.5;
-      // Fixed size
+      const powerBase = 5.5 * sPow;
       const sizeBase = 36;
       stage.playerWaves.push({
         kind: "bazooka", x: px + dir * 20, y: py - 4, w: sizeBase, h: 12, vx: dir * 4.5, vy: 0, ttl: 120, power: powerBase, spin: 0
@@ -6910,18 +7029,26 @@
       // Handled in fireRangedWeapon
     } else if (tier === 1) { // Machine Gun
       const rankIdx = battleRankIndex;
-      // Slower speed: 4.8 start (reduced from 6.0)
       const speed = 4.8 + rankIdx * 1.3;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 55, power: 0.4
+        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 55, power: 0.4 * sPow
       });
     } else { // Handgun
       const rankIdx = battleRankIndex;
-      // Slower speed: 4.5 start (reduced from 5.5)
       const speed = 4.5 + rankIdx * 1.2;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 65, power: 0.5
+        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 65, power: 0.5 * sPow
       });
+      // Gunslinger DT: extra angled shot
+      if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") {
+        stage.playerWaves.push({
+          kind: "bullet", x: px + dir * 15, y: py - 4, w: 6, h: 4, vx: dir * speed, vy: -1.2, ttl: 50, power: 0.35 * sPow
+        });
+        stage.playerWaves.push({
+          kind: "bullet", x: px + dir * 15, y: py + 4, w: 6, h: 4, vx: dir * speed, vy: 1.2, ttl: 50, power: 0.35 * sPow
+        });
+        if (devilTriggerTimer > 0) devilTriggerHitCount++;
+      }
     }
   }
 
@@ -6955,6 +7082,11 @@
     // Devil Trigger update
     if (devilTriggerTimer > 0) {
       devilTriggerTimer -= dt;
+      // Royal Guard DT: maintain auto-block aura & energy regen
+      if (devilTriggerStyle === "royalguard") {
+        royalGuardBlockTimer = Math.max(royalGuardBlockTimer, 8);
+        royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 0.15 * dt);
+      }
       if (devilTriggerTimer <= 0) {
         endDevilTrigger();
       }
@@ -7027,16 +7159,18 @@
     // W/↑/Space = up direction (shared with jump key)
     // A/D = left/right direction (shared with movement keys)
     if (actions.attackPressed) {
-      // Stinger requires near-simultaneous direction+attack (direction held < 6 frames)
-      const fwd = movingFwd && directionHoldTimer < 6;
+      // Stinger: direction+attack (generous 12 frame window)
+      const fwd = movingFwd && directionHoldTimer < 12;
       const hasDirection = fwd || input.jump || input.down;
       if (!player.onGround) {
-        // Swordmaster: ↓+J in air = Prop Shredder (multi-hit spin)
-        if (playerStyle === "swordmaster" && input.down) {
+        // Swordmaster: ↓+J in air OR any J after 2nd aerial hit = Prop Shredder
+        const smPropReady = playerStyle === "swordmaster" && (input.down || airComboStage >= 2);
+        if (smPropReady) {
           performPropShredder();
           airComboCount++;
           airComboDisplayTimer = 90;
           attackChargeTimer = 0;
+          // Don't reset airComboStage so player can keep spinning
           return;
         }
         // --- Aerial Rave: 4-stage air combo (DMC style) ---
@@ -7069,8 +7203,8 @@
         return;
       } else if (hasDirection) {
         // --- Direction attacks (instant on press) ---
-        if (input.jump) {
-          performSwordUpper();  // W + J = High Time (打ち上げ)
+        if (input.jump || input.up) {
+          performSwordUpper();  // W/↑ + J = High Time (打ち上げ)
         } else if (fwd) {
           performSwordStinger(); // D/A + J = Stinger (突進斬り)
         } else if (input.down) {
@@ -7339,8 +7473,8 @@
     // Launch shockwave projectile
     const waveW = dtActive ? 22 : 16;
     const waveH = dtActive ? 16 : 12;
-    const waveSpeed = (4.5 + rankIdx * 0.5) * (dtActive ? 1.4 : 1);
-    const waveTtl = dtActive ? 80 : 55;
+    const waveSpeed = (3.5 + rankIdx * 0.35) * (dtActive ? 1.3 : 1);
+    const waveTtl = dtActive ? 50 : 32;
     stage.playerWaves.push({
       kind: "drive",
       x: px + dir * 12,
@@ -7539,7 +7673,7 @@
       player.x = clamp(player.x, BOSS_ARENA.minX + 2, BOSS_ARENA.maxX - player.w - 2);
     }
 
-    tricksterCooldown = TRICKSTER_COOLDOWN;
+    tricksterCooldown = Math.floor(TRICKSTER_COOLDOWN * dtTricksterCooldownMul());
     damageInvulnTimer = Math.max(damageInvulnTimer, 18);
 
     // Afterimage particles at old position
@@ -7635,18 +7769,20 @@
 
     if (!nearest) return false;
 
-    // Teleport near the target
+    // Teleport above the target — ready for immediate enemy step
     const oldX = player.x;
     const oldY = player.y;
     const dir = nearest.x > px ? 1 : -1;
-    player.x = nearest.x - dir * (player.w + 4);
-    player.y = nearest.y - player.h * 0.5;
+    player.x = nearest.x - dir * (player.w * 0.5);
+    player.y = nearest.y - player.h - 6; // Position above enemy
     player.x = clamp(player.x, 0, stage.width - player.w);
+    player.y = Math.max(0, player.y);
     player.facing = dir;
-    player.vy = Math.min(player.vy, -1.0); // Slight upward momentum
+    player.vy = 0.5; // Slight downward = ready for stomp
     player.onGround = false;
+    stompChainGuardTimer = Math.max(stompChainGuardTimer, 12); // Assist stomp window
 
-    tricksterCooldown = TRICKSTER_COOLDOWN;
+    tricksterCooldown = Math.floor(TRICKSTER_COOLDOWN * dtTricksterCooldownMul());
     damageInvulnTimer = Math.max(damageInvulnTimer, 12);
 
     // Trail particles from old to new position
@@ -7902,7 +8038,20 @@
     }
   }
 
-  // --- Devil Trigger (Swordmaster Burst) ---
+  // --- Devil Trigger (Style-specific Burst) ---
+  const DT_STYLE_NAMES = {
+    swordmaster: "DEVIL TRIGGER!",
+    trickster:   "QUICKSILVER!!",
+    gunslinger:  "WILD TRIGGER!",
+    royalguard:  "DREADNAUGHT!!",
+  };
+  const DT_STYLE_COLORS = {
+    swordmaster: { tint: [180, 20, 0], vignette: [120, 0, 0], bar: "#ff3300", flash: "#ff4400" },
+    trickster:   { tint: [0, 60, 200], vignette: [0, 20, 140], bar: "#4488ff", flash: "#44ccff" },
+    gunslinger:  { tint: [180, 140, 0], vignette: [120, 80, 0], bar: "#ffcc00", flash: "#ffdd44" },
+    royalguard:  { tint: [0, 140, 60], vignette: [0, 80, 30], bar: "#22ff88", flash: "#44ffaa" },
+  };
+
   function triggerDevilTrigger() {
     if (devilTriggerTimer > 0) return false;
     if (isTimeBurstActive() || proteinBurstTimer > 0) return false;
@@ -7913,12 +8062,38 @@
     devilTriggerDuration = seconds * 60;
     devilTriggerTimer = devilTriggerDuration;
     devilTriggerHitCount = 0;
+    devilTriggerStyle = playerStyle;
     proteinBurstGauge1 = 0;
     proteinBurstGauge2 = 0;
 
-    hudMessage = "DEVIL TRIGGER!";
+    // Style-specific activation effects
+    const gpx = player.x + player.w * 0.5;
+    const gpy = player.y + player.h * 0.5;
+    hudMessage = DT_STYLE_NAMES[playerStyle] || "DEVIL TRIGGER!";
     hudTimer = 80;
-    triggerImpact(4, player.x + player.w * 0.5, player.y + player.h * 0.5, 5);
+    triggerImpact(4, gpx, gpy, 5);
+
+    // Royal Guard DT: start with full energy
+    if (playerStyle === "royalguard") {
+      royalGuardEnergy = ROYAL_GUARD_MAX_ENERGY;
+    }
+    // Trickster DT: reset cooldown instantly
+    if (playerStyle === "trickster") {
+      tricksterCooldown = 0;
+      combatDashCooldown = 0;
+    }
+
+    // Style-colored activation burst
+    const colors = DT_STYLE_COLORS[playerStyle] || DT_STYLE_COLORS.swordmaster;
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      hitSparks.push({
+        x: gpx, y: gpy,
+        vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4,
+        life: 18, maxLife: 18, color: colors.flash,
+      });
+    }
+
     if (seBurst1Max) playSound(seBurst1Max, 0.9);
     return true;
   }
@@ -7934,19 +8109,54 @@
     return devilTriggerTimer > 0;
   }
 
-  // Devil Trigger power multipliers
+  // Devil Trigger power multipliers — vary by DT style
   function dtPowerMul() {
-    let m = devilTriggerTimer > 0 ? 1.5 : 1;
-    if (playerStyle === "swordmaster") m *= 1.15; // Swordmaster damage bonus
-    return m;
+    if (devilTriggerTimer <= 0) {
+      return playerStyle === "swordmaster" ? 1.15 : 1;
+    }
+    // DT active: style-specific damage bonus
+    switch (devilTriggerStyle) {
+      case "swordmaster": return 1.5 * 1.15; // Best melee damage
+      case "gunslinger":  return 1.3;         // Moderate (gun bonus elsewhere)
+      case "royalguard":  return 1.2;         // Defensive focus
+      case "trickster":   return 1.25;        // Speed focus
+      default:            return 1.5;
+    }
   }
   function dtReachMul() {
-    let m = devilTriggerTimer > 0 ? 1.25 : 1;
-    if (playerStyle === "swordmaster") m *= 1.1; // Swordmaster reach bonus
-    return m;
+    if (devilTriggerTimer <= 0) {
+      return playerStyle === "swordmaster" ? 1.1 : 1;
+    }
+    switch (devilTriggerStyle) {
+      case "swordmaster": return 1.25 * 1.1;
+      case "trickster":   return 1.15;
+      default:            return 1.1;
+    }
   }
   function dtKnockMul() { return devilTriggerTimer > 0 ? 1.3 : 1; }
   function dtSparkCount() { return devilTriggerTimer > 0 ? 3 : 0; }
+  // Gunslinger DT: shot power & fire rate
+  function dtShotPowerMul() {
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") return 2.0;
+    return 1;
+  }
+  function dtShotReloadMul() {
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") return 0.4;
+    return 1;
+  }
+  // Trickster DT: speed & cooldown
+  function dtTricksterCooldownMul() {
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "trickster") return 0.3;
+    return 1;
+  }
+  function dtMovementSpeedMul() {
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "trickster") return 1.5;
+    return 1;
+  }
+  // Royal Guard DT: auto-guard aura
+  function dtRoyalGuardAutoBlock() {
+    return devilTriggerTimer > 0 && devilTriggerStyle === "royalguard";
+  }
   // Counter-attack bonus after emergency dodge
   function counterAttackMul() { return emergencyDodgeCounterTimer > 0 ? 2.0 : 1; }
 
@@ -8007,42 +8217,50 @@
           combatDashCooldown = COMBAT_DASH_COOLDOWN;
           return true;
         }
-        // Block mode
-        royalGuardBlockTimer = ROYAL_GUARD_BLOCK_WINDOW;
-        damageInvulnTimer = Math.max(damageInvulnTimer, ROYAL_GUARD_BLOCK_WINDOW + 4);
+        // Block mode — scales with battle rank
+        const guardWindow = royalGuardBlockWindow();
+        royalGuardBlockTimer = guardWindow;
+        damageInvulnTimer = Math.max(damageInvulnTimer, guardWindow + 6);
         player.vx *= 0.3;
         hudMessage = "GUARD!";
         hudTimer = 15;
         if (seWhipSwing) playSound(seWhipSwing, 0.3, 0.8);
-        // Absorb nearby damage into energy
+        // Guard box scales with rank — proactive check on press
+        const gs = royalGuardBoxScale();
         const guardBox = {
-          x: player.x - 8, y: player.y - 4,
-          w: player.w + 16, h: player.h + 8,
+          x: player.x - Math.floor(14 * gs), y: player.y - Math.floor(8 * gs),
+          w: player.w + Math.floor(28 * gs), h: player.h + Math.floor(16 * gs),
         };
         let absorbed = false;
         for (const bullet of stage.hazardBullets) {
           if (bullet.dead) continue;
           if (!overlap(guardBox, bullet)) continue;
           bullet.dead = true;
-          royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 25);
           absorbed = true;
         }
         for (const shot of stage.bossShots) {
           if (shot.dead) continue;
           if (!overlap(guardBox, shot)) continue;
           shot.dead = true;
-          royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 35);
           absorbed = true;
         }
-        if (absorbed) {
-          battleRankDodgeChain++;
-          hudMessage = battleRankDodgeChain >= 3 ? "PERFECT GUARD!" : "JUST GUARD!";
-          hudTimer = 30;
-          triggerImpact(2.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 3.0);
-          if (seStrongHit) playSound(seStrongHit, 0.7, 1.2);
-          battleRankGainByStyle("royal_guard", 2.5 + battleRankDodgeChain * 0.4);
+        for (const enemy of stage.enemies) {
+          if (!enemy.alive || enemy.kicked) continue;
+          if (!overlap(guardBox, enemy)) continue;
+          const ex = enemy.x + enemy.w * 0.5;
+          const px2 = player.x + player.w * 0.5;
+          if (Math.abs(ex - px2) < 30) {
+            enemy.hitstun = Math.max(enemy.hitstun || 0, 30);
+            enemy.flash = Math.max(enemy.flash || 0, 15);
+            enemy.vx = (ex > px2 ? 1 : -1) * 3.0;
+            absorbed = true;
+          }
         }
-        combatDashCooldown = 8;
+        if (absorbed) {
+          // This is frame-0 guard = always Just Guard
+          applyRoyalGuardSuccess(30, 2.5, "GUARD SUCCESS!");
+        }
+        combatDashCooldown = 6;
         return true;
       }
 
@@ -8160,50 +8378,41 @@
     const rankReload = Math.max(3, (DEDICATED_GUN_RELOAD - rankIdx * 1.2) * gunslingerBonus);
 
     // Air + Down/S + K = Bullet Rain (真下に弾を打ち込む)
-    // Duration scales with rank; cooldown after use
+    // Continues until player lands — no duration limit
     if (!player.onGround && input.down && bulletRainCooldown <= 0) {
-      const maxDuration = 30 + rankIdx * 12; // Rank 0: ~30f(0.5s), Rank 6: ~102f(1.7s)
-      if (bulletRainTimer <= 0) bulletRainTimer = maxDuration;
-      if (bulletRainTimer > 0) {
-        player.vy = 0; // Completely freeze in air
-        const isGunslinger = playerStyle === "gunslinger";
-        const bulletCount = 1 + Math.floor(rankIdx * 0.5) + (isGunslinger ? 1 : 0); // 1~4 bullets
-        const hSpread = 0.6 + rankIdx * 0.15 + (isGunslinger ? 0.3 : 0); // Wider at high rank
-        for (let i = 0; i < bulletCount; i++) {
-          const spread = (Math.random() - 0.5) * hSpread;
-          stage.playerWaves.push({
-            kind: "bullet", x: px + spread * 6, y: py + 6, w: 5, h: 5,
-            vx: spread * 0.5, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6
-          });
-        }
-        if (seHandgun) playSound(seHandgun, 0.5, 0.9);
-        dedicatedGunCooldown = rankReload;
-        triggerImpact(0.6, px, py + 10, 1.5);
-        battleRankGainByStyle("bullet_rain", 0.8);
-        bulletRainTimer -= dedicatedGunCooldown; // Consume duration per shot
-        if (bulletRainTimer <= 0) {
-          // Duration expired — enter cooldown
-          bulletRainCooldown = 60 + (6 - rankIdx) * 8; // Higher rank = shorter cooldown
-          hudMessage = "RAIN END";
-          hudTimer = 20;
-        } else {
-          hudMessage = "BULLET RAIN!";
-          hudTimer = 8;
-        }
-        return;
+      bulletRainTimer = 1; // Mark as active
+      player.vy = Math.min(player.vy + 0.08, 1.5); // Slow descent (eventually lands)
+      const isGunslinger = playerStyle === "gunslinger";
+      const bulletCount = 1 + Math.floor(rankIdx * 0.5) + (isGunslinger ? 1 : 0);
+      const hSpread = 0.6 + rankIdx * 0.15 + (isGunslinger ? 0.3 : 0);
+      for (let i = 0; i < bulletCount; i++) {
+        const spread = (Math.random() - 0.5) * hSpread;
+        stage.playerWaves.push({
+          kind: "bullet", x: px + spread * 6, y: py + 6, w: 5, h: 5,
+          vx: spread * 0.5, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6
+        });
       }
+      if (seHandgun) playSound(seHandgun, 0.5, 0.9);
+      dedicatedGunCooldown = rankReload;
+      triggerImpact(0.6, px, py + 10, 1.5);
+      battleRankGainByStyle("bullet_rain", 0.8);
+      hudMessage = "BULLET RAIN!";
+      hudTimer = 8;
+      return;
     }
-    // Reset bullet rain if not using it (landed or released down)
-    if (player.onGround || !input.down) {
-      if (bulletRainTimer > 0) {
-        bulletRainCooldown = 40 + (6 - rankIdx) * 6; // Partial cooldown on cancel
-      }
+    // End bullet rain on landing
+    if (player.onGround && bulletRainTimer > 0) {
+      bulletRainCooldown = 30 + (6 - rankIdx) * 4; // Short cooldown after landing
+      bulletRainTimer = 0;
+      hudMessage = "RAIN END";
+      hudTimer = 15;
+    }
+    if (!input.down || player.onGround) {
       bulletRainTimer = 0;
     }
 
-    // Gunslinger: back+K = Twosome Time (fire both directions)
-    const backHeld = (input.left && player.facing > 0) || (input.right && player.facing < 0);
-    if (playerStyle === "gunslinger" && backHeld) {
+    // Gunslinger: ↓+K (ground) = Twosome Time (fire both directions)
+    if (playerStyle === "gunslinger" && input.down && player.onGround) {
       performTwosomeTime();
       dedicatedGunCooldown = rankReload;
       if (!player.onGround) player.vy = Math.min(player.vy, -0.2);
@@ -8227,32 +8436,34 @@
       triggerImpact(0.5, px + dir * 10, py, 1.0);
       battleRankGainByStyle("gun_handgun", 0.6);
     } else if (gunType === 1) {
-      // Shotgun: spread shot, slower fire rate
+      // Shotgun: short-range spread, high stagger
       const pellets = 4 + Math.min(3, Math.floor(rankIdx * 0.6));
-      const spreadBase = 0.5 + rankIdx * 0.1;
+      const spreadBase = 0.6 + rankIdx * 0.12;
       const startAngle = -Math.floor(pellets / 2);
       for (let i = 0; i < pellets; i++) {
         const ang = startAngle + i;
         stage.playerWaves.push({
-          kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5,
-          vx: dir * 7.5, vy: ang * spreadBase, ttl: 20, power: 0.7
+          kind: "shotgun", x: px + dir * 8, y: py, w: 5, h: 5,
+          vx: dir * 5.5, vy: ang * spreadBase, ttl: 12, power: 1.0,
+          stagger: true,  // Flag for hitstun
         });
       }
       if (seShotgun) playSound(seShotgun, 0.7);
       dedicatedGunCooldown = Math.max(8, rankReload * 2.5);
-      triggerImpact(1.2, px + dir * 10, py, 2.0);
+      triggerImpact(1.5, px + dir * 8, py, 2.5);
       battleRankGainByStyle("gun_shotgun", 1.0);
     } else {
-      // Grenade: explosive projectile, slow fire rate
+      // Grenade: arcing projectile, explodes on enemy contact or after time
       const powerBase = 3.0 + rankIdx * 0.3;
-      const sizeBase = 28 + rankIdx * 2;
       stage.playerWaves.push({
-        kind: "bazooka", x: px + dir * 14, y: py - 4, w: sizeBase, h: 10,
-        vx: dir * 4.0, vy: -0.8, ttl: 90, power: powerBase, spin: 0
+        kind: "grenade", x: px + dir * 10, y: py - 6, w: 8, h: 8,
+        vx: dir * 3.5, vy: -4.0, gravity: 0.15,
+        ttl: 120, power: powerBase, spin: 0,
+        exploded: false, bounced: 0,
       });
-      if (seBazooka) playSound(seBazooka, 0.7);
+      if (seBazooka) playSound(seBazooka, 0.6);
       dedicatedGunCooldown = Math.max(12, rankReload * 4);
-      triggerImpact(1.5, px + dir * 14, py, 2.5);
+      triggerImpact(0.8, px + dir * 10, py, 1.5);
       battleRankGainByStyle("gun_grenade", 1.5);
     }
   }
@@ -8281,7 +8492,82 @@
       let parryHits = 0;
       let parryX = wave.x + wave.w * 0.5;
       let parryY = wave.y + wave.h * 0.5;
-      if (wave.kind === "bazooka") {
+      if (wave.kind === "grenade") {
+        // Arc trajectory with gravity
+        wave.x += wave.vx * dt;
+        wave.vy += (wave.gravity || 0.15) * dt;
+        wave.y += wave.vy * dt;
+        wave.spin = (wave.spin || 0) + dt * 0.4;
+        // Bounce off ground
+        const groundY = H - 24;
+        if (wave.y + wave.h > groundY && wave.vy > 0) {
+          wave.y = groundY - wave.h;
+          wave.vy = -wave.vy * 0.4;
+          wave.vx *= 0.7;
+          wave.bounced = (wave.bounced || 0) + 1;
+          if (wave.bounced >= 3 || Math.abs(wave.vy) < 0.3) {
+            // Explode after too many bounces
+            wave.ttl = 0;
+          }
+        }
+        // Check solid collision → bounce
+        const cx = wave.x + wave.w * 0.5;
+        const cy = wave.y + wave.h * 0.5;
+        for (const s of solids) {
+          if (s.kind === "crumble" && s.state === "gone") continue;
+          if (overlap(wave, s)) {
+            if (wave.vy > 0 && wave.y + wave.h > s.y && wave.y < s.y + 4) {
+              wave.y = s.y - wave.h;
+              wave.vy = -wave.vy * 0.35;
+              wave.vx *= 0.7;
+              wave.bounced++;
+            } else {
+              wave.ttl = 0; // Hit wall → explode
+            }
+            break;
+          }
+        }
+        // Check enemy collision → explode on contact
+        let hitEnemy = false;
+        for (const enemy of stage.enemies) {
+          if (!enemy.alive || enemy.kicked) continue;
+          if (overlap(wave, enemy)) { hitEnemy = true; break; }
+        }
+        if (!hitEnemy) {
+          for (const boss of getBossEntities()) {
+            if (boss.hp <= 0) continue;
+            if (overlap(wave, boss)) { hitEnemy = true; break; }
+          }
+        }
+        if (hitEnemy || wave.ttl <= 0) {
+          // EXPLODE! Spawn explosion wave
+          wave.dead = true;
+          const ex = wave.x + wave.w * 0.5;
+          const ey = wave.y + wave.h * 0.5;
+          const blastSize = 36 + battleRankIndex * 3;
+          stage.playerWaves.push({
+            kind: "explosion",
+            x: ex - blastSize * 0.5, y: ey - blastSize * 0.5,
+            w: blastSize, h: blastSize,
+            vx: 0, vy: 0, ttl: 18, power: wave.power * 1.5,
+            anim: 0,
+          });
+          triggerImpact(3.0, ex, ey, 4.0);
+          if (seBazooka) playSound(seBazooka, 0.9, 0.7);
+          // Explosion particles
+          for (let i = 0; i < 10; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1.5 + Math.random() * 3;
+            hitSparks.push({
+              x: ex, y: ey,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed - 1.5,
+              life: 12 + Math.random() * 8, maxLife: 20,
+              color: ["#ff6600", "#ffaa00", "#ff3300", "#ffcc44"][Math.floor(Math.random() * 4)],
+            });
+          }
+        }
+      } else if (wave.kind === "bazooka") {
         wave.x += wave.vx * dt;
         wave.y += wave.vy * dt;
         wave.spin = (wave.spin || 0) + dt * 0.35;
@@ -8369,8 +8655,13 @@
           const gunDmg = Math.max(1, Math.round((wave.power || 0.5) * 0.6));
           enemy.hp = Math.max(0, enemy.hp - gunDmg);
           enemy.flash = Math.max(enemy.flash || 0, 6);
-          // Light flinch but no big knockback — bullets chip away
-          if (!enemy.kicked) {
+          // Shotgun: heavy stagger + pushback
+          if (wave.stagger && !enemy.kicked) {
+            enemy.hitstun = Math.max(enemy.hitstun || 0, 18);
+            enemy.flash = Math.max(enemy.flash || 0, 12);
+            enemy.vx = dir * 2.0; // Knockback
+          } else if (!enemy.kicked) {
+            // Light flinch — bullets chip away
             enemy.hitstun = Math.max(enemy.hitstun || 0, 4);
           }
           if (enemy.hp <= 0 && !enemy.kicked) {
@@ -8601,7 +8892,8 @@
       if (stompable) {
         const dir = player.x + player.w * 0.5 < enemy.x + enemy.w * 0.5 ? 1 : -1;
         const pLv = proteinLevel();
-        const stompPower = ((weakPartyGuest ? 1.28 : 1.45) + pLv * 0.045) * crisisMul;
+        const tricksterBonus = playerStyle === "trickster" ? 1.4 : 1.0;
+        const stompPower = ((weakPartyGuest ? 1.28 : 1.45) + pLv * 0.045) * crisisMul * tricksterBonus;
         kickEnemy(enemy, dir, stompPower + 0.35, { rankStyle: "stomp" });
         player.vy = -6.35 - Math.min(0.45, Math.abs(player.vx) * 0.08);
         player.vx += dir * 0.12;
@@ -8662,6 +8954,17 @@
         continue;
       }
 
+      // Royal Guard: block enemy body contact (Just Guard aware)
+      if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+        const ex = enemy.x + enemy.w * 0.5;
+        const px2 = player.x + player.w * 0.5;
+        const isJust = royalGuardQuality() >= 2;
+        enemy.hitstun = Math.max(enemy.hitstun || 0, isJust ? 45 : 30);
+        enemy.flash = Math.max(enemy.flash || 0, isJust ? 20 : 15);
+        enemy.vx = (ex > px2 ? 1 : -1) * (isJust ? 4.0 : 2.5);
+        applyRoyalGuardSuccess(30, 2.5, "GUARD SUCCESS!");
+        continue;
+      }
       if (enemy.kind === "peacock") {
         killPlayer("孔雀に接触");
       } else {
@@ -8714,7 +9017,8 @@
           const hitX = b.x + b.w * 0.5;
           const hitY = b.y + b.h * 0.25;
           const bf = rollBlackFlashHit(hitX, hitY, 1.28 + (kickCombo > 1 ? 0.24 : 0));
-          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier() * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
+          const tricksterStompMul = playerStyle === "trickster" ? 1.4 : 1.0;
+          const damage = Math.max(1, Math.round((1 + bossDamageBonus()) * pinchAttackMultiplier() * tricksterStompMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
           b.hp = Math.max(0, b.hp - damage);
           b.invuln = BOSS_HIT_INVULN_FRAMES;
           b.vx += dir * (0.72 + (bf ? 0.28 : 0));
@@ -8748,6 +9052,16 @@
       if (stompChainGuardTimer > 0) {
         player.vy = Math.min(player.vy, -4.8);
         player.onGround = false;
+        return;
+      }
+
+      // Royal Guard: block boss contact / charge attacks (Just Guard aware)
+      if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+        const gpx = player.x + player.w * 0.5;
+        const pushDir = gpx < b.x + b.w * 0.5 ? -1 : 1;
+        player.vx = pushDir * 2.5;
+        const energy = b.mode === "dash" ? 50 : 35;
+        applyRoyalGuardSuccess(energy, 3.0, b.mode === "dash" ? "CHARGE GUARD!" : "GUARD SUCCESS!");
         return;
       }
 
@@ -9683,6 +9997,12 @@
 
       const touchingPlayer = overlap(player, shot);
       if (touchingPlayer) {
+        // Royal Guard: absorb boss shots during block (Just Guard aware)
+        if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+          shot.dead = true;
+          applyRoyalGuardSuccess(35, 2.0, "GUARD!");
+          continue;
+        }
         killPlayer(shot.reason || "ボス弾に被弾");
       } else if (shot.kind !== "rain_warn") {
         const grazePower = shot.kind === "rain" ? 1.14 : shot.kind === "spiral" || shot.kind === "nova" || shot.kind === "nova2" ? 1.22 : 1.02;
@@ -10351,7 +10671,7 @@
         player.vx *= Math.pow(friction, dt);
       }
 
-      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
+      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1) * dtMovementSpeedMul();
       player.vx = clamp(player.vx, -speedCap, speedCap);
 
       if (actions.jumpPressed && player.onGround) {
@@ -10573,7 +10893,7 @@
         player.vx *= Math.pow(friction, dt);
       }
 
-      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
+      const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1) * dtMovementSpeedMul();
       player.vx = clamp(player.vx, -speedCap, speedCap);
 
       if (actions.jumpPressed && player.onGround) {
@@ -12964,6 +13284,29 @@
     if (wave.kind === "shotgun") {
       ctx.fillStyle = "#fffacd"; // Lemon Chiffon
       ctx.fillRect(x, y, wave.w, wave.h);
+      return;
+    }
+    if (wave.kind === "grenade") {
+      ctx.save();
+      ctx.translate(x + wave.w * 0.5, y + wave.h * 0.5);
+      ctx.rotate(wave.spin || 0);
+      // Grenade body (round)
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#556655";
+      ctx.fill();
+      // Pin/highlight
+      ctx.beginPath();
+      ctx.arc(-1, -1, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#88aa88";
+      ctx.fill();
+      // Fuse spark
+      const sparkAlpha = 0.5 + Math.sin((wave.spin || 0) * 4) * 0.5;
+      ctx.beginPath();
+      ctx.arc(3, -3, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 200, 50, ${sparkAlpha.toFixed(2)})`;
+      ctx.fill();
+      ctx.restore();
       return;
     }
     if (wave.kind === "bazooka") {
@@ -15548,6 +15891,26 @@
       ctx.fillStyle = "#88ffaa";
       ctx.fillText("RG", 58, H - 27);
     }
+    // Royal Guard flash overlay on successful guard
+    if (royalGuardFlashTimer > 0) {
+      royalGuardFlashTimer -= 1;
+      const flashAlpha = clamp(royalGuardFlashTimer / 15, 0, 0.35);
+      ctx.fillStyle = royalGuardFlashColor;
+      ctx.globalAlpha = flashAlpha;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+      // Shield circle around player
+      const spx = player.x + player.w * 0.5 - cameraX;
+      const spy = player.y + player.h * 0.5;
+      const shieldR = 16 + (15 - royalGuardFlashTimer) * 1.5;
+      ctx.strokeStyle = royalGuardFlashColor;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = clamp(royalGuardFlashTimer / 15, 0, 0.8);
+      ctx.beginPath();
+      ctx.arc(spx, spy, shieldR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     // --- Taunt Bonus Indicator ---
     if (tauntBonusTimer > 0) {
       const tbAlpha = clamp(tauntBonusTimer / 60, 0.3, 1.0);
@@ -16347,39 +16710,59 @@
       const alpha = clamp(devilTriggerResultTimer / 60, 0, 1);
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#ff3300";
+      const resultColors = DT_STYLE_COLORS[devilTriggerStyle] || DT_STYLE_COLORS.swordmaster;
+      ctx.fillStyle = resultColors.bar;
       ctx.font = "bold 12px monospace";
       ctx.textAlign = "center";
-      ctx.fillText(`DEVIL TRIGGER RESULT: ${devilTriggerResultCount} HITS!`, W * 0.5, H * 0.35);
+      const resultName = (DT_STYLE_NAMES[devilTriggerStyle] || "DEVIL TRIGGER!").replace(/!+$/, "");
+      ctx.fillText(`${resultName} RESULT: ${devilTriggerResultCount} HITS!`, W * 0.5, H * 0.35);
       ctx.restore();
     }
 
     if (devilTriggerTimer <= 0) return;
 
-    // Red world tint
+    // Style-specific tint colors
+    const colors = DT_STYLE_COLORS[devilTriggerStyle] || DT_STYLE_COLORS.swordmaster;
+    const [tr, tg, tb] = colors.tint;
+    const [vr, vg, vb] = colors.vignette;
+
     const ratio = clamp(devilTriggerTimer / devilTriggerDuration, 0, 1);
     const pulse = 0.5 + Math.sin(performance.now() * 0.004) * 0.15;
     const intensity = 0.12 + pulse * 0.06;
 
-    ctx.fillStyle = `rgba(180, 20, 0, ${intensity * ratio})`;
+    // World tint (style-colored)
+    ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${intensity * ratio})`;
     ctx.fillRect(0, 0, W, H);
 
     // Vignette edges
     const grad = ctx.createRadialGradient(W * 0.5, H * 0.5, W * 0.2, W * 0.5, H * 0.5, W * 0.7);
     grad.addColorStop(0, "rgba(0, 0, 0, 0)");
-    grad.addColorStop(1, `rgba(120, 0, 0, ${0.15 * ratio})`);
+    grad.addColorStop(1, `rgba(${vr}, ${vg}, ${vb}, ${0.15 * ratio})`);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // DT timer bar
+    // DT timer bar (style-colored)
     const barW = 60;
     const barH = 3;
     const barX = Math.floor(W * 0.5 - barW * 0.5);
     const barY = 18;
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-    ctx.fillStyle = `rgba(255, ${Math.floor(50 + pulse * 50)}, 0, 0.9)`;
+    ctx.fillStyle = colors.bar;
+    ctx.globalAlpha = 0.8 + pulse * 0.2;
     ctx.fillRect(barX, barY, Math.floor(barW * ratio), barH);
+    ctx.globalAlpha = 1;
+
+    // Style name label
+    const dtLabel = DT_STYLE_NAMES[devilTriggerStyle] || "DEVIL TRIGGER!";
+    if (ratio > 0.9) {
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = colors.flash;
+      ctx.globalAlpha = clamp((ratio - 0.9) * 10, 0, 1);
+      ctx.fillText(dtLabel.replace("!", "").replace("!", ""), W * 0.5, barY + barH + 9);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawProteinBurstLaserOverlay() {
@@ -16771,7 +17154,7 @@
     // ArrowUp/W also sets "up" direction for attack combos
     if (keyAlsoUp[e.code]) input.up = true;
 
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(e.code)) {
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
       e.preventDefault();
     }
   });
