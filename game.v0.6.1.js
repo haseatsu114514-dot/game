@@ -192,15 +192,17 @@
   let combatDashTimer = 0;
   let combatDashCooldown = 0;
   let combatDashDir = 1;
-  const COMBAT_DASH_DURATION = 16;
-  const COMBAT_DASH_SPEED = 8.0;
-  const COMBAT_DASH_COOLDOWN = 20;
-  const COMBAT_DASH_INVULN = 22;
+  const COMBAT_DASH_DURATION = 22;
+  const COMBAT_DASH_SPEED = 12.0;
+  const COMBAT_DASH_COOLDOWN = 12;
+  const COMBAT_DASH_INVULN = 35;
 
   // --- Air Combo Tracker ---
   let airComboCount = 0;
   let airComboMaxHits = 6;
   let airComboDisplayTimer = 0;
+  let airComboStage = 0; // 0=first hit, 1=second hit, 2=slam down
+  let airComboWindow = 0; // Frames to chain next air hit
   let airGunHangTime = 8; // Frames of reduced gravity when shooting in air
 
   // --- Dedicated Gun (always available) ---
@@ -208,6 +210,7 @@
   const DEDICATED_GUN_RELOAD = 12;
   let bulletRainTimer = 0;     // Remaining duration (frames)
   let bulletRainCooldown = 0;  // Cooldown after use
+  let bulletRainRotation = false; // Upside-down rotation during bullet rain
 
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
@@ -393,10 +396,10 @@
 
   const VOICE_VOL = 0.7;
 
-  const EMERGENCY_DODGE_WINDOW = 90;
-  const EMERGENCY_DODGE_SLOWMO_SCALE = 0.12;
-  const EMERGENCY_DODGE_INVULN_DURATION = 60;
-  const EMERGENCY_DODGE_CHANCE = [0, 0.08, 0.15, 0.22, 0.30, 0.40, 0.50];
+  const EMERGENCY_DODGE_WINDOW = 120;
+  const EMERGENCY_DODGE_SLOWMO_SCALE = 0.08;
+  const EMERGENCY_DODGE_INVULN_DURATION = 90;
+  const EMERGENCY_DODGE_CHANCE = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65];
   const SHOT_CHARGE_MAX = 120;
   const SHOT_TIER2_THRESHOLD = 60; // Medium charge (Shotgun)
   const SHOT_TIER1_THRESHOLD = 20; // Small charge (Machinegun)
@@ -5313,9 +5316,18 @@
       }
 
       if (enemy.hitstun > 0) {
+        // Decrement launch timer (skip ground collision during initial launch)
+        if (enemy.launchTimer > 0) enemy.launchTimer -= enemyDt;
         enemy.vy = Math.min(enemy.vy + GRAVITY * enemyDt, MAX_FALL);
         enemy.vx *= Math.pow(enemy.kind === "bruiser" ? 0.9 : 0.84, enemyDt);
-        moveWithCollisions(enemy, solids, enemyDt);
+        if (enemy.launchTimer > 0) {
+          // During launch: move freely without ground collision
+          enemy.x += enemy.vx * enemyDt;
+          enemy.y += enemy.vy * enemyDt;
+          enemy.onGround = false;
+        } else {
+          moveWithCollisions(enemy, solids, enemyDt);
+        }
         if (enemy.x <= enemy.minX) {
           enemy.x = enemy.minX;
           enemy.dir = 1;
@@ -6847,11 +6859,19 @@
       const fwd = (input.right && player.facing > 0) || (input.left && player.facing < 0);
       const hasDirection = fwd || input.jump || input.down;
       if (!player.onGround) {
-        // --- Air attacks ---
-        // Brief hang before attack for better air control
+        // --- Air attacks: 3-stage combo ---
+        // Stage 0,1: horizontal slashes, Stage 2: slam down
         player.vy = Math.min(player.vy, 0.2);
-        // Air + J = Helm Breaker (叩き落とし) — always slam down in air
-        performSwordSlam();
+        if (airComboStage < 2) {
+          performAirSlash(airComboStage);
+          airComboStage++;
+          airComboWindow = 30; // Frames to chain next hit
+        } else {
+          // 3rd hit: slam down
+          performSwordSlam();
+          airComboStage = 0;
+          airComboWindow = 0;
+        }
         airComboCount++;
         airComboDisplayTimer = 90;
         attackChargeTimer = 0;
@@ -7024,11 +7044,13 @@
       }
       if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
       enemy.hp = Math.max(1, enemy.hp - 1); // Never kill — always leave at least 1 HP
-      // Strong upward launch
+      // Strong upward launch — move enemy up immediately to clear ground
       enemy.vx = dir * 0.3;
-      enemy.vy = -(9.0 + power * 0.8);
+      enemy.vy = -(12.0 + power * 1.2);
+      enemy.y -= 6; // Nudge up to clear ground collision
       enemy.onGround = false;
-      enemy.hitstun = Math.max(enemy.hitstun || 0, 40); // Long hitstun for air combos
+      enemy.launchTimer = 12; // Skip ground collision during initial launch
+      enemy.hitstun = Math.max(enemy.hitstun || 0, 50); // Long hitstun for air combos
       enemy.flash = 14;
       const hx = enemy.x + enemy.w * 0.5;
       const hy = enemy.y + enemy.h * 0.4;
@@ -7092,6 +7114,36 @@
     attackEffectMode = "sword";
     hudMessage = "HELM BREAKER!";
     hudTimer = 40;
+  }
+
+  // Air combo slash (stages 1 & 2) — horizontal hit while airborne
+  function performAirSlash(stage_num) {
+    const dir = player.facing;
+    const rankIdx = battleRankIndex;
+    const reach = 26 + rankIdx * 2;
+    const power = 1.2 + rankIdx * 0.08;
+
+    // Brief hang in air
+    player.vy = Math.min(player.vy, -0.5);
+
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 4 : player.x - reach + 4,
+      y: player.y + 2,
+      w: reach,
+      h: 16,
+    };
+
+    swordHitEnemies(hitBox, dir, power, 0.15); // Low knockback to keep enemy in range
+    swordHitBoss(hitBox, dir, power);
+    triggerImpact(1.5, player.x + dir * reach * 0.5, player.y + 8, 2);
+    spawnSwordSlash(dir, stage_num + 1);
+
+    if (seStrongHit) playSound(seStrongHit, 0.6, 1.0 + stage_num * 0.15);
+    swordAttackCooldown = 8;
+    attackEffectTimer = 8;
+    attackEffectMode = "sword";
+    hudMessage = stage_num === 0 ? "AIR COMBO 1!" : "AIR COMBO 2!";
+    hudTimer = 15;
   }
 
   function swordHitEnemies(hitBox, dir, power, knockMul, launchUp) {
@@ -7290,22 +7342,26 @@
       if (bulletRainTimer <= 0) bulletRainTimer = maxDuration;
       if (bulletRainTimer > 0) {
         player.vy = 0; // Completely freeze in air
+        bulletRainRotation = true; // Flip character upside-down
+        // Cap fire rate minimum to 6 frames to reduce lag
+        const rainReload = Math.max(6, rankReload);
         const bulletCount = 1 + Math.floor(rankIdx * 0.3); // 1~2 bullets per shot
         for (let i = 0; i < bulletCount; i++) {
           const spread = (Math.random() - 0.5) * 0.6; // Almost straight down
           stage.playerWaves.push({
             kind: "bullet", x: px + spread * 2, y: py + 6, w: 5, h: 5,
-            vx: spread * 0.15, vy: 6.0 + Math.random() * 1.0, ttl: 35, power: 0.5
+            vx: spread * 0.15, vy: 10.0 + Math.random() * 2.0, ttl: 30, power: 0.5
           });
         }
         if (seHandgun) playSound(seHandgun, 0.5, 0.9);
-        dedicatedGunCooldown = rankReload;
+        dedicatedGunCooldown = rainReload;
         triggerImpact(0.6, px, py + 10, 1.5);
         battleRankGainByStyle("bullet_rain", 0.8);
-        bulletRainTimer -= dedicatedGunCooldown; // Consume duration per shot
+        bulletRainTimer -= rainReload; // Consume duration per shot
         if (bulletRainTimer <= 0) {
           // Duration expired — enter cooldown
           bulletRainCooldown = 60 + (6 - rankIdx) * 8; // Higher rank = shorter cooldown
+          bulletRainRotation = false;
           hudMessage = "RAIN END";
           hudTimer = 20;
         } else {
@@ -7321,6 +7377,35 @@
         bulletRainCooldown = 40 + (6 - rankIdx) * 6; // Partial cooldown on cancel
       }
       bulletRainTimer = 0;
+      bulletRainRotation = false;
+    }
+
+    // Ground + Down + K = 3-direction spread shot (up, left, right)
+    if (player.onGround && input.down) {
+      const speed = 7.0 + rankIdx * 1.2;
+      const spreadPower = 0.5 + rankIdx * 0.04;
+      // Up
+      stage.playerWaves.push({
+        kind: "bullet", x: px, y: py - 4, w: 5, h: 5,
+        vx: (Math.random() - 0.5) * 0.3, vy: -speed, ttl: 50, power: spreadPower
+      });
+      // Left
+      stage.playerWaves.push({
+        kind: "bullet", x: px - 4, y: py, w: 5, h: 5,
+        vx: -speed, vy: (Math.random() - 0.5) * 0.3, ttl: 50, power: spreadPower
+      });
+      // Right
+      stage.playerWaves.push({
+        kind: "bullet", x: px + 4, y: py, w: 5, h: 5,
+        vx: speed, vy: (Math.random() - 0.5) * 0.3, ttl: 50, power: spreadPower
+      });
+      if (seHandgun) playSound(seHandgun, 0.5, 1.1);
+      dedicatedGunCooldown = rankReload;
+      triggerImpact(0.8, px, py, 2.0);
+      battleRankGainByStyle("spread_shot", 0.9);
+      hudMessage = "SPREAD SHOT!";
+      hudTimer = 15;
+      return;
     }
 
     // Normal gun: air shooting gives stronger hang time
@@ -9417,12 +9502,36 @@
       }
       if (swordStingerActive && swordStingerTimer > 0) {
         swordStingerTimer -= dt;
-        player.vx = player.facing * SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08);
+        const stingerDir = player.facing;
+        player.vx = stingerDir * SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08);
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+        // Continuous hit detection: catch new enemies during rush
+        const stingerReach = 32 + battleRankIndex * 3;
+        const stingerHitBox = {
+          x: stingerDir > 0 ? player.x + player.w : player.x - stingerReach,
+          y: player.y + 2,
+          w: stingerReach,
+          h: 16,
+        };
+        for (const enemy of stage.enemies) {
+          if (!enemy.alive || enemy.kicked) continue;
+          if (stingerCaughtEnemies.includes(enemy)) continue;
+          if (!overlap(stingerHitBox, enemy)) continue;
+          // Catch new enemy
+          enemy.vx = 0;
+          enemy.vy = 0;
+          enemy.flash = 12;
+          enemy.hitstun = Math.max(enemy.hitstun || 0, 20);
+          stingerCaughtEnemies.push(enemy);
+          const hx = enemy.x + enemy.w * 0.5;
+          const hy = enemy.y + enemy.h * 0.4;
+          spawnWaveBurst(hx, hy, 0.5);
+          if (seStrongHit) playSound(seStrongHit, 0.4);
+        }
         // Drag caught enemies along with player
         for (const enemy of stingerCaughtEnemies) {
           if (!enemy.alive) continue;
-          enemy.x = player.x + player.facing * (player.w + 2);
+          enemy.x = player.x + stingerDir * (player.w + 2);
           enemy.y = player.y + (player.h - enemy.h) * 0.5;
           enemy.vx = player.vx;
           enemy.vy = 0;
@@ -9551,6 +9660,12 @@
         battleRankGainByStyle("air_combo_finish", airComboCount * 0.5);
       }
       airComboCount = 0;
+      airComboStage = 0;
+      airComboWindow = 0;
+    }
+    if (airComboWindow > 0) {
+      airComboWindow -= dt;
+      if (airComboWindow <= 0) { airComboStage = 0; airComboWindow = 0; }
     }
     if (airComboDisplayTimer > 0) airComboDisplayTimer -= dt;
 
@@ -9752,6 +9867,12 @@
         battleRankGainByStyle("air_combo_finish", airComboCount * 0.5);
       }
       airComboCount = 0;
+      airComboStage = 0;
+      airComboWindow = 0;
+    }
+    if (airComboWindow > 0) {
+      airComboWindow -= dt;
+      if (airComboWindow <= 0) { airComboStage = 0; airComboWindow = 0; }
     }
     if (airComboDisplayTimer > 0) airComboDisplayTimer -= dt;
     if (proteinBurstTimer <= 0) {
@@ -13296,11 +13417,20 @@
     drawBoss();
     drawGoal();
     drawRushAura();
-    const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
+    const hurtBlink = damageInvulnTimer > 0 && !swordStingerActive && !millionStabActive && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (!hurtBlink) {
       drawHeroAfterimageTrail();
       if (invincibleTimer > 0) {
         drawInvincibleBikeRide();
+      } else if (bulletRainRotation) {
+        const hx = player.x - cameraX + player.w * 0.5;
+        const hy = player.y + player.h * 0.5;
+        ctx.save();
+        ctx.translate(hx, hy);
+        ctx.rotate(Math.PI);
+        ctx.translate(-hx, -hy);
+        drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+        ctx.restore();
       } else {
         drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
       }
@@ -13317,7 +13447,19 @@
       drawInvincibleBikeRide();
       return;
     }
-    drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+    if (bulletRainRotation) {
+      // Upside-down rotation during Bullet Rain
+      const hx = player.x - cameraX + player.w * 0.5;
+      const hy = player.y + player.h * 0.5;
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(Math.PI);
+      ctx.translate(-hx, -hy);
+      drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+      ctx.restore();
+    } else {
+      drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+    }
   }
 
   function drawTextPanel(lines, y = 136) {
@@ -15521,7 +15663,7 @@
     KeyD: "right",
     ArrowUp: "jump",
     KeyW: "jump",
-    Space: "jump",
+    Space: "styleChange",
     ArrowDown: "down",
     KeyJ: "attack",
     KeyF: "attack",
@@ -15650,8 +15792,8 @@
       scheduleBGM();
       const actions = sampleActions();
 
-      // Style system disabled - always swordmaster with gun on K
-      if (false && actions.styleChangePressed) {
+      // Style change with Space key
+      if (actions.styleChangePressed) {
         if (playerStyle === "berserker") playerStyle = "gunner";
         else if (playerStyle === "gunner") playerStyle = "swordmaster";
         else playerStyle = "berserker";
