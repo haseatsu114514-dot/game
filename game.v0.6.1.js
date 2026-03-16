@@ -402,8 +402,8 @@
   const SWORD_COMBO_WINDOW = 28;          // Frames to chain combo
   const SWORD_COMBO_REACH = [22, 26, 32]; // Reach per combo stage
   const SWORD_COMBO_POWER = [1.0, 1.2, 1.8]; // Base power per stage
-  const SWORD_STINGER_DURATION = 14;
-  const SWORD_STINGER_SPEED = 5.5;
+  const SWORD_STINGER_DURATION = 20;
+  const SWORD_STINGER_SPEED = 7.0;
   const SWORD_UPPER_DURATION = 12;
   const SWORD_UPPER_HANG_TIME = 20;       // ~0.33 second hang time (reduced from 60)
   const SWORD_SLAM_DURATION = 18;
@@ -3383,7 +3383,7 @@
         enemy.shootInterval = enemy.shooter ? 176 + i * 9 : 0;
         enemy.shootCooldown = enemy.shooter ? 104 + i * 7 : 0;
         enemy.flash = 0;
-        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
         enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
         enemy.hitstun = 0;
       }
@@ -3607,7 +3607,7 @@
         enemy.shootInterval = enemy.shooter ? 162 + i * 8 : 0;
         enemy.shootCooldown = enemy.shooter ? 94 + i * 7 : 0;
         enemy.flash = 0;
-        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
         enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
         enemy.hitstun = 0;
       }
@@ -3879,7 +3879,7 @@
       enemy.shootInterval = enemy.shooter ? 156 + i * 10 : 0;
       enemy.shootCooldown = enemy.shooter ? 96 + i * 10 : 0;
       enemy.flash = 0;
-      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
+      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
       enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
       enemy.hitstun = 0;
     }
@@ -4487,7 +4487,7 @@
       : false;
     const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
     const effectivePower = blackFlash && !blackFlashPowerApplied ? power * BLACK_FLASH_DAMAGE_MUL : power;
-    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 12 : enemy.kind === "peacock" ? 8 : 5)));
+    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
     if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) {
       enemy.hp = enemy.maxHp;
     }
@@ -6892,8 +6892,8 @@
   function performSwordStinger() {
     const dir = player.facing;
     const rankIdx = battleRankIndex;
-    const reach = 30 + rankIdx * 3;
-    const power = 1.5 + rankIdx * 0.1;
+    const reach = 48 + rankIdx * 4;
+    const power = 2.5 + rankIdx * 0.15;
 
     swordStingerActive = true;
     swordStingerTimer = SWORD_STINGER_DURATION;
@@ -6901,18 +6901,18 @@
 
     const hitBox = {
       x: dir > 0 ? player.x + player.w : player.x - reach,
-      y: player.y + 4,
+      y: player.y + 2,
       w: reach,
-      h: 12,
+      h: 16,
     };
 
-    swordHitEnemies(hitBox, dir, power, 1.5);
+    swordHitEnemies(hitBox, dir, power, 1.8);
     swordHitBoss(hitBox, dir, power);
-    triggerImpact(1.8, player.x + dir * reach, player.y + 10, 3);
+    triggerImpact(2.5, player.x + dir * reach, player.y + 10, 4);
     spawnSwordSlash(dir, 3);
 
-    if (seStrongHit) playSound(seStrongHit, 0.7);
-    swordAttackCooldown = 14;
+    if (seStrongHit) playSound(seStrongHit, 0.8);
+    swordAttackCooldown = 12;
     swordComboStage = 0;
     swordComboTimer = 0;
     attackEffectTimer = 12;
@@ -7012,10 +7012,13 @@
         blackFlash: bf,
         blackFlashPowerApplied: true,
       });
-      enemy.vx = dir * (3 + power * 0.8) * knockMul * crisisMul;
       if (launchUp) {
-        enemy.vy = -(6 + power * 0.5);
+        // Launch enemies strongly UPWARD with minimal horizontal movement
+        enemy.vx = dir * 0.5;  // Almost no horizontal knockback
+        enemy.vy = -(8.5 + power * 0.6);  // Strong upward launch
+        enemy.onGround = false;
       } else {
+        enemy.vx = dir * (3 + power * 0.8) * knockMul * crisisMul;
         enemy.vy = -(2 + power * 0.4) * knockMul;
       }
       enemy.flash = 12;
@@ -7173,18 +7176,37 @@
     if (!playable) return;
     if (deathAnimActive) return;
 
-    // Air gun: reduce gravity for hang time
-    if (!player.onGround) {
-      player.vy = Math.min(player.vy, 0.5);
-      airComboCount++;
-      airComboDisplayTimer = 90;
-    }
-
-    // Fire handgun using existing projectile system
     const dir = player.facing;
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.45;
     const rankIdx = battleRankIndex;
+
+    // Air + Down + K = Bullet Rain (下方向に弾をばらまく)
+    if (!player.onGround && input.down) {
+      player.vy = Math.min(player.vy, 0.3); // Hang in air
+      const bulletCount = 2 + Math.floor(rankIdx * 0.5);
+      for (let i = 0; i < bulletCount; i++) {
+        const spread = (Math.random() - 0.5) * 3.0;
+        stage.playerWaves.push({
+          kind: "bullet", x: px + spread * 4, y: py + 4, w: 6, h: 6,
+          vx: spread, vy: 5.0 + Math.random() * 2, ttl: 40, power: 0.5
+        });
+      }
+      if (seHandgun) playSound(seHandgun, 0.5, 0.9);
+      dedicatedGunCooldown = DEDICATED_GUN_RELOAD + 4;
+      triggerImpact(1.0, px, py + 10, 2.0);
+      battleRankGainByStyle("bullet_rain", 0.8);
+      hudMessage = "BULLET RAIN!";
+      hudTimer = 25;
+      return;
+    }
+
+    // Normal gun: air shooting gives hang time
+    if (!player.onGround) {
+      player.vy = Math.min(player.vy, 0.5);
+    }
+
+    // Fire handgun
     const speed = 5.5 + rankIdx * 1.0;
     stage.playerWaves.push({
       kind: "bullet", x: px + dir * 6, y: py, w: 8, h: 4,
@@ -7193,8 +7215,6 @@
     if (seHandgun) playSound(seHandgun, 0.45);
     dedicatedGunCooldown = DEDICATED_GUN_RELOAD;
     triggerImpact(0.5, px + dir * 10, py, 1.0);
-
-    // Battle rank: register as gun style for diversity bonus
     battleRankGainByStyle("gun_shot", 0.6);
   }
 
