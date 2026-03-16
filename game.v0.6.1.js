@@ -9,8 +9,8 @@
 
   const W = canvas.width;
   const H = canvas.height;
-  const GRAVITY = 0.34;
-  const MAX_FALL = 8.2;
+  const GRAVITY = 0.26;
+  const MAX_FALL = 6.0;
 
   const STATE = {
     TITLE: "title",
@@ -7382,14 +7382,46 @@
 
       for (const enemy of stage.enemies) {
         if (wave.dead) break;
-        if (!enemy.alive || enemy.kicked) continue;
         if (!waveHitbox || !overlap(waveHitbox, enemy)) continue;
         const dir = wave.vx >= 0 ? 1 : -1;
         const isGun = wave.kind === "bullet" || wave.kind === "shotgun";
-        const knockMul = isGun ? 0.4 : 1.0;
+
+        // Gun bullets: always deal damage, ignore hitstun/kicked state
+        if (isGun) {
+          if (!enemy.alive) continue;
+          enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
+          if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) enemy.hp = enemy.maxHp;
+          const gunDmg = Math.max(1, Math.round((wave.power || 0.5) * 0.6));
+          enemy.hp = Math.max(0, enemy.hp - gunDmg);
+          enemy.flash = Math.max(enemy.flash || 0, 6);
+          // Light flinch but no big knockback — bullets chip away
+          if (!enemy.kicked) {
+            enemy.hitstun = Math.max(enemy.hitstun || 0, 4);
+          }
+          if (enemy.hp <= 0 && !enemy.kicked) {
+            // Finish off with kickEnemy for proper defeat handling
+            enemy.hp = 0;
+            kickEnemy(enemy, dir, (wave.power || 0.5) * 0.5, {
+              immediateRemove: false,
+              flyLifetime: 22,
+              rankStyle: "atk1_wave_shot",
+            });
+          }
+          const hx = enemy.x + enemy.w * 0.5;
+          const hy = enemy.y + enemy.h * 0.4;
+          triggerImpact(0.4 + (wave.power || 0) * 0.2, hx, hy, 1.2);
+          spawnWaveBurst(hx, hy, 0.3 + (wave.power || 0) * 0.3);
+          playKickSfx(0.6);
+          wave.dead = true;
+          break;
+        }
+
+        // Non-gun projectiles: use original kickEnemy logic
+        if (!enemy.alive || enemy.kicked) continue;
+        const knockMul = 1.0;
         kickEnemy(enemy, dir, (1.2 + (wave.power || 0) * 0.7) * crisisMul * knockMul, {
           immediateRemove: false,
-          flyLifetime: isGun ? 22 : 38,
+          flyLifetime: 38,
           rankStyle: "atk1_wave_shot",
         });
         enemy.vx = dir * (5.1 + (wave.power || 0) * 1.3) * crisisMul * knockMul;
