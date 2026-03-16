@@ -192,10 +192,10 @@
   let combatDashTimer = 0;
   let combatDashCooldown = 0;
   let combatDashDir = 1;
-  const COMBAT_DASH_DURATION = 10;
-  const COMBAT_DASH_SPEED = 6.5;
-  const COMBAT_DASH_COOLDOWN = 18;
-  const COMBAT_DASH_INVULN = 12;
+  const COMBAT_DASH_DURATION = 16;
+  const COMBAT_DASH_SPEED = 8.0;
+  const COMBAT_DASH_COOLDOWN = 20;
+  const COMBAT_DASH_INVULN = 22;
 
   // --- Air Combo Tracker ---
   let airComboCount = 0;
@@ -410,8 +410,8 @@
   const SWORD_COMBO_WINDOW = 28;          // Frames to chain combo
   const SWORD_COMBO_REACH = [22, 26, 32]; // Reach per combo stage
   const SWORD_COMBO_POWER = [1.0, 1.2, 1.8]; // Base power per stage
-  const SWORD_STINGER_DURATION = 20;
-  const SWORD_STINGER_SPEED = 7.0;
+  const SWORD_STINGER_DURATION = 14;
+  const SWORD_STINGER_SPEED = 5.5;
   const SWORD_UPPER_DURATION = 12;
   const SWORD_UPPER_HANG_TIME = 30;       // ~0.5 second hang time for air combos
   const SWORD_SLAM_DURATION = 18;
@@ -4495,8 +4495,10 @@
       : false;
     const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
     const effectivePower = blackFlash && !blackFlashPowerApplied ? power * BLACK_FLASH_DAMAGE_MUL : power;
-    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
-    if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) {
+    if (!enemy.maxHp) {
+      enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+    }
+    if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) {
       enemy.hp = enemy.maxHp;
     }
     // Power-based damage: scale with attack power (min 1)
@@ -6939,8 +6941,8 @@
   function performSwordStinger() {
     const dir = player.facing;
     const rankIdx = battleRankIndex;
-    const reach = 48 + rankIdx * 4;
-    const power = 2.5 + rankIdx * 0.15;
+    const reach = 32 + rankIdx * 3;
+    const power = 1.8 + rankIdx * 0.12;
 
     swordStingerActive = true;
     swordStingerTimer = SWORD_STINGER_DURATION;
@@ -7017,8 +7019,10 @@
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlap(hitBox, enemy)) continue;
       // Light damage only (1 HP)
-      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || enemy.hp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
-      if (!Number.isFinite(enemy.hp) || enemy.hp <= 0) enemy.hp = enemy.maxHp;
+      if (!enemy.maxHp) {
+        enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+      }
+      if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
       enemy.hp = Math.max(1, enemy.hp - 1); // Never kill — always leave at least 1 HP
       // Strong upward launch
       enemy.vx = dir * 0.3;
@@ -7286,12 +7290,12 @@
       if (bulletRainTimer <= 0) bulletRainTimer = maxDuration;
       if (bulletRainTimer > 0) {
         player.vy = 0; // Completely freeze in air
-        const bulletCount = 2 + Math.floor(rankIdx * 0.5); // 2~5 bullets per shot
+        const bulletCount = 1 + Math.floor(rankIdx * 0.3); // 1~2 bullets per shot
         for (let i = 0; i < bulletCount; i++) {
-          const spread = (Math.random() - 0.5) * 2.0; // Tight spread — mostly straight down
+          const spread = (Math.random() - 0.5) * 0.6; // Almost straight down
           stage.playerWaves.push({
-            kind: "bullet", x: px + spread * 3, y: py + 6, w: 5, h: 5,
-            vx: spread * 0.4, vy: 5.5 + Math.random() * 1.5, ttl: 45, power: 0.4
+            kind: "bullet", x: px + spread * 2, y: py + 6, w: 5, h: 5,
+            vx: spread * 0.15, vy: 6.0 + Math.random() * 1.0, ttl: 35, power: 0.5
           });
         }
         if (seHandgun) playSound(seHandgun, 0.5, 0.9);
@@ -7418,7 +7422,7 @@
           if (!enemy.maxHp) {
             enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
           }
-          if (!Number.isFinite(enemy.hp) || enemy.hp < 0) enemy.hp = enemy.maxHp;
+          if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
           const gunDmg = Math.max(1, Math.round((wave.power || 0.5) * 0.6));
           enemy.hp = Math.max(0, enemy.hp - gunDmg);
           enemy.flash = Math.max(enemy.flash || 0, 6);
