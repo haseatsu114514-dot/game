@@ -345,6 +345,7 @@
   const DEDICATED_GUN_RELOAD = 12;
   let bulletRainTimer = 0;     // Remaining duration (frames)
   let bulletRainCooldown = 0;  // Cooldown after use
+  let bulletRainRotation = false; // Upside-down rotation during bullet rain
 
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
@@ -5571,9 +5572,17 @@
       }
 
       if (enemy.hitstun > 0) {
+        if (enemy.launchTimer > 0) enemy.launchTimer -= enemyDt;
         enemy.vy = Math.min(enemy.vy + GRAVITY * enemyDt, MAX_FALL);
         enemy.vx *= Math.pow(enemy.kind === "bruiser" ? 0.9 : 0.84, enemyDt);
-        moveWithCollisions(enemy, solids, enemyDt);
+        if (enemy.launchTimer > 0) {
+          // During launch: move freely without ground collision
+          enemy.x += enemy.vx * enemyDt;
+          enemy.y += enemy.vy * enemyDt;
+          enemy.onGround = false;
+        } else {
+          moveWithCollisions(enemy, solids, enemyDt);
+        }
         if (enemy.x <= enemy.minX) {
           enemy.x = enemy.minX;
           enemy.dir = 1;
@@ -7381,8 +7390,9 @@
       // Strong upward launch (DMC style) — near-vertical with minimal horizontal push
       enemy.vx = dir * 0.08;
       enemy.vy = launchVy;
-      enemy.y -= 4; // Lift enemy off ground to prevent immediate re-grounding
+      enemy.y -= 6; // Nudge up to clear ground collision
       enemy.onGround = false;
+      enemy.launchTimer = 12; // Skip ground collision during initial launch
       enemy.hitstun = Math.max(enemy.hitstun || 0, launchHistun);
       enemy.flash = 14;
       const hx = enemy.x + enemy.w * 0.5;
@@ -8047,8 +8057,8 @@
   };
   const DT_STYLE_COLORS = {
     swordmaster: { tint: [180, 20, 0], vignette: [120, 0, 0], bar: "#ff3300", flash: "#ff4400" },
-    trickster:   { tint: [0, 60, 200], vignette: [0, 20, 140], bar: "#4488ff", flash: "#44ccff" },
-    gunslinger:  { tint: [180, 140, 0], vignette: [120, 80, 0], bar: "#ffcc00", flash: "#ffdd44" },
+    trickster:   { tint: [180, 140, 0], vignette: [120, 80, 0], bar: "#ffcc00", flash: "#ffdd44" },
+    gunslinger:  { tint: [0, 60, 200], vignette: [0, 20, 140], bar: "#4488ff", flash: "#44ccff" },
     royalguard:  { tint: [0, 140, 60], vignette: [0, 80, 30], bar: "#22ff88", flash: "#44ffaa" },
   };
 
@@ -8135,14 +8145,18 @@
   }
   function dtKnockMul() { return devilTriggerTimer > 0 ? 1.3 : 1; }
   function dtSparkCount() { return devilTriggerTimer > 0 ? 3 : 0; }
-  // Gunslinger DT: shot power & fire rate
+  // Gunslinger DT: massive shot power, faster fire
   function dtShotPowerMul() {
-    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") return 2.0;
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") return 3.0;
     return 1;
   }
   function dtShotReloadMul() {
-    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") return 0.4;
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") return 0.3;
     return 1;
+  }
+  // Gunslinger DT: bullets pierce through enemies
+  function dtShotPierce() {
+    return devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger";
   }
   // Trickster DT: speed & cooldown
   function dtTricksterCooldownMul() {
@@ -8381,19 +8395,23 @@
     // Continues until player lands — no duration limit
     if (!player.onGround && input.down && bulletRainCooldown <= 0) {
       bulletRainTimer = 1; // Mark as active
+      bulletRainRotation = true; // Flip character upside-down
       player.vy = Math.min(player.vy + 0.08, 1.5); // Slow descent (eventually lands)
       const isGunslinger = playerStyle === "gunslinger";
       const bulletCount = 1 + Math.floor(rankIdx * 0.5) + (isGunslinger ? 1 : 0);
       const hSpread = 0.6 + rankIdx * 0.15 + (isGunslinger ? 0.3 : 0);
+      // Cap fire rate minimum to 6 frames to reduce lag
+      const rainReload = Math.max(6, rankReload);
       for (let i = 0; i < bulletCount; i++) {
         const spread = (Math.random() - 0.5) * hSpread;
+        const sPow = dtShotPowerMul();
         stage.playerWaves.push({
           kind: "bullet", x: px + spread * 6, y: py + 6, w: 5, h: 5,
-          vx: spread * 0.5, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6
+          vx: spread * 0.5, vy: 12.0 + Math.random() * 2.0, ttl: 25, power: 0.6 * sPow
         });
       }
       if (seHandgun) playSound(seHandgun, 0.5, 0.9);
-      dedicatedGunCooldown = rankReload;
+      dedicatedGunCooldown = rainReload;
       triggerImpact(0.6, px, py + 10, 1.5);
       battleRankGainByStyle("bullet_rain", 0.8);
       hudMessage = "BULLET RAIN!";
@@ -8402,13 +8420,15 @@
     }
     // End bullet rain on landing
     if (player.onGround && bulletRainTimer > 0) {
-      bulletRainCooldown = 30 + (6 - rankIdx) * 4; // Short cooldown after landing
+      bulletRainCooldown = 30 + (6 - rankIdx) * 4;
       bulletRainTimer = 0;
+      bulletRainRotation = false;
       hudMessage = "RAIN END";
       hudTimer = 15;
     }
     if (!input.down || player.onGround) {
       bulletRainTimer = 0;
+      bulletRainRotation = false;
     }
 
     // Gunslinger: ↓+K (ground) = Twosome Time (fire both directions)
@@ -8416,6 +8436,24 @@
       performTwosomeTime();
       dedicatedGunCooldown = rankReload;
       if (!player.onGround) player.vy = Math.min(player.vy, -0.2);
+      return;
+    }
+
+    // Non-gunslinger: Ground + Down + K = 3-direction spread shot
+    if (playerStyle !== "gunslinger" && player.onGround && input.down) {
+      const speed = 7.0 + rankIdx * 1.2;
+      const spreadPower = 0.5 + rankIdx * 0.04;
+      stage.playerWaves.push(
+        { kind: "bullet", x: px, y: py - 4, w: 5, h: 5, vx: (Math.random() - 0.5) * 0.3, vy: -speed, ttl: 50, power: spreadPower },
+        { kind: "bullet", x: px - 4, y: py, w: 5, h: 5, vx: -speed, vy: (Math.random() - 0.5) * 0.3, ttl: 50, power: spreadPower },
+        { kind: "bullet", x: px + 4, y: py, w: 5, h: 5, vx: speed, vy: (Math.random() - 0.5) * 0.3, ttl: 50, power: spreadPower }
+      );
+      if (seHandgun) playSound(seHandgun, 0.5, 1.1);
+      dedicatedGunCooldown = rankReload;
+      triggerImpact(0.8, px, py, 2.0);
+      battleRankGainByStyle("spread_shot", 0.9);
+      hudMessage = "SPREAD SHOT!";
+      hudTimer = 15;
       return;
     }
 
@@ -8674,11 +8712,21 @@
           }
           const hx = enemy.x + enemy.w * 0.5;
           const hy = enemy.y + enemy.h * 0.4;
-          triggerImpact(0.4 + (wave.power || 0) * 0.2, hx, hy, 1.2);
-          spawnWaveBurst(hx, hy, 0.3 + (wave.power || 0) * 0.3);
+          // Gunslinger DT: piercing bullets + heavy impact
+          if (dtShotPierce()) {
+            triggerImpact(1.5 + (wave.power || 0) * 0.8, hx, hy, 3.0);
+            spawnWaveBurst(hx, hy, 1.0 + (wave.power || 0) * 0.6);
+            hitStopTimer = Math.max(hitStopTimer, 2);
+            if (devilTriggerTimer > 0) devilTriggerHitCount++;
+            // Don't set wave.dead — bullet pierces through
+          } else {
+            triggerImpact(0.4 + (wave.power || 0) * 0.2, hx, hy, 1.2);
+            spawnWaveBurst(hx, hy, 0.3 + (wave.power || 0) * 0.3);
+            wave.dead = true;
+          }
           playKickSfx(0.6);
-          wave.dead = true;
-          break;
+          if (wave.dead) break;
+          continue; // Pierce: check next enemy
         }
 
         // Non-gun projectiles: use original kickEnemy logic
@@ -10699,13 +10747,33 @@
       }
       if (swordStingerActive && swordStingerTimer > 0) {
         swordStingerTimer -= dt;
+        const stingerDir = player.facing;
         const stingerSpd = SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08) * (devilTriggerTimer > 0 ? 1.3 : 1);
-        player.vx = player.facing * stingerSpd;
+        player.vx = stingerDir * stingerSpd;
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+        // Continuous hit detection: catch new enemies during rush
+        const stingerReach = 32 + battleRankIndex * 3;
+        const stingerHitBox = {
+          x: stingerDir > 0 ? player.x + player.w : player.x - stingerReach,
+          y: player.y + 2, w: stingerReach, h: 16,
+        };
+        for (const enemy of stage.enemies) {
+          if (!enemy.alive || enemy.kicked) continue;
+          if (stingerCaughtEnemies.includes(enemy)) continue;
+          if (!overlap(stingerHitBox, enemy)) continue;
+          enemy.vx = 0;
+          enemy.vy = 0;
+          enemy.flash = 12;
+          enemy.hitstun = Math.max(enemy.hitstun || 0, 20);
+          stingerCaughtEnemies.push(enemy);
+          spawnWaveBurst(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 0.5);
+          if (seStrongHit) playSound(seStrongHit, 0.4);
+          if (devilTriggerTimer > 0) devilTriggerHitCount++;
+        }
         // Drag caught enemies along with player
         for (const enemy of stingerCaughtEnemies) {
           if (!enemy.alive) continue;
-          enemy.x = player.x + player.facing * (player.w + 2);
+          enemy.x = player.x + stingerDir * (player.w + 2);
           enemy.y = player.y + (player.h - enemy.h) * 0.5;
           enemy.vx = player.vx;
           enemy.vy = 0;
@@ -10920,12 +10988,29 @@
       }
       if (swordStingerActive && swordStingerTimer > 0) {
         swordStingerTimer -= dt;
+        const stingerDir2 = player.facing;
         const stingerSpd2 = SWORD_STINGER_SPEED * (1 + battleRankIndex * 0.08) * (devilTriggerTimer > 0 ? 1.3 : 1);
-        player.vx = player.facing * stingerSpd2;
+        player.vx = stingerDir2 * stingerSpd2;
         damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+        // Continuous hit detection during boss stage stinger
+        const stReach2 = 32 + battleRankIndex * 3;
+        const stHitBox2 = {
+          x: stingerDir2 > 0 ? player.x + player.w : player.x - stReach2,
+          y: player.y + 2, w: stReach2, h: 16,
+        };
+        for (const enemy of stage.enemies) {
+          if (!enemy.alive || enemy.kicked) continue;
+          if (stingerCaughtEnemies.includes(enemy)) continue;
+          if (!overlap(stHitBox2, enemy)) continue;
+          enemy.vx = 0; enemy.vy = 0; enemy.flash = 12;
+          enemy.hitstun = Math.max(enemy.hitstun || 0, 20);
+          stingerCaughtEnemies.push(enemy);
+          spawnWaveBurst(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 0.5);
+          if (devilTriggerTimer > 0) devilTriggerHitCount++;
+        }
         for (const enemy of stingerCaughtEnemies) {
           if (!enemy.alive) continue;
-          enemy.x = player.x + player.facing * (player.w + 2);
+          enemy.x = player.x + stingerDir2 * (player.w + 2);
           enemy.y = player.y + (player.h - enemy.h) * 0.5;
           enemy.vx = player.vx;
           enemy.vy = 0;
@@ -14714,11 +14799,20 @@
     drawBoss();
     drawGoal();
     drawRushAura();
-    const hurtBlink = damageInvulnTimer > 0 && Math.floor(damageInvulnTimer / 3) % 2 === 0;
+    const hurtBlink = damageInvulnTimer > 0 && !swordStingerActive && !millionStabActive && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (!hurtBlink) {
       drawHeroAfterimageTrail();
       if (invincibleTimer > 0) {
         drawInvincibleBikeRide();
+      } else if (bulletRainRotation) {
+        const hx = player.x - cameraX + player.w * 0.5;
+        const hy = player.y + player.h * 0.5;
+        ctx.save();
+        ctx.translate(hx, hy);
+        ctx.rotate(Math.PI);
+        ctx.translate(-hx, -hy);
+        drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+        ctx.restore();
       } else {
         drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
       }
@@ -14735,7 +14829,18 @@
       drawInvincibleBikeRide();
       return;
     }
-    drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+    if (bulletRainRotation) {
+      const hx = player.x - cameraX + player.w * 0.5;
+      const hy = player.y + player.h * 0.5;
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(Math.PI);
+      ctx.translate(-hx, -hy);
+      drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+      ctx.restore();
+    } else {
+      drawHero(player.x - cameraX, player.y, player.facing, player.anim, 1);
+    }
     // Taunt glow effect
     if (tauntFlashTimer > 0 || tauntBonusTimer > 0) {
       const px = player.x - cameraX + player.w * 0.5;
@@ -15866,8 +15971,8 @@
     // --- Style Indicator ---
     {
       const styleColors = {
-        swordmaster: "#ff6644", trickster: "#44aaff",
-        gunslinger: "#ffcc44", royalguard: "#44ff88",
+        swordmaster: "#ff6644", trickster: "#ffcc44",
+        gunslinger: "#44aaff", royalguard: "#44ff88",
       };
       const styleShort = {
         swordmaster: "SM", trickster: "TR",
@@ -17262,8 +17367,8 @@
       // V alone = cycle
       if (actions.styleChangePressed) {
         const styleColors = {
-          swordmaster: "#ff4422", trickster: "#22aaff",
-          gunslinger: "#ffcc22", royalguard: "#22ff88",
+          swordmaster: "#ff4422", trickster: "#ffcc22",
+          gunslinger: "#22aaff", royalguard: "#22ff88",
         };
         const styleNames = {
           swordmaster: "SWORDMASTER!", trickster: "TRICKSTER!",
