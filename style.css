@@ -68,6 +68,7 @@ body {
 }
 
 .screen-wrap {
+  position: relative;
   border: 2px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
