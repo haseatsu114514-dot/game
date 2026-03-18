@@ -152,7 +152,7 @@
   let attackMashCount = 0;
   let attackMashTimer = 0;
   let shotChargeTimer = 0;
-  let playerStyle = "swordmaster"; // "swordmaster" (default), "berserker" or "gunner"
+  let playerStyle = "swordmaster"; // "swordmaster", "berserker", "gunner", "royalguard", "gunslinger"
   let shotReloadTimer = 0;
 
   // Gunner Ammo System
@@ -211,6 +211,17 @@
   let bulletRainTimer = 0;     // Remaining duration (frames)
   let bulletRainCooldown = 0;  // Cooldown after use
   let bulletRainRotation = false; // Upside-down rotation during bullet rain
+
+  // --- Royal Guard Style ---
+  let royalGuardGauge = 0;          // 0-5 levels
+  const ROYAL_GUARD_MAX_LEVEL = 5;
+  const ROYAL_GUARD_GAUGE_PER_LEVEL = 100; // points per level
+  const ROYAL_GUARD_MAX_GAUGE = ROYAL_GUARD_MAX_LEVEL * ROYAL_GUARD_GAUGE_PER_LEVEL;
+  let royalGuardBlockTimer = 0;     // Active block frames
+  let royalGuardReleaseTimer = 0;   // Release attack active frames
+  let royalGuardBlockCooldown = 0;  // Cooldown after block/release
+  const ROYAL_GUARD_BLOCK_WINDOW = 12;   // Just-guard window
+  const ROYAL_GUARD_BLOCK_DURATION = 20; // Total block duration
 
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
@@ -4584,6 +4595,11 @@
       if (emergencyDodgeInvulnTimer > 0) return;
       if (emergencyDodgeActive) return;
 
+      // Royal Guard block absorbs damage
+      if (playerStyle === "royalguard" && royalGuardBlockTimer > 0) {
+        if (royalGuardAbsorb(1)) return;
+      }
+
       if (!emergencyDodgeSkipNext) {
         const dodgeChance = EMERGENCY_DODGE_CHANCE[clamp(battleRankIndex, 0, EMERGENCY_DODGE_CHANCE.length - 1)] || 0;
         if (dodgeChance > 0 && Math.random() < dodgeChance) {
@@ -6717,21 +6733,22 @@
       if (seBazooka) playSound(seBazooka, 0.8);
     } else if (tier === 2) { // Shotgun
       const rankIdx = battleRankIndex;
-      let pellets = 5;  // Base increased from 3
-      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 10;
-      else if (rankIdx >= 5) pellets = 9;
-      else if (rankIdx >= 3) pellets = 8;
-      else if (rankIdx >= 2) pellets = 7;
-      else if (rankIdx >= 1) pellets = 6;
+      let pellets = 8;  // Higher base density
+      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 16;
+      else if (rankIdx >= 5) pellets = 14;
+      else if (rankIdx >= 3) pellets = 12;
+      else if (rankIdx >= 2) pellets = 10;
+      else if (rankIdx >= 1) pellets = 9;
 
-      // Consume Ammo = Pellets
-      const actualFire = Math.min(gunnerAmmo, pellets);
-      if (actualFire > 0) {
-        gunnerAmmo -= actualFire;
-        // Loop
-        // Shotgun Spread: Tighter spread, higher power
-        const spreadBase = 0.55 + rankIdx * 0.12;
-        const startAngle = -Math.floor(actualFire / 2);
+      // Consume Ammo = pellets/2 (more pellets but same ammo cost)
+      const ammoCost = Math.ceil(pellets / 2);
+      const actualFire = gunnerAmmo >= ammoCost ? pellets : Math.min(gunnerAmmo * 2, pellets);
+      const actualCost = Math.min(gunnerAmmo, ammoCost);
+      if (actualCost > 0) {
+        gunnerAmmo -= actualCost;
+        // Shotgun Spread: Tighter spread, higher density
+        const spreadBase = 0.35 + rankIdx * 0.08; // Tighter spread
+        const startAngle = -(actualFire - 1) / 2;
         const dir = player.facing;
         const px = player.x + player.w * 0.5;
         const py = player.y + player.h * 0.45;
@@ -6739,7 +6756,9 @@
         for (let i = 0; i < actualFire; i++) {
           const ang = startAngle + i;
           stage.playerWaves.push({
-            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5, vx: dir * 7.5, vy: ang * spreadBase, ttl: 25, power: 0.85
+            kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5,
+            vx: dir * 7.5, vy: ang * spreadBase, ttl: 22,
+            power: 0.7, shotgunOriginX: px, shotgunOriginY: py
           });
         }
         if (seShotgun) playSound(seShotgun, 0.7);
@@ -7291,6 +7310,15 @@
       if (combatDashTimer <= 0) {
         combatDashTimer = 0;
         combatDashCooldown = COMBAT_DASH_COOLDOWN;
+        // Push overlapping enemies away to prevent getting stuck
+        for (const enemy of stage.enemies) {
+          if (!enemy.alive) continue;
+          if (!overlap(player, enemy)) continue;
+          const pushDir = (enemy.x + enemy.w * 0.5) > (player.x + player.w * 0.5) ? 1 : -1;
+          enemy.vx = pushDir * 4;
+          enemy.vy = -2;
+          enemy.hitstun = Math.max(enemy.hitstun || 0, 8);
+        }
       }
       return true;
     }
@@ -7380,8 +7408,8 @@
       bulletRainRotation = false;
     }
 
-    // Ground + Down + K = 3-direction spread shot (up, left, right)
-    if (player.onGround && input.down) {
+    // Ground + Down + K = 3-direction spread shot (Gunslinger only)
+    if (player.onGround && input.down && playerStyle === "gunslinger") {
       const speed = 7.0 + rankIdx * 1.2;
       const spreadPower = 0.5 + rankIdx * 0.04;
       // Up
@@ -7425,6 +7453,134 @@
     battleRankGainByStyle("gun_shot", 0.6);
   }
 
+  // ========== ROYAL GUARD SYSTEM ==========
+  function updateRoyalGuard(dt, actions) {
+    if (playerStyle !== "royalguard") return;
+    if (royalGuardBlockCooldown > 0) royalGuardBlockCooldown -= dt;
+    if (royalGuardReleaseTimer > 0) {
+      royalGuardReleaseTimer -= dt;
+      if (royalGuardReleaseTimer <= 0) {
+        royalGuardReleaseTimer = 0;
+      }
+    }
+
+    // L key = Block (when royalguard style)
+    if (actions.dashPressed && royalGuardBlockCooldown <= 0 && royalGuardReleaseTimer <= 0) {
+      // If gauge >= 1 level and holding down, do Release instead
+      if (input.down && royalGuardGauge >= ROYAL_GUARD_GAUGE_PER_LEVEL) {
+        performRoyalGuardRelease();
+        return;
+      }
+      // Start blocking
+      royalGuardBlockTimer = ROYAL_GUARD_BLOCK_DURATION;
+      damageInvulnTimer = Math.max(damageInvulnTimer, ROYAL_GUARD_BLOCK_DURATION + 2);
+      hudMessage = "ROYAL GUARD!";
+      hudTimer = 20;
+      if (seStrongHit) playSound(seStrongHit, 0.3, 1.5);
+    }
+
+    if (royalGuardBlockTimer > 0) {
+      royalGuardBlockTimer -= dt;
+      // Lock player movement during block
+      player.vx *= 0.5;
+      if (royalGuardBlockTimer <= 0) {
+        royalGuardBlockTimer = 0;
+        royalGuardBlockCooldown = 8;
+      }
+    }
+  }
+
+  function royalGuardAbsorb(damage) {
+    // Called when player takes damage while blocking
+    if (royalGuardBlockTimer <= 0) return false;
+    const isJustGuard = royalGuardBlockTimer > (ROYAL_GUARD_BLOCK_DURATION - ROYAL_GUARD_BLOCK_WINDOW);
+    const gaugeGain = isJustGuard ? 80 : 40; // Just guard = more gauge
+    royalGuardGauge = Math.min(ROYAL_GUARD_MAX_GAUGE, royalGuardGauge + gaugeGain);
+    const currentLevel = Math.floor(royalGuardGauge / ROYAL_GUARD_GAUGE_PER_LEVEL);
+    if (isJustGuard) {
+      hudMessage = "JUST GUARD! Lv" + currentLevel;
+      hudTimer = 30;
+      triggerImpact(3.0, player.x + player.w * 0.5, player.y + player.h * 0.5, 4);
+      if (seStrongHit) playSound(seStrongHit, 0.9, 1.2);
+    } else {
+      hudMessage = "GUARD! Lv" + currentLevel;
+      hudTimer = 20;
+      triggerImpact(1.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 2);
+    }
+    battleRankGainByStyle("royal_guard", isJustGuard ? 2.0 : 0.8);
+    return true; // Damage absorbed
+  }
+
+  function performRoyalGuardRelease() {
+    const currentLevel = Math.min(ROYAL_GUARD_MAX_LEVEL, Math.floor(royalGuardGauge / ROYAL_GUARD_GAUGE_PER_LEVEL));
+    if (currentLevel < 1) return;
+
+    const dir = player.facing;
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.45;
+    const power = 2.0 + currentLevel * 2.5;    // Lv1=4.5, Lv5=14.5
+    const reach = 30 + currentLevel * 15;       // Lv1=45, Lv5=105
+    const height = 20 + currentLevel * 10;      // Lv1=30, Lv5=70
+
+    const hitBox = {
+      x: dir > 0 ? player.x + player.w - 4 : player.x - reach + 4,
+      y: player.y - height * 0.3,
+      w: reach,
+      h: height,
+    };
+
+    // Hit enemies
+    const crisisMul = pinchAttackMultiplier();
+    for (const enemy of stage.enemies) {
+      if (!enemy.alive || enemy.kicked) continue;
+      if (!overlap(hitBox, enemy)) continue;
+      const bf = rollBlackFlashHit(enemy.x + enemy.w * 0.5, enemy.y + enemy.h * 0.4, 1.5 + currentLevel * 0.5);
+      kickEnemy(enemy, dir, power * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1), {
+        immediateRemove: false,
+        flyLifetime: 30 + currentLevel * 5,
+        rankStyle: "royal_release",
+        blackFlash: bf,
+        blackFlashPowerApplied: true,
+      });
+      enemy.vx = dir * (5 + currentLevel * 2);
+      enemy.vy = -(4 + currentLevel * 1.5);
+      const hx = enemy.x + enemy.w * 0.5;
+      const hy = enemy.y + enemy.h * 0.4;
+      spawnWaveBurst(hx, hy, 1.0 + currentLevel * 0.5);
+      if (devilTriggerTimer > 0) devilTriggerHitCount++;
+    }
+    swordHitBoss(hitBox, dir, power);
+
+    // Shockwave visual
+    stage.playerWaves.push({
+      kind: "swordwave",
+      x: player.x + dir * 4,
+      y: player.y - height * 0.2,
+      w: reach * 0.8,
+      h: height * 0.6,
+      vx: dir * 3,
+      vy: 0,
+      ttl: 15 + currentLevel * 3,
+      phase: 0,
+      spin: 0,
+      power: power * 0.4,
+    });
+
+    triggerImpact(3.0 + currentLevel * 1.5, px, py, 5 + currentLevel);
+    if (seBazooka) playSound(seBazooka, 0.7 + currentLevel * 0.06, 0.8);
+    if (seStrongHit) playSound(seStrongHit, 0.9, 0.6 + currentLevel * 0.08);
+
+    // Consume all gauge
+    royalGuardGauge = 0;
+    royalGuardReleaseTimer = 15;
+    royalGuardBlockCooldown = 20;
+    damageInvulnTimer = Math.max(damageInvulnTimer, 15);
+
+    hudMessage = "RELEASE! Lv" + currentLevel;
+    hudTimer = 50;
+    battleRankGainByStyle("royal_release", currentLevel * 1.5);
+  }
+
   // ========== WEAPON SWITCH (I KEY - reserved for future use) ==========
   function handleWeaponSwitch(actions) {
     // Style system disabled - always swordmaster with full combat kit
@@ -7447,6 +7603,32 @@
         wave.x += wave.vx * dt;
         wave.y += wave.vy * dt;
         wave.spin = (wave.spin || 0) + dt * 0.35;
+        // Apply gravity to grenade
+        wave.vy = (wave.vy || 0) + 0.15 * dt;
+        // Bounce off ceilings (solids above)
+        const bcx = wave.x + wave.w * 0.5;
+        const bcy = wave.y + wave.h * 0.5;
+        if (bcx >= screenLeft - 60 && bcx <= screenRight + 60) {
+          for (const s of solids) {
+            if (s.kind === "crumble" && s.state === "gone") continue;
+            if (!overlap(wave, s)) continue;
+            // Hit solid from below (grenade going up)
+            if (wave.vy < 0 && wave.y + wave.h * 0.5 > s.y + s.h * 0.5) {
+              wave.vy = Math.abs(wave.vy) * 0.7; // Bounce down
+              wave.y = s.y + s.h + 1;
+              wave.spin = (wave.spin || 0) + 0.5;
+            } else if (wave.vy >= 0 && wave.y + wave.h * 0.5 < s.y + s.h * 0.5) {
+              // Hit floor - explode
+              spawnExplosion(wave.x + wave.w / 2, wave.y + wave.h / 2, wave.power || 2);
+              wave.dead = true;
+            } else {
+              // Side wall - bounce horizontally
+              wave.vx = -wave.vx * 0.7;
+              wave.x += wave.vx * 2;
+            }
+            break;
+          }
+        }
       } else if (wave.kind === "bullet" || wave.kind === "shotgun") {
         wave.x += wave.vx * dt;
         wave.y += wave.vy * dt;
@@ -7508,7 +7690,15 @@
             enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
           }
           if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
-          const gunDmg = Math.max(1, Math.round((wave.power || 0.5) * 0.6));
+          // Shotgun close-range bonus: more damage the closer the target
+          let gunPower = wave.power || 0.5;
+          if (wave.kind === "shotgun" && wave.shotgunOriginX !== undefined) {
+            const distFromOrigin = Math.abs((enemy.x + enemy.w * 0.5) - wave.shotgunOriginX);
+            // Within ~50px = 2x damage, within ~100px = 1.5x, beyond = 1x
+            const closeMul = distFromOrigin < 50 ? 2.0 : distFromOrigin < 100 ? 1.5 : 1.0;
+            gunPower *= closeMul;
+          }
+          const gunDmg = Math.max(1, Math.round(gunPower * 0.6));
           enemy.hp = Math.max(0, enemy.hp - gunDmg);
           enemy.flash = Math.max(enemy.flash || 0, 6);
           // Light flinch but no big knockback — bullets chip away
@@ -9469,7 +9659,10 @@
 
       if (move !== 0) {
         player.vx += move * accel * dt;
-        player.facing = move > 0 ? 1 : -1;
+        // Lock facing during bullet rain
+        if (bulletRainTimer <= 0) {
+          player.facing = move > 0 ? 1 : -1;
+        }
       } else {
         player.vx *= Math.pow(friction, dt);
       }
@@ -9644,9 +9837,13 @@
     updateLifeUpItems(worldDt);
     updateBikes(worldDt);
     updateCheckpointTokens(worldDt);
-    // --- Combat Dash ---
+    // --- Combat Dash (not in royalguard, L is block there) ---
     if (!bursting) {
-      updateCombatDash(dt, actions);
+      if (playerStyle !== "royalguard") {
+        updateCombatDash(dt, actions);
+      } else {
+        updateRoyalGuard(dt, actions);
+      }
     }
     // --- Dedicated Gun (K key, always available) ---
     updateDedicatedGun(dt, actions);
@@ -9715,7 +9912,10 @@
 
       if (move !== 0) {
         player.vx += move * accel * dt;
-        player.facing = move > 0 ? 1 : -1;
+        // Lock facing during bullet rain
+        if (bulletRainTimer <= 0) {
+          player.facing = move > 0 ? 1 : -1;
+        }
       } else {
         player.vx *= Math.pow(friction, dt);
       }
@@ -9857,7 +10057,11 @@
     updateEnemies(worldDt, solids);
     updateHazardBullets(worldDt, solids);
     // --- Combat systems (Boss battle) ---
-    updateCombatDash(dt, actions);
+    if (playerStyle !== "royalguard") {
+      updateCombatDash(dt, actions);
+    } else {
+      updateRoyalGuard(dt, actions);
+    }
     updateDedicatedGun(dt, actions);
     handleWeaponSwitch(actions);
     if (player.onGround && airComboCount > 0) {
@@ -13477,6 +13681,7 @@
       ctx.fillText(lines[i], 12, y + 6 + i * 12);
     }
     drawAmmoUI();
+    drawRoyalGuardGauge();
   }
 
   function drawHeartIcon(x, y, filled) {
@@ -15794,12 +15999,16 @@
 
       // Style change with Space key
       if (actions.styleChangePressed) {
-        if (playerStyle === "berserker") playerStyle = "gunner";
-        else if (playerStyle === "gunner") playerStyle = "swordmaster";
-        else playerStyle = "berserker";
+        if (playerStyle === "swordmaster") playerStyle = "gunslinger";
+        else if (playerStyle === "gunslinger") playerStyle = "royalguard";
+        else if (playerStyle === "royalguard") playerStyle = "berserker";
+        else if (playerStyle === "berserker") playerStyle = "gunner";
+        else playerStyle = "swordmaster";
 
         hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE"
           : playerStyle === "gunner" ? "GUNNER STYLE"
+          : playerStyle === "royalguard" ? "ROYAL GUARD!"
+          : playerStyle === "gunslinger" ? "GUNSLINGER!"
           : "SWORDMASTER STYLE";
         hudTimer = 60;
 
@@ -15862,15 +16071,25 @@
     if (btnAttack) {
       const isBerserker = playerStyle === "berserker";
       const isSwordmaster = playerStyle === "swordmaster";
+      const isRoyalGuard = playerStyle === "royalguard";
+      const isGunslinger = playerStyle === "gunslinger";
       btnAttack.style.background = isBerserker
         ? "linear-gradient(to bottom, #ff5555, #cc0000)"
         : isSwordmaster
           ? "linear-gradient(to bottom, #ff6644, #cc3300)"
+        : isRoyalGuard
+          ? "linear-gradient(to bottom, #5588ff, #2244cc)"
+        : isGunslinger
+          ? "linear-gradient(to bottom, #ffcc33, #cc9900)"
           : "linear-gradient(to bottom, #5555ff, #0000cc)";
       btnAttack.style.boxShadow = isBerserker
         ? "0 4px 0 #990000"
         : isSwordmaster
           ? "0 4px 0 #992200"
+        : isRoyalGuard
+          ? "0 4px 0 #1133aa"
+        : isGunslinger
+          ? "0 4px 0 #997700"
           : "0 4px 0 #000099";
     }
 
@@ -15899,8 +16118,10 @@
         chargeRatio = attackChargeTimer / ATTACK_CHARGE_MAX;
       } else if (playerStyle === "gunner") {
         chargeRatio = shotChargeTimer / SHOT_CHARGE_MAX;
-      } else if (playerStyle === "swordmaster") {
+      } else if (playerStyle === "swordmaster" || playerStyle === "gunslinger") {
         chargeRatio = swordChargeTimer / SWORD_CHARGE_MAX;
+      } else if (playerStyle === "royalguard") {
+        chargeRatio = royalGuardGauge / ROYAL_GUARD_MAX_GAUGE;
       }
 
       const chargeRatio2 = attack2ChargeTimer / ATTACK2_CHARGE_MAX;
@@ -15975,6 +16196,67 @@
     if (ammoRatio > 0) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
       ctx.fillRect(barX, barY, Math.floor(barW * ammoRatio), 2);
+    }
+
+    ctx.restore();
+  }
+
+  function drawRoyalGuardGauge() {
+    if (playerStyle !== "royalguard") return;
+    ctx.save();
+    const panelX = 6;
+    const panelY = 62;
+    const panelW = 108;
+    const panelH = 32;
+    const currentLevel = Math.min(ROYAL_GUARD_MAX_LEVEL, Math.floor(royalGuardGauge / ROYAL_GUARD_GAUGE_PER_LEVEL));
+    const levelProgress = (royalGuardGauge % ROYAL_GUARD_GAUGE_PER_LEVEL) / ROYAL_GUARD_GAUGE_PER_LEVEL;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    const borderColor = currentLevel >= 5 ? "rgba(255, 50, 50, 0.9)"
+      : currentLevel >= 3 ? "rgba(255, 180, 50, 0.7)"
+      : "rgba(100, 150, 255, 0.5)";
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+    // Level text
+    ctx.font = "bold 10px 'Courier New', monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = currentLevel >= 5 ? "#ff4444" : currentLevel >= 3 ? "#ffaa33" : "#88bbff";
+    ctx.fillText(`ROYAL GUARD Lv${currentLevel}`, panelX + 4, panelY + 2);
+
+    // Level bars (5 segments)
+    const barX = panelX + 4;
+    const barY = panelY + 16;
+    const segW = Math.floor((panelW - 12) / ROYAL_GUARD_MAX_LEVEL);
+    const barH = 10;
+
+    for (let i = 0; i < ROYAL_GUARD_MAX_LEVEL; i++) {
+      const sx = barX + i * (segW + 1);
+      ctx.fillStyle = "#222";
+      ctx.fillRect(sx, barY, segW, barH);
+      if (i < currentLevel) {
+        // Full segment
+        const colors = ["#4488ff", "#44aaff", "#ffaa33", "#ff6633", "#ff3333"];
+        ctx.fillStyle = colors[i] || "#ff3333";
+        ctx.fillRect(sx, barY, segW, barH);
+        ctx.fillStyle = "rgba(255,255,255,0.2)";
+        ctx.fillRect(sx, barY, segW, 3);
+      } else if (i === currentLevel && levelProgress > 0) {
+        // Partial fill
+        const colors = ["#4488ff", "#44aaff", "#ffaa33", "#ff6633", "#ff3333"];
+        ctx.fillStyle = colors[i] || "#ff3333";
+        ctx.fillRect(sx, barY, Math.floor(segW * levelProgress), barH);
+      }
+    }
+
+    // Block indicator
+    if (royalGuardBlockTimer > 0) {
+      const pulse = Math.abs(Math.sin(performance.now() * 0.01));
+      ctx.fillStyle = `rgba(100, 200, 255, ${0.3 + pulse * 0.4})`;
+      ctx.fillRect(panelX, panelY, panelW, panelH);
     }
 
     ctx.restore();
