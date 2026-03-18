@@ -152,7 +152,7 @@
   let attackMashCount = 0;
   let attackMashTimer = 0;
   let shotChargeTimer = 0;
-  let playerStyle = "swordmaster"; // "swordmaster", "berserker", "gunner", "royalguard", "gunslinger"
+  let playerStyle = "swordmaster"; // "swordmaster", "gunslinger", "royalguard", "trickster"
   let shotReloadTimer = 0;
 
   // Gunner Ammo System
@@ -3113,13 +3113,7 @@
     if (gameState !== STATE.PLAY && gameState !== STATE.BOSS) return;
 
     if (actions.burstPressed) {
-      if (playerStyle === "berserker") {
-        if (!triggerProteinBurst()) {
-          if (isTimeBurstActive() || proteinBurstTimer > 0) return;
-          hudMessage = `BURST: ATTACK ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
-          hudTimer = 28;
-        }
-      } else if (playerStyle === "swordmaster") {
+      if (playerStyle === "swordmaster") {
         if (!triggerDevilTrigger()) {
           if (devilTriggerTimer > 0 || isTimeBurstActive() || proteinBurstTimer > 0) return;
           hudMessage = `BURST: DEVIL ${Math.floor(proteinBurstGauge1)}/${PROTEIN_BURST_MIN}+`;
@@ -4623,7 +4617,7 @@
         dropBattleRankOnDamage(true);
       }
       playerHearts = Math.max(0, playerHearts - 1);
-      damageInvulnTimer = 84;
+      damageInvulnTimer = 84 + tricksterInvulnBonus();
       hurtFlashTimer = 24;
       playDamageSfx();
       if (seEvasionFail) playSound(seEvasionFail, 1.0);
@@ -5598,10 +5592,6 @@
     }
 
     // Debug log for Freeze investigation
-    if (playerStyle === "berserker" && chargeFrames < 10) {
-      console.log("releaseChargeAttack (Small Charge):", chargeFrames, options);
-    }
-
     const comboStage = clamp(Math.floor(options.comboStage || 0), 0, ATTACK_MASH_TRIGGER - 1);
     const comboPunch = comboStage > 0;
     const comboType = comboPunch
@@ -5649,9 +5639,9 @@
     const spinRadiusX = Math.max(12, Math.floor(baseSpinRadiusX * (1 + (rankRangeMul - 1) * 0.9)));
     const spinRadiusY = Math.max(10, Math.floor(baseSpinRadiusY * (1 + (rankRangeMul - 1) * 0.85)));
     const baseReach = maxChargeMorningStar
-      ? 45 + Math.floor(chargeRatio * 10) // Reduced from 55
+      ? 30 + Math.floor(chargeRatio * 8)  // Shorter range, comes back faster
       : morningStarStrike
-        ? 20 + Math.floor(chargeRatio * 18) + (morningStarLong ? 10 : 0)
+        ? 16 + Math.floor(chargeRatio * 12) + (morningStarLong ? 6 : 0)  // Reduced from 20+18+10
         : morningStarSpin
           ? 12 + Math.floor(chargeRatio * 12)
           : comboPunch
@@ -6066,7 +6056,7 @@
     if (shoryuFinisher) {
       attackCooldown = Math.max(attackCooldown, ATTACK_PUNCH_COOLDOWN + 10);
     }
-    const baseEffectTimer = strongWave ? 16 : shoryuFinisher ? 18 : comboPunch ? 8 + comboStage * 2 : morningStarSpin ? 24 : morningStarStrike ? 16 : 11;
+    const baseEffectTimer = strongWave ? 16 : shoryuFinisher ? 18 : comboPunch ? 8 + comboStage * 2 : morningStarSpin ? 24 : morningStarStrike ? 12 : 11;
     attackEffectTimer = Math.round(baseEffectTimer + rankBoost.blend * (strongWave ? 9 : morningStarSpin ? 8 : morningStarStrike ? 6 : 5));
     attackEffectMode = strongWave ? "wave" : shoryuFinisher ? "shoryu" : comboPunch ? `combo${comboStage}` : morningStarSpin ? "morningstar_spin" : morningStarStrike ? "morningstar" : "punch";
     attackEffectPhase = shoryuFinisher
@@ -6532,48 +6522,9 @@
     attack2ChargeReadyPlayed = false;
 
 
-    if (playerStyle === "berserker") {
-      if (input.attack) {
-        const beforeCharge = attackChargeTimer;
-        const chargeMul = battleRankChargeMultiplier();
-        attackChargeTimer = Math.min(ATTACK_CHARGE_MAX, attackChargeTimer + dt * chargeMul);
-        attackMaxHoldTimer = 0;
-        if (
-          !attackChargeReadyPlayed &&
-          attackChargeTimer >= ATTACK_WAVE_CHARGE_MIN &&
-          beforeCharge < ATTACK_WAVE_CHARGE_MIN
-        ) {
-          attackChargeReadyPlayed = true;
-          playChargeReadySfx();
-        }
-        return;
-      }
-
-      if (actions.attackReleased && attackChargeTimer > 0) {
-        const quickTapCombo = attackChargeTimer <= ATTACK_COMBO_TAP_MAX;
-        if (quickTapCombo) {
-          attackMashCount = attackMashTimer > 0 ? Math.min(ATTACK_MASH_TRIGGER, attackMashCount + 1) : 1;
-          attackMashTimer = ATTACK_MASH_WINDOW;
-          if (attackMashCount >= ATTACK_MASH_TRIGGER) {
-            startHyakuretsuMode(HYAKURETSU_COMBO_AUTO_DURATION, true);
-          } else {
-            releaseChargeAttack(attackChargeTimer, { forcePunch: true, comboStage: attackMashCount });
-          }
-        } else {
-          attackMashCount = 0;
-          attackMashTimer = 0;
-          releaseChargeAttack(attackChargeTimer);
-        }
-      }
-      attackChargeTimer = 0;
-      attackMaxHoldTimer = 0;
-      attackChargeReadyPlayed = false;
-    } else {
-      // Reset melee charge if not in berserker mode
-      attackChargeTimer = 0;
-      attackMaxHoldTimer = 0;
-      attackChargeReadyPlayed = false;
-    }
+    attackChargeTimer = 0;
+    attackMaxHoldTimer = 0;
+    attackChargeReadyPlayed = false;
 
     updateShot(dt, actions);
   }
@@ -7303,13 +7254,20 @@
 
   // ========== COMBAT DASH / DODGE SYSTEM ==========
   function updateCombatDash(dt, actions) {
+    // Trickster: longer dash, more invuln, shorter cooldown
+    const isTrickster = playerStyle === "trickster";
+    const dashDuration = isTrickster ? COMBAT_DASH_DURATION * 1.6 : COMBAT_DASH_DURATION;
+    const dashSpeed = isTrickster ? COMBAT_DASH_SPEED * 1.3 : COMBAT_DASH_SPEED;
+    const dashInvuln = isTrickster ? COMBAT_DASH_INVULN * 1.5 : COMBAT_DASH_INVULN;
+    const dashCooldownTime = isTrickster ? Math.floor(COMBAT_DASH_COOLDOWN * 0.5) : COMBAT_DASH_COOLDOWN;
+
     if (combatDashTimer > 0) {
       combatDashTimer -= dt;
-      player.vx = combatDashDir * COMBAT_DASH_SPEED;
+      player.vx = combatDashDir * dashSpeed;
       damageInvulnTimer = Math.max(damageInvulnTimer, 2);
       if (combatDashTimer <= 0) {
         combatDashTimer = 0;
-        combatDashCooldown = COMBAT_DASH_COOLDOWN;
+        combatDashCooldown = dashCooldownTime;
         // Push overlapping enemies away to prevent getting stuck
         for (const enemy of stage.enemies) {
           if (!enemy.alive) continue;
@@ -7325,10 +7283,10 @@
     if (combatDashCooldown > 0) combatDashCooldown -= dt;
     if (actions.dashPressed && combatDashCooldown <= 0) {
       combatDashDir = player.facing;
-      combatDashTimer = COMBAT_DASH_DURATION;
-      damageInvulnTimer = Math.max(damageInvulnTimer, COMBAT_DASH_INVULN);
+      combatDashTimer = dashDuration;
+      damageInvulnTimer = Math.max(damageInvulnTimer, dashInvuln);
       if (seWhipSwing) playSound(seWhipSwing, 0.4, 1.5);
-      hudMessage = "DODGE!";
+      hudMessage = isTrickster ? "TRICK!" : "DODGE!";
       hudTimer = 20;
       // Air dash: slight upward boost to maintain height
       if (!player.onGround) {
@@ -7337,6 +7295,11 @@
       return true;
     }
     return false;
+  }
+
+  // Trickster passive: boost all invuln frames slightly
+  function tricksterInvulnBonus() {
+    return playerStyle === "trickster" ? 8 : 0;
   }
 
   // ========== DEDICATED GUN (K KEY - always available) ==========
@@ -7755,14 +7718,21 @@
           const hx = boss.x + boss.w * 0.5;
           const hy = boss.y + boss.h * 0.4;
           const bf = rollBlackFlashHit(hx, hy, 1.14 + (wave.power || 0) * 1.08);
+          const isGunWave = wave.kind === "bullet" || wave.kind === "shotgun";
           const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
           boss.hp = Math.max(0, boss.hp - bossDamage);
-          boss.invuln = BOSS_HIT_INVULN_FRAMES;
-          boss.vx += dir * (0.62 + (wave.power || 0) * 0.28 + (bf ? 0.24 : 0));
-          boss.vy = Math.min(boss.vy, -(1.85 + (wave.power || 0) * 0.24 + (bf ? 0.2 : 0)));
-          triggerImpact(2.0 + (wave.power || 0), hx, hy, 3.0);
-          spawnWaveBurst(hx, hy, 1.0 + (wave.power || 0));
-          playKickSfx(1.52 + (wave.power || 0) * 0.28);
+          // Gun bullets: very short invuln so rapid fire works
+          boss.invuln = isGunWave ? 4 : BOSS_HIT_INVULN_FRAMES;
+          // Gun bullets: minimal knockback to boss
+          if (isGunWave) {
+            boss.vx += dir * 0.1;
+          } else {
+            boss.vx += dir * (0.62 + (wave.power || 0) * 0.28 + (bf ? 0.24 : 0));
+            boss.vy = Math.min(boss.vy, -(1.85 + (wave.power || 0) * 0.24 + (bf ? 0.2 : 0)));
+          }
+          triggerImpact(isGunWave ? 0.5 : 2.0 + (wave.power || 0), hx, hy, isGunWave ? 1.0 : 3.0);
+          spawnWaveBurst(hx, hy, isGunWave ? 0.3 : 1.0 + (wave.power || 0));
+          playKickSfx(isGunWave ? 0.5 : 1.52 + (wave.power || 0) * 0.28);
 
           if (wave.kind === "bazooka") {
             spawnExplosion(wave.x + wave.w / 2, wave.y + wave.h / 2, wave.power || 2);
@@ -9606,9 +9576,9 @@
     if (anyButton) {
       emergencyDodgeActive = false;
       emergencyDodgeTimer = 0;
-      emergencyDodgeInvulnTimer = EMERGENCY_DODGE_INVULN_DURATION;
+      emergencyDodgeInvulnTimer = EMERGENCY_DODGE_INVULN_DURATION + tricksterInvulnBonus();
       emergencyDodgeFlashTimer = 12;
-      damageInvulnTimer = Math.max(damageInvulnTimer, 30);
+      damageInvulnTimer = Math.max(damageInvulnTimer, 30 + tricksterInvulnBonus());
       triggerImpact(2.2, player.x + player.w * 0.5, player.y + player.h * 0.5, 3.0);
       hudMessage = "緊急回避成功!";
       hudTimer = 60;
@@ -12869,7 +12839,7 @@
       : isHyakuretsu
         ? 14 + visualPower * 10
         : isMorningStar
-          ? 22 + visualPower * 28
+          ? 16 + visualPower * 18  // Shorter visual reach
           : isCombo
             ? 12 + comboStage * 4 + (comboMove === "kick" ? 3 : comboMove === "upper" ? 1 : 0) + visualPower * 6
             : 10 + visualPower * 50;
@@ -14553,7 +14523,7 @@
       sat: clamp(burstTone1.sat + 6, 28, 98),
       light: clamp(burstTone1.light + 2, 38, 86),
     };
-    const isBerserker = playerStyle === "berserker";
+    const isBerserker = false; // berserker removed
     const activeTone = isBerserker ? burstTone1 : burstTone2;
 
     const drawBurstSegment = (x, w, ratio, tone, ready, active) => {
@@ -15787,7 +15757,7 @@
 
     // Tone based on current style (Red for Berserker, Blue for Gunner)
     // Actually, let's keep it simple or check playerStyle
-    const isBerserker = playerStyle === "berserker";
+    const isBerserker = false; // berserker removed
     const tone1 = burstChargeTone(chargeRatio1);
     const tone2 = {
       hue: (tone1.hue + 84) % 360,
@@ -15997,19 +15967,17 @@
       scheduleBGM();
       const actions = sampleActions();
 
-      // Style change with Space key
+      // Style change with Space key (4 styles)
       if (actions.styleChangePressed) {
         if (playerStyle === "swordmaster") playerStyle = "gunslinger";
         else if (playerStyle === "gunslinger") playerStyle = "royalguard";
-        else if (playerStyle === "royalguard") playerStyle = "berserker";
-        else if (playerStyle === "berserker") playerStyle = "gunner";
+        else if (playerStyle === "royalguard") playerStyle = "trickster";
         else playerStyle = "swordmaster";
 
-        hudMessage = playerStyle === "berserker" ? "BERSERKER STYLE"
-          : playerStyle === "gunner" ? "GUNNER STYLE"
+        hudMessage = playerStyle === "trickster" ? "TRICKSTER!"
           : playerStyle === "royalguard" ? "ROYAL GUARD!"
           : playerStyle === "gunslinger" ? "GUNSLINGER!"
-          : "SWORDMASTER STYLE";
+          : "SWORDMASTER!";
         hudTimer = 60;
 
         // Reset timers to prevent jams
@@ -16069,27 +16037,27 @@
 
   function updateStyleUI() {
     if (btnAttack) {
-      const isBerserker = playerStyle === "berserker";
       const isSwordmaster = playerStyle === "swordmaster";
       const isRoyalGuard = playerStyle === "royalguard";
       const isGunslinger = playerStyle === "gunslinger";
-      btnAttack.style.background = isBerserker
-        ? "linear-gradient(to bottom, #ff5555, #cc0000)"
-        : isSwordmaster
-          ? "linear-gradient(to bottom, #ff6644, #cc3300)"
+      const isTrickster = playerStyle === "trickster";
+      btnAttack.style.background = isSwordmaster
+        ? "linear-gradient(to bottom, #ff6644, #cc3300)"
         : isRoyalGuard
           ? "linear-gradient(to bottom, #5588ff, #2244cc)"
         : isGunslinger
           ? "linear-gradient(to bottom, #ffcc33, #cc9900)"
+        : isTrickster
+          ? "linear-gradient(to bottom, #ff55ff, #cc00cc)"
           : "linear-gradient(to bottom, #5555ff, #0000cc)";
-      btnAttack.style.boxShadow = isBerserker
-        ? "0 4px 0 #990000"
-        : isSwordmaster
-          ? "0 4px 0 #992200"
+      btnAttack.style.boxShadow = isSwordmaster
+        ? "0 4px 0 #992200"
         : isRoyalGuard
           ? "0 4px 0 #1133aa"
         : isGunslinger
           ? "0 4px 0 #997700"
+        : isTrickster
+          ? "0 4px 0 #990099"
           : "0 4px 0 #000099";
     }
 
@@ -16114,9 +16082,7 @@
       // 2. Charge Bar Display
       let chargeRatio = 0;
 
-      if (playerStyle === "berserker") {
-        chargeRatio = attackChargeTimer / ATTACK_CHARGE_MAX;
-      } else if (playerStyle === "gunner") {
+      if (playerStyle === "gunner") {
         chargeRatio = shotChargeTimer / SHOT_CHARGE_MAX;
       } else if (playerStyle === "swordmaster" || playerStyle === "gunslinger") {
         chargeRatio = swordChargeTimer / SWORD_CHARGE_MAX;
