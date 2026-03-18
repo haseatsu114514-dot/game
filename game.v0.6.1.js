@@ -466,10 +466,10 @@
   const PRE_BOSS_MOVIE_START_AT = 230;
   const GOD_PHASE_CUTSCENE_DURATION = 210;
   const GOD_PHASE_CUTSCENE_SKIP_MIN = 24;
-  const PEACOCK_BOSS_HP = 14;
-  const PEACOCK_HUMAN_BOSS_HP = 18;
-  const GOD_BOSS_PHASE1_HP = 23;
-  const GOD_BOSS_PHASE2_HP = 31;
+  const PEACOCK_BOSS_HP = 28;
+  const PEACOCK_HUMAN_BOSS_HP = 35;
+  const GOD_BOSS_PHASE1_HP = 45;
+  const GOD_BOSS_PHASE2_HP = 60;
   const GOD_BOSS_SHOT_DENSITY_MUL = 1.28;
   const CANNON_BULLET_SPEED = 1.3;
   const CANNON_WARN_WINDOW = 24;
@@ -3399,7 +3399,7 @@
         enemy.shootInterval = enemy.shooter ? 176 + i * 9 : 0;
         enemy.shootCooldown = enemy.shooter ? 104 + i * 7 : 0;
         enemy.flash = 0;
-        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 28 : enemy.kind === "peacock" ? 18 : 12)));
         enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
         enemy.hitstun = 0;
       }
@@ -3623,7 +3623,7 @@
         enemy.shootInterval = enemy.shooter ? 162 + i * 8 : 0;
         enemy.shootCooldown = enemy.shooter ? 94 + i * 7 : 0;
         enemy.flash = 0;
-        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
+        enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 28 : enemy.kind === "peacock" ? 18 : 12)));
         enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
         enemy.hitstun = 0;
       }
@@ -3895,7 +3895,7 @@
       enemy.shootInterval = enemy.shooter ? 156 + i * 10 : 0;
       enemy.shootCooldown = enemy.shooter ? 96 + i * 10 : 0;
       enemy.flash = 0;
-      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7)));
+      enemy.maxHp = Math.max(1, Math.round(enemy.maxHp || (enemy.kind === "bruiser" ? 28 : enemy.kind === "peacock" ? 18 : 12)));
       enemy.hp = Math.min(enemy.maxHp, Math.max(1, Math.round(enemy.hp || enemy.maxHp)));
       enemy.hitstun = 0;
     }
@@ -4504,7 +4504,7 @@
     const blackFlashPowerApplied = options.blackFlashPowerApplied === true;
     const effectivePower = blackFlash && !blackFlashPowerApplied ? power * BLACK_FLASH_DAMAGE_MUL : power;
     if (!enemy.maxHp) {
-      enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+      enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 28 : enemy.kind === "peacock" ? 18 : 12));
     }
     if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) {
       enemy.hp = enemy.maxHp;
@@ -6818,7 +6818,7 @@
 
     // Cooldown
     if (swordAttackCooldown > 0) {
-      swordAttackCooldown -= dt;
+      swordAttackCooldown -= dt * (1 / styleCooldownMul()); // Trickster: faster recovery
       return;
     }
 
@@ -6993,34 +6993,35 @@
     const power = 1.0 + rankIdx * 0.06; // Low damage — purpose is launch, not kill
 
     // Launch player and enemies upward
-    player.vy = -7;
+    player.vy = -6;
     player.onGround = false;
 
     const hitBox = {
       x: dir > 0 ? player.x + player.w - 4 : player.x - reach + 4,
-      y: player.y - 10,
+      y: player.y - 8,
       w: reach,
-      h: 28,
+      h: 24,
     };
 
     // Direct launch: skip kickEnemy damage, manually launch enemies
     const crisisMul = pinchAttackMultiplier();
+    // Swordmaster bonus: upper does more damage
+    const upperDmg = playerStyle === "swordmaster" ? 3 : 2;
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlap(hitBox, enemy)) continue;
-      // Light damage only (1 HP)
       if (!enemy.maxHp) {
-        enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+        enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 28 : enemy.kind === "peacock" ? 18 : 12));
       }
       if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
-      enemy.hp = Math.max(1, enemy.hp - 1); // Never kill — always leave at least 1 HP
-      // Strong upward launch — move enemy up immediately to clear ground
+      enemy.hp = Math.max(1, enemy.hp - upperDmg); // Never kill — always leave at least 1 HP
+      // Controlled upward launch
       enemy.vx = dir * 0.3;
-      enemy.vy = -(12.0 + power * 1.2);
-      enemy.y -= 6; // Nudge up to clear ground collision
+      enemy.vy = -(9.0 + power * 0.8);
+      enemy.y -= 4; // Nudge up to clear ground collision
       enemy.onGround = false;
-      enemy.launchTimer = 12; // Skip ground collision during initial launch
-      enemy.hitstun = Math.max(enemy.hitstun || 0, 50); // Long hitstun for air combos
+      enemy.launchTimer = 10; // Skip ground collision during initial launch
+      enemy.hitstun = Math.max(enemy.hitstun || 0, 45); // Long hitstun for air combos
       enemy.flash = 14;
       const hx = enemy.x + enemy.w * 0.5;
       const hy = enemy.y + enemy.h * 0.4;
@@ -7118,7 +7119,9 @@
 
   function swordHitEnemies(hitBox, dir, power, knockMul, launchUp) {
     const crisisMul = pinchAttackMultiplier();
-    const effectivePower = power * crisisMul;
+    // Swordmaster bonus: +25% sword damage
+    const styleMul = playerStyle === "swordmaster" ? 1.25 : 1.0;
+    const effectivePower = power * crisisMul * styleMul;
     for (const enemy of stage.enemies) {
       if (!enemy.alive || enemy.kicked) continue;
       if (!overlap(hitBox, enemy)) continue;
@@ -7302,6 +7305,11 @@
     return playerStyle === "trickster" ? 8 : 0;
   }
 
+  // Trickster passive: sword cooldown reduction
+  function styleCooldownMul() {
+    return playerStyle === "trickster" ? 0.7 : 1.0;
+  }
+
   // ========== DEDICATED GUN (K KEY - always available) ==========
   function updateDedicatedGun(dt, actions) {
     if (dedicatedGunCooldown > 0) {
@@ -7457,7 +7465,7 @@
     // Called when player takes damage while blocking
     if (royalGuardBlockTimer <= 0) return false;
     const isJustGuard = royalGuardBlockTimer > (ROYAL_GUARD_BLOCK_DURATION - ROYAL_GUARD_BLOCK_WINDOW);
-    const gaugeGain = isJustGuard ? 80 : 40; // Just guard = more gauge
+    const gaugeGain = isJustGuard ? 45 : 20; // Just guard = more gauge, but slower overall
     royalGuardGauge = Math.min(ROYAL_GUARD_MAX_GAUGE, royalGuardGauge + gaugeGain);
     const currentLevel = Math.floor(royalGuardGauge / ROYAL_GUARD_GAUGE_PER_LEVEL);
     if (isJustGuard) {
@@ -7650,14 +7658,14 @@
           if (!enemy.alive) continue;
           // Initialize HP only if never set
           if (!enemy.maxHp) {
-            enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 16 : enemy.kind === "peacock" ? 10 : 7));
+            enemy.maxHp = Math.max(1, Math.round(enemy.kind === "bruiser" ? 28 : enemy.kind === "peacock" ? 18 : 12));
           }
           if (!Number.isFinite(enemy.hp) || enemy.hp === undefined) enemy.hp = enemy.maxHp;
+          // Gunslinger bonus: +50% gun damage
+          let gunPower = (wave.power || 0.5) * (playerStyle === "gunslinger" ? 1.5 : 1.0);
           // Shotgun close-range bonus: more damage the closer the target
-          let gunPower = wave.power || 0.5;
           if (wave.kind === "shotgun" && wave.shotgunOriginX !== undefined) {
             const distFromOrigin = Math.abs((enemy.x + enemy.w * 0.5) - wave.shotgunOriginX);
-            // Within ~50px = 2x damage, within ~100px = 1.5x, beyond = 1x
             const closeMul = distFromOrigin < 50 ? 2.0 : distFromOrigin < 100 ? 1.5 : 1.0;
             gunPower *= closeMul;
           }
@@ -9442,9 +9450,17 @@
 
     if (isTimeBurstStopActive()) return;
 
+    // Royal Guard block negates hazard damage
+    const rgBlocking = playerStyle === "royalguard" && royalGuardBlockTimer > 0;
+
     for (const block of stage.fallBlocks) {
       if (block.state !== "fall") continue;
       if (overlap(player, block)) {
+        if (rgBlocking) {
+          royalGuardAbsorb(1);
+          block.state = "gone"; // Destroy the block
+          continue;
+        }
         killPlayer("落下ブロックで即死");
         return;
       }
@@ -9462,6 +9478,10 @@
         h: activeH,
       };
       if (overlap(player, hit)) {
+        if (rgBlocking) {
+          royalGuardAbsorb(1);
+          continue;
+        }
         killPlayer("電撃ポールに接触");
         return;
       }
@@ -9640,7 +9660,9 @@
       const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
       player.vx = clamp(player.vx, -speedCap, speedCap);
 
-      if (actions.jumpPressed && player.onGround) {
+      // Suppress jump if attack is also pressed with W/Up (High Time takes priority)
+      const upperInput = actions.jumpPressed && (actions.attackPressed || input.attack) && player.onGround;
+      if (actions.jumpPressed && player.onGround && !upperInput) {
         player.vy = -jumpPower;
         playJumpSfx();
         swordDoubleJumpUsed = false;
@@ -9651,7 +9673,7 @@
           dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
         }
         player.onGround = false;
-      } else if (actions.jumpPressed && !player.onGround && !swordDoubleJumpUsed) {
+      } else if (actions.jumpPressed && !player.onGround && !swordDoubleJumpUsed && !upperInput) {
         swordDoubleJumpUsed = true;
         player.vy = -(jumpPower * 0.85);
         playJumpSfx();
@@ -9893,7 +9915,8 @@
       const speedCap = maxSpeed * (dashJumpAssistTimer > 0 ? DASH_JUMP_SPEED_CAP_MULT : 1);
       player.vx = clamp(player.vx, -speedCap, speedCap);
 
-      if (actions.jumpPressed && player.onGround) {
+      const upperInput2 = actions.jumpPressed && (actions.attackPressed || input.attack) && player.onGround;
+      if (actions.jumpPressed && player.onGround && !upperInput2) {
         player.vy = -jumpPower;
         playJumpSfx();
         swordDoubleJumpUsed = false;
@@ -9904,7 +9927,7 @@
           dashJumpAssistTimer = DASH_JUMP_ASSIST_FRAMES;
         }
         player.onGround = false;
-      } else if (actions.jumpPressed && !player.onGround && !swordDoubleJumpUsed) {
+      } else if (actions.jumpPressed && !player.onGround && !swordDoubleJumpUsed && !upperInput2) {
         swordDoubleJumpUsed = true;
         player.vy = -(jumpPower * 0.85);
         playJumpSfx();
