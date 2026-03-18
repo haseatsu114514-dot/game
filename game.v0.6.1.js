@@ -6635,8 +6635,16 @@
 
           if (tier === 0) {
             const rankIdx = battleRankIndex;
-            const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(4, 30 - rankIdx * 4);
+            // Rank makes handgun fire much faster - feels like rapid fire at high ranks
+            const reloadBase = rankIdx >= BATTLE_RANK_EX_INDEX ? 0 : Math.max(2, 22 - rankIdx * 4);
             shotReloadTimer = reloadBase;
+            // Rank 4+ fires double shot, Rank 6 fires triple
+            if (rankIdx >= 6) {
+              fireRangedProjectile(0);
+              fireRangedProjectile(0);
+            } else if (rankIdx >= 4) {
+              fireRangedProjectile(0);
+            }
           }
         } else {
           // Not enough ammo - prompt reload
@@ -6662,7 +6670,8 @@
     if (shotMachineGunCount > 0) {
       shotMachineGunFrame += dt;
       const rankIdx = battleRankIndex;
-      const delay = Math.max(2, 6 - Math.floor(rankIdx * 0.6));
+      // Higher rank = faster machine gun rate (more satisfying spray)
+      const delay = Math.max(1, 5 - Math.floor(rankIdx * 0.7));
       if (shotMachineGunFrame >= delay) {
         shotMachineGunFrame = 0;
         if (gunnerAmmo > 0) {
@@ -6684,11 +6693,13 @@
       if (seBazooka) playSound(seBazooka, 0.8);
     } else if (tier === 2) { // Shotgun
       const rankIdx = battleRankIndex;
-      let pellets = 8;  // Higher base density
-      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 16;
-      else if (rankIdx >= 5) pellets = 14;
-      else if (rankIdx >= 3) pellets = 12;
-      else if (rankIdx >= 2) pellets = 10;
+      // More pellets at higher ranks = more hits = more damage
+      let pellets = 8;
+      if (rankIdx >= BATTLE_RANK_EX_INDEX) pellets = 22;
+      else if (rankIdx >= 5) pellets = 18;
+      else if (rankIdx >= 4) pellets = 15;
+      else if (rankIdx >= 3) pellets = 13;
+      else if (rankIdx >= 2) pellets = 11;
       else if (rankIdx >= 1) pellets = 9;
 
       // Consume Ammo = pellets/2 (more pellets but same ammo cost)
@@ -6709,15 +6720,16 @@
           stage.playerWaves.push({
             kind: "shotgun", x: px + dir * 10, y: py, w: 5, h: 5,
             vx: dir * 7.5, vy: ang * spreadBase, ttl: 22,
-            power: 0.7, shotgunOriginX: px, shotgunOriginY: py
+            power: 0.5, shotgunOriginX: px, shotgunOriginY: py
           });
         }
         if (seShotgun) playSound(seShotgun, 0.7);
       }
     } else if (tier === 1) { // Machine Gun
       const rankIdx = battleRankIndex;
-      const baseBurst = 3;
-      const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 5 : Math.min(4, rankIdx);
+      // More bullets at higher ranks - volume of fire is the damage
+      const baseBurst = 4;
+      const extra = rankIdx >= BATTLE_RANK_EX_INDEX ? 8 : Math.min(6, Math.floor(rankIdx * 1.2));
       shotMachineGunCount = baseBurst + extra;
       shotMachineGunFrame = 3;
 
@@ -6757,14 +6769,16 @@
       // Slower speed: 4.8 start (reduced from 6.0)
       const speed = 4.8 + rankIdx * 1.3;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 55, power: 0.4
+        kind: "bullet", x: px + dir * 15, y: py + (Math.random() - 0.5) * 6, w: 6, h: 4, vx: dir * speed, vy: (Math.random() - 0.5) * 1.5, ttl: 55, power: 0.3
       });
     } else { // Handgun
       const rankIdx = battleRankIndex;
-      // Slower speed: 4.5 start (reduced from 5.5)
+      // Speed increases with rank
       const speed = 4.5 + rankIdx * 1.2;
+      // Slight vertical spread for extra bullets at high rank
+      const yOff = rankIdx >= 4 ? (Math.random() - 0.5) * 3 : 0;
       stage.playerWaves.push({
-        kind: "bullet", x: px + dir * 15, y: py, w: 8, h: 4, vx: dir * speed, vy: 0, ttl: 65, power: 0.5
+        kind: "bullet", x: px + dir * 15, y: py + yOff, w: 8, h: 4, vx: dir * speed, vy: yOff * 0.1, ttl: 65, power: 0.35
       });
     }
   }
@@ -7672,6 +7686,7 @@
           const gunDmg = Math.max(1, Math.round(gunPower * 0.6));
           enemy.hp = Math.max(0, enemy.hp - gunDmg);
           enemy.flash = Math.max(enemy.flash || 0, 6);
+          if (devilTriggerTimer > 0) devilTriggerHitCount++;
           // Light flinch but no big knockback — bullets chip away
           if (!enemy.kicked) {
             enemy.hitstun = Math.max(enemy.hitstun || 0, 4);
@@ -7721,7 +7736,9 @@
 
       if (!wave.dead && stage.boss.active) {
         for (const boss of getBossEntities()) {
-          if (boss.hp <= 0 || boss.invuln > 0 || !waveHitbox || !overlap(waveHitbox, boss)) continue;
+          if (boss.hp <= 0 || !waveHitbox || !overlap(waveHitbox, boss)) continue;
+          // Devil Trigger ignores boss invulnerability (same as melee)
+          if (boss.invuln > 0 && devilTriggerTimer <= 0) continue;
           const dir = wave.vx >= 0 ? 1 : -1;
           const hx = boss.x + boss.w * 0.5;
           const hy = boss.y + boss.h * 0.4;
@@ -7730,7 +7747,12 @@
           const bossDamage = Math.max(1, Math.round((1 + bossDamageBonus()) * crisisMul * (bf ? BLACK_FLASH_DAMAGE_MUL : 1)));
           boss.hp = Math.max(0, boss.hp - bossDamage);
           // Gun bullets: very short invuln so rapid fire works
-          boss.invuln = isGunWave ? 4 : BOSS_HIT_INVULN_FRAMES;
+          // DT: minimal invuln for all attacks
+          if (devilTriggerTimer > 0) {
+            boss.invuln = Math.min(boss.invuln, isGunWave ? 2 : 4);
+          } else {
+            boss.invuln = isGunWave ? 4 : BOSS_HIT_INVULN_FRAMES;
+          }
           // Gun bullets: minimal knockback to boss
           if (isGunWave) {
             boss.vx += dir * 0.1;
@@ -7746,12 +7768,11 @@
             spawnExplosion(wave.x + wave.w / 2, wave.y + wave.h / 2, wave.power || 2);
           }
           handleBossHpZero();
+          if (devilTriggerTimer > 0) devilTriggerHitCount++;
           wave.dead = true;
           break;
         }
       }
-
-
 
 
       // Guns (bullet/shotgun) cannot cancel enemy projectiles; other weapons can
