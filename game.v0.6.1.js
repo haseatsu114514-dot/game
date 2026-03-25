@@ -14,6 +14,7 @@
 
   const STATE = {
     TITLE: "title",
+    TUTORIAL: "tutorial",
     CUTSCENE: "cutscene",
     STAGE_INTRO: "stage_intro",
     PRE_BOSS: "pre_boss",
@@ -81,6 +82,65 @@
   let hudMessage = "";
   let hudTimer = 0;
   let deathContinueMode = "checkpoint";
+
+  // --- Tutorial System ---
+  const isTouchDevice = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+  let tutorialStep = 0;
+  let tutorialTimer = 0;
+  let tutorialCompleted = false;
+  let tutorialSkipHold = 0;
+  const TUTORIAL_SKIP_HOLD_TIME = 40;
+  const TUTORIAL_STEPS = [
+    {
+      key: "move",
+      titleJa: "移動",
+      descJa: isTouchDevice ? "左右ボタンで移動しよう" : "A / D キーで左右に移動しよう",
+      check: (actions) => input.left || input.right,
+      requiredFrames: 40,
+    },
+    {
+      key: "jump",
+      titleJa: "ジャンプ",
+      descJa: isTouchDevice ? "JUMPボタンでジャンプ！2回で2段ジャンプ" : "W / Space でジャンプ！2回押しで2段ジャンプ",
+      check: (actions) => actions.jumpPressed,
+      requiredFrames: 0,
+      requiredCount: 2,
+    },
+    {
+      key: "attack",
+      titleJa: "攻撃",
+      descJa: isTouchDevice ? "攻撃ボタンで斬撃コンボ！" : "J キーで斬撃コンボ！連打してみよう",
+      check: (actions) => actions.attackPressed,
+      requiredFrames: 0,
+      requiredCount: 3,
+    },
+    {
+      key: "shoot",
+      titleJa: "銃撃",
+      descJa: isTouchDevice ? "SHOOTボタンで銃撃！押しっぱなしで連射" : "K キーで銃撃！押しっぱなしで連射",
+      check: (actions) => input.shoot,
+      requiredFrames: 30,
+    },
+    {
+      key: "dash",
+      titleJa: "ダッシュ回避",
+      descJa: isTouchDevice ? "DASHボタンで素早く回避！" : "L キーでダッシュ回避！攻撃をかわそう",
+      check: (actions) => actions.dashPressed,
+      requiredFrames: 0,
+      requiredCount: 1,
+    },
+    {
+      key: "ready",
+      titleJa: "準備完了！",
+      descJa: "操作は覚えた！いざ出陣！",
+      check: () => false,
+      autoAdvance: 90,
+    },
+  ];
+  let tutorialStepProgress = 0;
+  let tutorialStepCount = 0;
+  let tutorialAutoTimer = 0;
+  let tutorialFadeOut = 0;
 
   let checkpointIndex = 0;
   let currentStageNumber = 1;
@@ -1725,7 +1785,7 @@
 
     ensureVoiceFiles();
 
-    if (gameState === STATE.TITLE || gameState === STATE.CUTSCENE || gameState === STATE.STAGE_INTRO || gameState === STATE.PRE_BOSS) {
+    if (gameState === STATE.TITLE || gameState === STATE.TUTORIAL || gameState === STATE.CUTSCENE || gameState === STATE.STAGE_INTRO || gameState === STATE.PRE_BOSS) {
       startOpeningTheme();
     }
   }
@@ -11155,7 +11215,18 @@
     preBossCutsceneTimer = 0;
     godPhaseCutsceneTimer = 0;
     cameraX = 0;
-    gameState = STATE.CUTSCENE;
+    if (!tutorialCompleted) {
+      tutorialStep = 0;
+      tutorialTimer = 0;
+      tutorialStepProgress = 0;
+      tutorialStepCount = 0;
+      tutorialAutoTimer = 0;
+      tutorialFadeOut = 0;
+      tutorialSkipHold = 0;
+      gameState = STATE.TUTORIAL;
+    } else {
+      gameState = STATE.CUTSCENE;
+    }
     startOpeningTheme();
   }
 
@@ -11168,6 +11239,201 @@
     if (actions.startPressed || actions.jumpPressed || actions.attackPressed || actions.attack2Pressed) {
       beginOpeningCutscene();
     }
+  }
+
+  function skipTutorial() {
+    tutorialCompleted = true;
+    tutorialFadeOut = 0;
+    gameState = STATE.CUTSCENE;
+  }
+
+  function updateTutorial(dt, actions) {
+    cameraX = 0;
+    tutorialTimer += dt;
+    player.anim += dt * 0.45;
+
+    // Skip: hold start (Enter) or long-press
+    if (input.start) {
+      tutorialSkipHold += dt;
+      if (tutorialSkipHold >= TUTORIAL_SKIP_HOLD_TIME) {
+        skipTutorial();
+        return;
+      }
+    } else {
+      tutorialSkipHold = 0;
+    }
+
+    // Fade out transition
+    if (tutorialFadeOut > 0) {
+      tutorialFadeOut -= dt;
+      if (tutorialFadeOut <= 0) {
+        tutorialCompleted = true;
+        gameState = STATE.CUTSCENE;
+      }
+      return;
+    }
+
+    const step = TUTORIAL_STEPS[tutorialStep];
+    if (!step) {
+      skipTutorial();
+      return;
+    }
+
+    // Auto-advance steps (like the "ready" step)
+    if (step.autoAdvance) {
+      tutorialAutoTimer += dt;
+      if (tutorialAutoTimer >= step.autoAdvance) {
+        tutorialFadeOut = 20;
+      }
+      return;
+    }
+
+    // Check if current step condition is met
+    if (step.check(actions)) {
+      if (step.requiredCount) {
+        tutorialStepCount++;
+        if (tutorialStepCount >= step.requiredCount) {
+          advanceTutorialStep();
+        }
+      } else if (step.requiredFrames) {
+        tutorialStepProgress += dt;
+        if (tutorialStepProgress >= step.requiredFrames) {
+          advanceTutorialStep();
+        }
+      } else {
+        advanceTutorialStep();
+      }
+    } else if (step.requiredFrames && !step.requiredCount) {
+      // For hold-type checks, reset if not holding
+    }
+  }
+
+  function advanceTutorialStep() {
+    tutorialStep++;
+    tutorialStepProgress = 0;
+    tutorialStepCount = 0;
+    tutorialAutoTimer = 0;
+  }
+
+  function drawTutorial() {
+    // Draw the game background for visual context
+    const savedCamera = cameraX;
+    cameraX = Math.floor((Math.sin(tutorialTimer * 0.012) * 0.5 + 0.5) * 80);
+    drawSkyGradient();
+    drawParallax();
+    cameraX = savedCamera;
+
+    // Dark overlay
+    ctx.fillStyle = "rgba(6, 8, 14, 0.72)";
+    ctx.fillRect(0, 0, W, H);
+
+    // Title
+    ctx.fillStyle = "#ff6f8c";
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("TUTORIAL", W / 2, 20);
+
+    // Current step
+    const step = TUTORIAL_STEPS[tutorialStep];
+    if (step) {
+      // Step indicator dots
+      const dotY = 30;
+      const totalDots = TUTORIAL_STEPS.length;
+      const dotSpacing = 10;
+      const dotStartX = W / 2 - ((totalDots - 1) * dotSpacing) / 2;
+      for (let i = 0; i < totalDots; i++) {
+        ctx.fillStyle = i < tutorialStep ? "#ff6f8c" : i === tutorialStep ? "#ffe0cf" : "rgba(255,255,255,0.25)";
+        ctx.beginPath();
+        ctx.arc(dotStartX + i * dotSpacing, dotY, i === tutorialStep ? 3 : 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Step title
+      ctx.fillStyle = "#ffe7b0";
+      ctx.font = "bold 14px monospace";
+      ctx.fillText(step.titleJa, W / 2, 56);
+
+      // Step description
+      ctx.fillStyle = "#f0ebd9";
+      ctx.font = "10px monospace";
+      ctx.fillText(step.descJa, W / 2, 72);
+
+      // Progress bar (for steps that require holding)
+      if (step.requiredFrames && tutorialStepProgress > 0) {
+        const barW = 100;
+        const barH = 6;
+        const barX = (W - barW) / 2;
+        const barY = 82;
+        const ratio = Math.min(1, tutorialStepProgress / step.requiredFrames);
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = "#ff6f8c";
+        ctx.fillRect(barX, barY, barW * ratio, barH);
+        ctx.strokeStyle = "rgba(255,255,255,0.3)";
+        ctx.strokeRect(barX, barY, barW, barH);
+      }
+
+      // Count indicator (for steps that require multiple presses)
+      if (step.requiredCount) {
+        const countText = `${tutorialStepCount} / ${step.requiredCount}`;
+        ctx.fillStyle = "#aaddff";
+        ctx.font = "10px monospace";
+        ctx.fillText(countText, W / 2, 88);
+      }
+
+      // Animated hint arrow or key icon
+      const hintY = 105 + Math.sin(tutorialTimer * 0.15) * 2;
+      if (isTouchDevice) {
+        ctx.fillStyle = "rgba(255,224,207,0.7)";
+        ctx.font = "9px monospace";
+        ctx.fillText("画面下のボタンで操作", W / 2, hintY);
+      } else {
+        const keyHints = {
+          move: "[ A ]  [ D ]",
+          jump: "[ W / Space ]",
+          attack: "[ J ]",
+          shoot: "[ K ]",
+          dash: "[ L ]",
+          ready: "",
+        };
+        ctx.fillStyle = "#aaddff";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText(keyHints[step.key] || "", W / 2, hintY);
+      }
+    }
+
+    // Draw player character for visual feedback
+    const heroBob = Math.sin(tutorialTimer * 0.12) * 1.2;
+    drawHero(W / 2 - 10, 120 + heroBob, 1, tutorialTimer * 1.08, 1.4);
+
+    // Skip hint
+    ctx.textAlign = "right";
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = "8px monospace";
+    const skipLabel = isTouchDevice ? "SKIPボタン長押しでスキップ" : "Enter 長押しでスキップ";
+    ctx.fillText(skipLabel, W - 8, H - 6);
+
+    // Skip progress bar
+    if (tutorialSkipHold > 0) {
+      const skipRatio = Math.min(1, tutorialSkipHold / TUTORIAL_SKIP_HOLD_TIME);
+      const skipBarW = 60;
+      const skipBarH = 3;
+      const skipBarX = W - 8 - skipBarW;
+      const skipBarY = H - 3;
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.fillRect(skipBarX, skipBarY, skipBarW, skipBarH);
+      ctx.fillStyle = "#ff6f8c";
+      ctx.fillRect(skipBarX, skipBarY, skipBarW * skipRatio, skipBarH);
+    }
+
+    // Fade out effect
+    if (tutorialFadeOut > 0) {
+      const alpha = 1 - (tutorialFadeOut / 20);
+      ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    ctx.textAlign = "left";
   }
 
   function updateCutscene(dt, actions) {
@@ -11416,6 +11682,11 @@
 
     if (gameState === STATE.TITLE) {
       updateTitle(dt, actions);
+      return;
+    }
+
+    if (gameState === STATE.TUTORIAL) {
+      updateTutorial(dt, actions);
       return;
     }
 
@@ -16947,6 +17218,12 @@
       return;
     }
 
+    if (gameState === STATE.TUTORIAL) {
+      drawTutorial();
+      drawPs1Overlay();
+      return;
+    }
+
     if (gameState === STATE.CUTSCENE) {
       drawCutscene();
       drawPs1Overlay();
@@ -17185,6 +17462,11 @@
 
     if (gameState === STATE.TITLE) {
       beginOpeningCutscene();
+      return;
+    }
+
+    if (gameState === STATE.TUTORIAL) {
+      // Taps on canvas during tutorial are ignored (use buttons)
       return;
     }
 
@@ -17470,6 +17752,25 @@
   const btnAttack = document.getElementById("btn-attack");
   const hudAmmo = document.getElementById("hud-ammo");
   const hudChargeFill = document.getElementById("hud-charge-fill");
+
+  // --- Mobile Touch Controls Auto-Detection ---
+  const controlsSection = document.querySelector(".controls");
+  if (controlsSection) {
+    if (isTouchDevice) {
+      controlsSection.removeAttribute("style");
+    } else {
+      controlsSection.style.display = "none";
+    }
+  }
+
+  // Bind additional touch buttons (shoot, dash, down, skip)
+  try {
+    bindHoldButton("btn-shoot", "shoot");
+    bindHoldButton("btn-dash", "dash");
+    bindHoldButton("btn-down", "down");
+    // Skip tutorial button triggers "start" input
+    bindHoldButton("btn-skip", "start");
+  } catch (_e) { console.error("[init] extra button setup", _e); }
 
   try { updateStyleUI(); } catch (_e) { console.error("[init] updateStyleUI", _e); }
   console.log("Game Version:", GAME_VERSION);
