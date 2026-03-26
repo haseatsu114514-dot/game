@@ -90,53 +90,216 @@
   let tutorialCompleted = false;
   let tutorialSkipHold = 0;
   const TUTORIAL_SKIP_HOLD_TIME = 40;
+
+  // Tutorial page navigation
+  let tutorialPage = 0; // sub-page within a step (for multi-page info steps)
+
+  // Touch/PC adaptive text helper
+  function tKey(pcText, touchText) { return isTouchDevice ? touchText : pcText; }
+
   const TUTORIAL_STEPS = [
+    // --- Phase 1: Basic Controls ---
     {
-      key: "move",
+      key: "move", phase: "BASIC",
       titleJa: "移動",
-      descJa: isTouchDevice ? "左右ボタンで移動しよう" : "A / D キーで左右に移動しよう",
-      check: (actions) => input.left || input.right,
+      descJa: [tKey("A / D キーで左右に移動しよう", "左右ボタンで移動しよう")],
+      check: () => input.left || input.right,
       requiredFrames: 40,
     },
     {
-      key: "jump",
+      key: "jump", phase: "BASIC",
       titleJa: "ジャンプ",
-      descJa: isTouchDevice ? "JUMPボタンでジャンプ！2回で2段ジャンプ" : "W / Space でジャンプ！2回押しで2段ジャンプ",
+      descJa: [tKey("W / Space でジャンプ！", "JUMPボタンでジャンプ！"), "2回入力で2段ジャンプ！"],
       check: (actions) => actions.jumpPressed,
-      requiredFrames: 0,
       requiredCount: 2,
     },
     {
-      key: "attack",
+      key: "attack", phase: "BASIC",
       titleJa: "攻撃",
-      descJa: isTouchDevice ? "攻撃ボタンで斬撃コンボ！" : "J キーで斬撃コンボ！連打してみよう",
+      descJa: [tKey("J キーで斬撃コンボ！連打してみよう", "攻撃ボタンで斬撃コンボ！")],
       check: (actions) => actions.attackPressed,
-      requiredFrames: 0,
       requiredCount: 3,
     },
     {
-      key: "shoot",
+      key: "shoot", phase: "BASIC",
       titleJa: "銃撃",
-      descJa: isTouchDevice ? "SHOOTボタンで銃撃！押しっぱなしで連射" : "K キーで銃撃！押しっぱなしで連射",
-      check: (actions) => input.shoot,
+      descJa: [tKey("K キーで銃撃！押しっぱなしで連射", "SHOOTボタンで銃撃！押しっぱなしで連射")],
+      check: () => input.shoot,
       requiredFrames: 30,
     },
     {
-      key: "dash",
+      key: "dash", phase: "BASIC",
       titleJa: "ダッシュ回避",
-      descJa: isTouchDevice ? "DASHボタンで素早く回避！" : "L キーでダッシュ回避！攻撃をかわそう",
+      descJa: [tKey("L キーでダッシュ回避！", "DASHボタンで素早く回避！"), "敵の攻撃をかわそう"],
       check: (actions) => actions.dashPressed,
-      requiredFrames: 0,
       requiredCount: 1,
     },
+
+    // --- Phase 2: Style System ---
     {
-      key: "ready",
+      key: "style_intro", phase: "STYLE",
+      titleJa: "スタイルチェンジ",
+      descJa: [
+        "このゲームには4つの戦闘スタイルがある！",
+        "状況に合わせてスタイルを切り替えて戦おう",
+        tKey("V キーでスタイル切替（方向+Vで直接指定）", "STYLEボタンでスタイル切替"),
+      ],
+      info: true,
+    },
+    {
+      key: "style_swordmaster", phase: "STYLE",
+      titleJa: "SWORDMASTER",
+      descJa: [
+        "近接攻撃の達人！剣技のダメージが最強",
+        tKey("攻撃長押し→離す: 回転斬り SPIN ATTACK", "攻撃長押し→離す: 回転斬り"),
+        tKey("方向+J: 突進斬り / W+J: 打ち上げ", "方向+攻撃: 突進斬り"),
+        "DT発動時: ダメージ1.5倍・リーチ1.25倍",
+      ],
+      color: "#ff6644",
+      info: true,
+    },
+    {
+      key: "style_trickster", phase: "STYLE",
+      titleJa: "TRICKSTER",
+      descJa: [
+        "超高速回避の使い手！スピード特化",
+        tKey("L キーでテレポート回避（距離60）", "DASHでテレポート回避"),
+        "回避成功でランクボーナス＆攻撃力UP",
+        "DT発動時: 移動速度1.5倍・回避CD大幅短縮",
+      ],
+      color: "#ffcc22",
+      info: true,
+    },
+    {
+      key: "style_gunslinger", phase: "STYLE",
+      titleJa: "GUNSLINGER",
+      descJa: [
+        "銃火器のスペシャリスト！射撃ダメージ特化",
+        tKey("K長押しでチャージ: マシンガン→ショットガン→バズーカ", "SHOOT長押しでチャージ射撃"),
+        "弾数制限あり（15発）・自動リロード",
+        "DT発動時: 射撃ダメージ3倍・弾が貫通",
+      ],
+      color: "#22aaff",
+      info: true,
+    },
+    {
+      key: "style_royalguard", phase: "STYLE",
+      titleJa: "ROYAL GUARD",
+      descJa: [
+        "鉄壁の防御！ガード＆カウンター特化",
+        "敵の攻撃をタイミングよくガードしよう",
+        "ジャストガード(6F以内)で高エネルギー獲得",
+        "DT発動時: オートガード・エネルギー全回復",
+      ],
+      color: "#22ff88",
+      info: true,
+    },
+    {
+      key: "style_try", phase: "STYLE",
+      titleJa: "スタイルを切替えよう！",
+      descJa: [tKey("V キーを押してスタイルチェンジ！", "STYLEボタンでスタイルチェンジ！")],
+      check: (actions) => actions.styleChangePressed,
+      requiredCount: 2,
+    },
+
+    // --- Phase 3: Battle Rank ---
+    {
+      key: "rank_intro", phase: "RANK",
+      titleJa: "バトルランク",
+      descJa: [
+        "多彩な技を使い分けるとランクが上がる！",
+        "同じ技の連打はランク低下の原因に…",
+        "技を散らしてスタイリッシュに戦おう！",
+      ],
+      info: true,
+    },
+    {
+      key: "rank_tiers", phase: "RANK",
+      titleJa: "ランク一覧",
+      descJa: [
+        "Danger → Badass → Apocalyptic",
+        "→ Savege → SS → SSS → EX",
+        "高ランクで攻撃力・チャージ速度が大幅UP",
+      ],
+      subInfo: [
+        { label: "Danger", color: "#6688ff", desc: "チャージ 0.7x" },
+        { label: "Badass", color: "#44dddd", desc: "チャージ 0.9x" },
+        { label: "Apocalyptic", color: "#44ff44", desc: "チャージ 1.18x" },
+        { label: "Savege", color: "#ffaa22", desc: "チャージ 1.56x" },
+        { label: "SS", color: "#ff6622", desc: "チャージ 2.08x" },
+        { label: "SSS", color: "#ff4488", desc: "チャージ 2.88x" },
+        { label: "EX", color: "#ffd700", desc: "チャージ 3.24x" },
+      ],
+      info: true,
+    },
+
+    // --- Phase 4: Black Flash ---
+    {
+      key: "blackflash", phase: "ADVANCED",
+      titleJa: "黒閃 (Black Flash)",
+      descJa: [
+        "攻撃ヒット時にランダムで発動する強化効果",
+        "発動時: ダメージ1.3倍・ランク上昇1.3倍",
+        "連続発動で確率UP (8%→最大90%)",
+        "SSS以上でハイモード突入！",
+      ],
+      color: "#222",
+      info: true,
+    },
+
+    // --- Phase 5: Burst System ---
+    {
+      key: "burst_intro", phase: "ADVANCED",
+      titleJa: "バースト & デビルトリガー",
+      descJa: [
+        "敵を倒すとバーストゲージが溜まる",
+        "ゲージ50%以上で発動可能！",
+        tKey("U キーでバースト発動", "BURSTボタンで発動"),
+      ],
+      info: true,
+    },
+    {
+      key: "burst_types", phase: "ADVANCED",
+      titleJa: "バーストの種類",
+      descJa: [
+        "デビルトリガー: スタイル別の強化状態(3〜6秒)",
+        "プロテインバースト: ゲージMAXでレーザー攻撃",
+        "タイムバースト: 時間停止(MAX) or 敵減速",
+      ],
+      subInfo: [
+        { label: "剣DT", color: "#ff4422", desc: "ダメージ1.5x リーチ1.25x" },
+        { label: "技DT", color: "#ffcc22", desc: "速度1.5x 回避CD 0.3x" },
+        { label: "銃DT", color: "#22aaff", desc: "射撃3.0x 弾貫通" },
+        { label: "盾DT", color: "#22ff88", desc: "オートガード エネ全回復" },
+      ],
+      info: true,
+    },
+
+    // --- Phase 6: Emergency Dodge & Items ---
+    {
+      key: "emergency", phase: "ADVANCED",
+      titleJa: "緊急回避 & アイテム",
+      descJa: [
+        "致命的ダメージで緊急回避チャンス発生！",
+        "成功でカウンター攻撃が2.0倍に",
+        "バイク接触で無敵(10秒)・敵撃破で延長",
+        "プロテイン: バーストゲージ回復",
+      ],
+      info: true,
+    },
+
+    // --- Phase 7: Ready ---
+    {
+      key: "ready", phase: "READY",
       titleJa: "準備完了！",
-      descJa: "操作は覚えた！いざ出陣！",
-      check: () => false,
-      autoAdvance: 90,
+      descJa: [
+        "全システムを理解した！いざ出陣！",
+        "技を散らしてランクを上げ、スタイリッシュに戦え！",
+      ],
+      autoAdvance: 80,
     },
   ];
+
   let tutorialStepProgress = 0;
   let tutorialStepCount = 0;
   let tutorialAutoTimer = 0;
@@ -11223,6 +11386,7 @@
       tutorialAutoTimer = 0;
       tutorialFadeOut = 0;
       tutorialSkipHold = 0;
+      tutorialPage = 0;
       gameState = STATE.TUTORIAL;
     } else {
       gameState = STATE.CUTSCENE;
@@ -11288,6 +11452,14 @@
       return;
     }
 
+    // Info-only steps: advance on any button press
+    if (step.info) {
+      if (actions.jumpPressed || actions.attackPressed || actions.startPressed || actions.dashPressed || actions.shootPressed) {
+        advanceTutorialStep();
+      }
+      return;
+    }
+
     // Check if current step condition is met
     if (step.check(actions)) {
       if (step.requiredCount) {
@@ -11303,8 +11475,6 @@
       } else {
         advanceTutorialStep();
       }
-    } else if (step.requiredFrames && !step.requiredCount) {
-      // For hold-type checks, reset if not holding
     }
   }
 
@@ -11313,6 +11483,19 @@
     tutorialStepProgress = 0;
     tutorialStepCount = 0;
     tutorialAutoTimer = 0;
+    tutorialPage = 0;
+  }
+
+  // Get phase label and color
+  function getTutorialPhaseInfo(phase) {
+    switch (phase) {
+      case "BASIC": return { label: "基本操作", color: "#ff6f8c" };
+      case "STYLE": return { label: "スタイル", color: "#ffcc22" };
+      case "RANK": return { label: "バトルランク", color: "#ff6622" };
+      case "ADVANCED": return { label: "上級テクニック", color: "#aa66ff" };
+      case "READY": return { label: "出陣", color: "#ffd700" };
+      default: return { label: "TUTORIAL", color: "#ff6f8c" };
+    }
   }
 
   function drawTutorial() {
@@ -11324,65 +11507,158 @@
     cameraX = savedCamera;
 
     // Dark overlay
-    ctx.fillStyle = "rgba(6, 8, 14, 0.72)";
+    ctx.fillStyle = "rgba(6, 8, 14, 0.78)";
     ctx.fillRect(0, 0, W, H);
 
-    // Title
-    ctx.fillStyle = "#ff6f8c";
-    ctx.font = "bold 12px monospace";
-    ctx.textAlign = "center";
-    ctx.fillText("TUTORIAL", W / 2, 20);
-
-    // Current step
     const step = TUTORIAL_STEPS[tutorialStep];
-    if (step) {
-      // Step indicator dots
-      const dotY = 30;
-      const totalDots = TUTORIAL_STEPS.length;
-      const dotSpacing = 10;
-      const dotStartX = W / 2 - ((totalDots - 1) * dotSpacing) / 2;
-      for (let i = 0; i < totalDots; i++) {
-        ctx.fillStyle = i < tutorialStep ? "#ff6f8c" : i === tutorialStep ? "#ffe0cf" : "rgba(255,255,255,0.25)";
-        ctx.beginPath();
-        ctx.arc(dotStartX + i * dotSpacing, dotY, i === tutorialStep ? 3 : 2, 0, Math.PI * 2);
-        ctx.fill();
+    if (!step) return;
+
+    const phaseInfo = getTutorialPhaseInfo(step.phase);
+
+    // Phase label (top left)
+    ctx.textAlign = "left";
+    ctx.fillStyle = phaseInfo.color;
+    ctx.font = "bold 8px monospace";
+    ctx.fillText(phaseInfo.label, 8, 12);
+
+    // Step counter (top right)
+    ctx.textAlign = "right";
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.font = "8px monospace";
+    ctx.fillText(`${tutorialStep + 1} / ${TUTORIAL_STEPS.length}`, W - 8, 12);
+
+    // Progress bar at top
+    const progressRatio = tutorialStep / TUTORIAL_STEPS.length;
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    ctx.fillRect(0, 0, W, 2);
+    ctx.fillStyle = phaseInfo.color;
+    ctx.fillRect(0, 0, W * progressRatio, 2);
+
+    // Content area - different layouts for info vs interactive steps
+    ctx.textAlign = "center";
+
+    if (step.info) {
+      // --- Info step layout ---
+      // Title with optional color accent
+      const titleColor = step.color || "#ffe7b0";
+      ctx.fillStyle = titleColor;
+      ctx.font = "bold 13px monospace";
+      ctx.fillText(step.titleJa, W / 2, 30);
+
+      // Underline
+      const titleW = ctx.measureText(step.titleJa).width;
+      ctx.fillStyle = titleColor;
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(W / 2 - titleW / 2, 33, titleW, 1);
+      ctx.globalAlpha = 1;
+
+      // Description lines
+      const descLines = step.descJa;
+      const lineH = 13;
+      let descStartY = 48;
+      ctx.font = "9px monospace";
+      for (let i = 0; i < descLines.length; i++) {
+        ctx.fillStyle = i === 0 ? "#f0ebd9" : "#c8c0b0";
+        ctx.fillText(descLines[i], W / 2, descStartY + i * lineH);
       }
 
-      // Step title
+      // Sub-info table (for rank tiers, burst types etc.)
+      if (step.subInfo) {
+        const tableY = descStartY + descLines.length * lineH + 6;
+        const rowH = 12;
+        const tableW = 220;
+        const tableX = (W - tableW) / 2;
+
+        // Table background
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.fillRect(tableX - 4, tableY - 4, tableW + 8, step.subInfo.length * rowH + 8);
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.strokeRect(tableX - 4, tableY - 4, tableW + 8, step.subInfo.length * rowH + 8);
+
+        ctx.font = "8px monospace";
+        for (let i = 0; i < step.subInfo.length; i++) {
+          const item = step.subInfo[i];
+          const y = tableY + i * rowH + 8;
+
+          // Label
+          ctx.textAlign = "left";
+          ctx.fillStyle = item.color;
+          ctx.fillText(item.label, tableX + 2, y);
+
+          // Description
+          ctx.fillStyle = "#c8c0b0";
+          ctx.fillText(item.desc, tableX + 82, y);
+        }
+        ctx.textAlign = "center";
+      }
+
+      // "Press any key to continue" prompt
+      const promptBlink = Math.floor(tutorialTimer / 20) % 2 === 0;
+      if (promptBlink) {
+        ctx.fillStyle = "rgba(255,231,176,0.7)";
+        ctx.font = "8px monospace";
+        const nextLabel = isTouchDevice ? "タップで次へ" : "何かキーで次へ";
+        ctx.fillText(nextLabel, W / 2, H - 16);
+      }
+
+    } else if (step.autoAdvance) {
+      // --- Auto-advance step (ready screen) ---
+      ctx.fillStyle = "#ffd700";
+      ctx.font = "bold 16px monospace";
+      ctx.fillText(step.titleJa, W / 2, 50);
+
+      const descLines = step.descJa;
+      ctx.font = "10px monospace";
+      for (let i = 0; i < descLines.length; i++) {
+        ctx.fillStyle = i === 0 ? "#f0ebd9" : "#c8c0b0";
+        ctx.fillText(descLines[i], W / 2, 70 + i * 14);
+      }
+
+      // Draw hero larger for the ready screen
+      const heroBob = Math.sin(tutorialTimer * 0.12) * 1.5;
+      drawHero(W / 2 - 12, 100 + heroBob, 1, tutorialTimer * 1.2, 1.6);
+
+    } else {
+      // --- Interactive step layout ---
+      // Title
       ctx.fillStyle = "#ffe7b0";
       ctx.font = "bold 14px monospace";
-      ctx.fillText(step.titleJa, W / 2, 56);
+      ctx.fillText(step.titleJa, W / 2, 32);
 
-      // Step description
-      ctx.fillStyle = "#f0ebd9";
-      ctx.font = "10px monospace";
-      ctx.fillText(step.descJa, W / 2, 72);
+      // Description lines
+      const descLines = step.descJa;
+      ctx.font = "9px monospace";
+      for (let i = 0; i < descLines.length; i++) {
+        ctx.fillStyle = i === 0 ? "#f0ebd9" : "#c8c0b0";
+        ctx.fillText(descLines[i], W / 2, 48 + i * 12);
+      }
 
-      // Progress bar (for steps that require holding)
+      const interactY = 48 + descLines.length * 12 + 8;
+
+      // Progress bar (for hold-type steps)
       if (step.requiredFrames && tutorialStepProgress > 0) {
         const barW = 100;
         const barH = 6;
         const barX = (W - barW) / 2;
-        const barY = 82;
+        const barY = interactY;
         const ratio = Math.min(1, tutorialStepProgress / step.requiredFrames);
         ctx.fillStyle = "rgba(0,0,0,0.5)";
         ctx.fillRect(barX, barY, barW, barH);
-        ctx.fillStyle = "#ff6f8c";
+        ctx.fillStyle = phaseInfo.color;
         ctx.fillRect(barX, barY, barW * ratio, barH);
         ctx.strokeStyle = "rgba(255,255,255,0.3)";
         ctx.strokeRect(barX, barY, barW, barH);
       }
 
-      // Count indicator (for steps that require multiple presses)
+      // Count indicator (for multi-press steps)
       if (step.requiredCount) {
-        const countText = `${tutorialStepCount} / ${step.requiredCount}`;
         ctx.fillStyle = "#aaddff";
         ctx.font = "10px monospace";
-        ctx.fillText(countText, W / 2, 88);
+        ctx.fillText(`${tutorialStepCount} / ${step.requiredCount}`, W / 2, interactY + 6);
       }
 
-      // Animated hint arrow or key icon
-      const hintY = 105 + Math.sin(tutorialTimer * 0.15) * 2;
+      // Key hint
+      const hintY = 110 + Math.sin(tutorialTimer * 0.15) * 2;
       if (isTouchDevice) {
         ctx.fillStyle = "rgba(255,224,207,0.7)";
         ctx.font = "9px monospace";
@@ -11394,32 +11670,32 @@
           attack: "[ J ]",
           shoot: "[ K ]",
           dash: "[ L ]",
-          ready: "",
+          style_try: "[ V ]",
         };
         ctx.fillStyle = "#aaddff";
         ctx.font = "bold 11px monospace";
         ctx.fillText(keyHints[step.key] || "", W / 2, hintY);
       }
+
+      // Draw hero for interactive steps
+      const heroBob = Math.sin(tutorialTimer * 0.12) * 1.2;
+      drawHero(W / 2 - 10, 122 + heroBob, 1, tutorialTimer * 1.08, 1.4);
     }
 
-    // Draw player character for visual feedback
-    const heroBob = Math.sin(tutorialTimer * 0.12) * 1.2;
-    drawHero(W / 2 - 10, 120 + heroBob, 1, tutorialTimer * 1.08, 1.4);
-
-    // Skip hint
+    // Skip hint (always visible)
     ctx.textAlign = "right";
-    ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.font = "8px monospace";
-    const skipLabel = isTouchDevice ? "SKIPボタン長押しでスキップ" : "Enter 長押しでスキップ";
-    ctx.fillText(skipLabel, W - 8, H - 6);
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.font = "7px monospace";
+    const skipLabel = isTouchDevice ? "SKIP長押しでスキップ" : "Enter長押しでスキップ";
+    ctx.fillText(skipLabel, W - 6, H - 5);
 
     // Skip progress bar
     if (tutorialSkipHold > 0) {
       const skipRatio = Math.min(1, tutorialSkipHold / TUTORIAL_SKIP_HOLD_TIME);
-      const skipBarW = 60;
-      const skipBarH = 3;
-      const skipBarX = W - 8 - skipBarW;
-      const skipBarY = H - 3;
+      const skipBarW = 50;
+      const skipBarH = 2;
+      const skipBarX = W - 6 - skipBarW;
+      const skipBarY = H - 2;
       ctx.fillStyle = "rgba(0,0,0,0.5)";
       ctx.fillRect(skipBarX, skipBarY, skipBarW, skipBarH);
       ctx.fillStyle = "#ff6f8c";
