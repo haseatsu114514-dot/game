@@ -11498,6 +11498,540 @@
     }
   }
 
+  function drawTutorialDemo(step, t, demoX, demoY) {
+    // Render animated demo for each tutorial step
+    const key = step.key;
+    ctx.save();
+
+    // Demo stage ground line
+    const groundY = demoY + 26;
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(demoX - 60, groundY, 120, 1);
+
+    const facing = 1;
+    const heroX = demoX - 7;
+    const heroY = demoY;
+
+    if (key === "move") {
+      // Walking demo: hero moves left and right
+      const cycle = (t * 0.03) % 2;
+      const dir = cycle < 1 ? 1 : -1;
+      const offset = cycle < 1 ? (cycle * 40 - 20) : ((cycle - 1) * 40 - 20);
+      drawHero(heroX + offset, heroY, dir, t * 1.2, 1.2);
+      // Speed lines
+      for (let i = 0; i < 3; i++) {
+        const lx = heroX + offset - dir * (6 + i * 5);
+        const ly = heroY + 8 + i * 5;
+        ctx.fillStyle = `rgba(200,220,255,${0.3 - i * 0.08})`;
+        ctx.fillRect(lx, ly, dir * -4, 1);
+      }
+
+    } else if (key === "jump") {
+      // Jump demo: hero bounces up and down
+      const jumpCycle = (t * 0.04) % 1;
+      const jumpH = Math.sin(jumpCycle * Math.PI) * 20;
+      const doubleJump = jumpCycle > 0.5 ? Math.sin((jumpCycle - 0.5) * Math.PI * 2) * 8 : 0;
+      drawHero(heroX, heroY - jumpH - doubleJump, 1, t * 0.8, 1.2);
+      // Jump trail
+      if (jumpH > 5) {
+        ctx.fillStyle = `rgba(255,255,200,${jumpH / 30})`;
+        ctx.beginPath();
+        ctx.arc(heroX + 7, heroY + 24, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (key === "attack") {
+      // Combo demo: hero swings sword in sequence
+      const comboCycle = (t * 0.025) % 3;
+      const comboIdx = Math.floor(comboCycle);
+      const comboPhase = comboCycle - comboIdx;
+      drawHero(heroX, heroY, 1, t * 1.5, 1.2, comboPhase > 0.3 && comboPhase < 0.7 ? 0.5 : 0);
+      // Sword slash arcs
+      if (comboPhase > 0.1 && comboPhase < 0.6) {
+        const slashAlpha = 1 - (comboPhase - 0.1) / 0.5;
+        const slashAngle = -Math.PI * 0.3 + comboPhase * Math.PI * 1.2;
+        const slashR = 16 + comboIdx * 3;
+        ctx.strokeStyle = `rgba(255,${200 - comboIdx * 40},${150 - comboIdx * 50},${slashAlpha})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(heroX + 14, heroY + 10, slashR, slashAngle - 0.8, slashAngle + 0.8);
+        ctx.stroke();
+        // Hit sparks
+        if (comboPhase > 0.2 && comboPhase < 0.35) {
+          for (let i = 0; i < 4; i++) {
+            const sx = heroX + 22 + Math.random() * 8;
+            const sy = heroY + 6 + Math.random() * 12;
+            ctx.fillStyle = `rgba(255,${200 + Math.random() * 55},100,${0.8 * slashAlpha})`;
+            ctx.fillRect(sx, sy, 2, 1);
+          }
+        }
+      }
+
+    } else if (key === "shoot") {
+      // Shooting demo: hero fires bullets
+      drawHero(heroX - 10, heroY, 1, 0, 1.2);
+      const bulletCycle = (t * 0.08) % 1;
+      for (let i = 0; i < 3; i++) {
+        const bPhase = (bulletCycle + i * 0.33) % 1;
+        const bx = heroX + 8 + bPhase * 50;
+        const alpha = 1 - bPhase;
+        // Bullet trail
+        ctx.fillStyle = `rgba(255,200,60,${alpha * 0.8})`;
+        ctx.fillRect(bx, heroY + 10, 4, 2);
+        ctx.fillStyle = `rgba(255,255,200,${alpha * 0.5})`;
+        ctx.fillRect(bx + 1, heroY + 11, 2, 1);
+      }
+      // Muzzle flash
+      if (bulletCycle < 0.15) {
+        ctx.fillStyle = `rgba(255,240,150,${0.7 - bulletCycle * 4})`;
+        ctx.beginPath();
+        ctx.arc(heroX + 10, heroY + 11, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (key === "dash") {
+      // Dash demo: hero teleports/dashes forward
+      const dashCycle = (t * 0.02) % 1;
+      if (dashCycle < 0.3) {
+        // Standing
+        drawHero(heroX - 20, heroY, 1, t * 0.5, 1.2);
+      } else if (dashCycle < 0.5) {
+        // Dashing - afterimage trail
+        const dashProgress = (dashCycle - 0.3) / 0.2;
+        const dx = -20 + dashProgress * 40;
+        // Afterimages
+        for (let i = 0; i < 3; i++) {
+          ctx.globalAlpha = 0.15 + (2 - i) * 0.1;
+          drawHero(heroX - 20 + (dx * i / 3), heroY, 1, t * 0.5, 1.2);
+        }
+        ctx.globalAlpha = 1;
+        drawHero(heroX + dx, heroY, 1, t * 0.5, 1.2);
+        // Speed burst
+        ctx.fillStyle = `rgba(150,220,255,${0.4 * (1 - dashProgress)})`;
+        ctx.fillRect(heroX - 20, heroY + 4, dx, 16);
+      } else {
+        // Landed
+        drawHero(heroX + 20, heroY, 1, t * 0.5, 1.2);
+      }
+
+    } else if (key === "style_swordmaster") {
+      // Swordmaster demo: charge attack + combo
+      const cycle = (t * 0.02) % 2;
+      if (cycle < 0.8) {
+        // Charge phase (glowing)
+        const chargeRatio = cycle / 0.8;
+        drawHero(heroX, heroY, 1, t * 0.3, 1.2);
+        // Charge aura
+        ctx.fillStyle = `rgba(255,100,68,${chargeRatio * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(heroX + 7, heroY + 12, 10 + chargeRatio * 6, 0, Math.PI * 2);
+        ctx.fill();
+        // Charge particles
+        for (let i = 0; i < 3; i++) {
+          const angle = t * 0.1 + i * Math.PI * 0.67;
+          const r = 8 + chargeRatio * 5;
+          ctx.fillStyle = `rgba(255,200,150,${chargeRatio * 0.7})`;
+          ctx.fillRect(heroX + 7 + Math.cos(angle) * r, heroY + 12 + Math.sin(angle) * r, 2, 2);
+        }
+      } else {
+        // Release: big slash
+        const releasePhase = (cycle - 0.8) / 1.2;
+        drawHero(heroX, heroY, 1, t * 2, 1.2, 0.3);
+        // Massive sword arc
+        const slashSize = 22 + releasePhase * 10;
+        const alpha = Math.max(0, 1 - releasePhase * 1.5);
+        ctx.strokeStyle = `rgba(255,100,68,${alpha})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(heroX + 14, heroY + 8, slashSize, -1.2 + releasePhase * 2, 0.8 + releasePhase * 2);
+        ctx.stroke();
+        // Impact sparks
+        if (releasePhase < 0.3) {
+          for (let i = 0; i < 6; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const d = 12 + Math.random() * 15;
+            ctx.fillStyle = `rgba(255,${180 + Math.random() * 75},80,${alpha})`;
+            ctx.fillRect(heroX + 14 + Math.cos(a) * d, heroY + 8 + Math.sin(a) * d, 2, 2);
+          }
+        }
+      }
+
+    } else if (key === "style_trickster") {
+      // Trickster demo: teleport dodge sequence
+      const cycle = (t * 0.025) % 1.5;
+      if (cycle < 0.4) {
+        drawHero(heroX - 25, heroY, 1, t * 1.2, 1.2);
+        // Incoming danger indicator
+        const dangerX = heroX + 30 - cycle * 40;
+        ctx.fillStyle = `rgba(255,60,60,${0.5 + Math.sin(t * 0.3) * 0.3})`;
+        ctx.fillRect(dangerX, heroY + 4, 8, 8);
+        ctx.fillStyle = "#ff3333";
+        ctx.font = "7px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("!", dangerX + 4, heroY + 2);
+      } else if (cycle < 0.7) {
+        // Teleport flash
+        const tpPhase = (cycle - 0.4) / 0.3;
+        // Ghost at old position
+        ctx.globalAlpha = 0.3 * (1 - tpPhase);
+        drawHero(heroX - 25, heroY, 1, t * 1.2, 1.2);
+        ctx.globalAlpha = 1;
+        // Teleport trail
+        ctx.fillStyle = `rgba(255,204,34,${0.5 * (1 - tpPhase)})`;
+        ctx.fillRect(heroX - 25, heroY + 6, 50 * tpPhase, 12);
+        // New position
+        ctx.globalAlpha = tpPhase;
+        drawHero(heroX + 25, heroY, -1, t * 1.2, 1.2);
+        ctx.globalAlpha = 1;
+        // Flash ring
+        ctx.strokeStyle = `rgba(255,204,34,${0.6 * (1 - tpPhase)})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(heroX + 25 + 7, heroY + 12, 6 + tpPhase * 10, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        // Counter-ready pose
+        const readyPhase = (cycle - 0.7) / 0.8;
+        drawHero(heroX + 25, heroY, -1, t * 0.5, 1.2);
+        // Speed aura
+        if (readyPhase < 0.5) {
+          ctx.fillStyle = `rgba(255,204,34,${0.3 * (1 - readyPhase * 2)})`;
+          ctx.beginPath();
+          ctx.arc(heroX + 25 + 7, heroY + 12, 8 + readyPhase * 12, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+    } else if (key === "style_gunslinger") {
+      // Gunslinger demo: charge shot tiers
+      const cycle = (t * 0.015) % 3;
+      drawHero(heroX - 15, heroY, 1, 0, 1.2);
+      if (cycle < 1) {
+        // Tier 1: Machinegun rapid bullets
+        const phase = cycle;
+        for (let i = 0; i < 5; i++) {
+          const bp = (phase * 3 + i * 0.2) % 1;
+          const bx = heroX + bp * 60;
+          ctx.fillStyle = `rgba(255,255,100,${1 - bp})`;
+          ctx.fillRect(bx, heroY + 9 + (i % 2) * 2, 3, 1);
+        }
+        ctx.fillStyle = "#aaddff";
+        ctx.font = "7px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("MACHINEGUN", heroX + 25, heroY - 4);
+      } else if (cycle < 2) {
+        // Tier 2: Shotgun spread
+        const phase = (cycle - 1);
+        if (phase < 0.3) {
+          const sp = phase / 0.3;
+          for (let i = -2; i <= 2; i++) {
+            const bx = heroX + sp * 50;
+            const by = heroY + 10 + i * sp * 6;
+            ctx.fillStyle = `rgba(255,250,200,${1 - sp})`;
+            ctx.fillRect(bx, by, 4, 2);
+          }
+        }
+        ctx.fillStyle = "#aaddff";
+        ctx.font = "7px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("SHOTGUN", heroX + 25, heroY - 4);
+      } else {
+        // Tier 3: Bazooka
+        const phase = (cycle - 2);
+        if (phase < 0.5) {
+          const bp = phase / 0.5;
+          const bx = heroX + bp * 55;
+          // Missile body
+          ctx.fillStyle = "#888";
+          ctx.fillRect(bx, heroY + 8, 6, 4);
+          ctx.fillStyle = "#ff4444";
+          ctx.fillRect(bx + 5, heroY + 8, 2, 4);
+          // Trail
+          ctx.fillStyle = `rgba(255,160,60,${0.5 * (1 - bp)})`;
+          ctx.fillRect(bx - 4, heroY + 9, 4, 2);
+          // Explosion at impact
+          if (bp > 0.8) {
+            const ex = (bp - 0.8) / 0.2;
+            ctx.fillStyle = `rgba(255,200,60,${0.7 * (1 - ex)})`;
+            ctx.beginPath();
+            ctx.arc(heroX + 55, heroY + 10, 8 + ex * 12, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.fillStyle = "#aaddff";
+        ctx.font = "7px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("BAZOOKA", heroX + 25, heroY - 4);
+      }
+
+    } else if (key === "style_royalguard") {
+      // Royal Guard demo: block + release
+      const cycle = (t * 0.02) % 2;
+      if (cycle < 0.6) {
+        // Incoming attack
+        drawHero(heroX, heroY, 1, 0, 1.2);
+        const attackX = heroX + 40 - cycle * 30;
+        ctx.fillStyle = `rgba(255,60,60,${0.6})`;
+        ctx.fillRect(attackX, heroY + 4, 6, 10);
+        // Guard text
+        ctx.fillStyle = "#22ff88";
+        ctx.font = "7px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("GUARD!", heroX + 7, heroY - 6);
+      } else if (cycle < 1.0) {
+        // Just Guard flash
+        const gPhase = (cycle - 0.6) / 0.4;
+        drawHero(heroX, heroY, 1, 0, 1.2);
+        // Shield flash
+        ctx.fillStyle = `rgba(34,255,136,${0.6 * (1 - gPhase)})`;
+        ctx.beginPath();
+        ctx.arc(heroX + 7, heroY + 12, 10 + gPhase * 8, 0, Math.PI * 2);
+        ctx.fill();
+        // "JUST!" text
+        ctx.fillStyle = `rgba(34,255,136,${1 - gPhase})`;
+        ctx.font = "bold 9px monospace";
+        ctx.fillText("JUST!", heroX + 7, heroY - 4 - gPhase * 6);
+        // Energy gain sparks
+        for (let i = 0; i < 4; i++) {
+          const a = Math.random() * Math.PI * 2;
+          ctx.fillStyle = `rgba(34,255,136,${0.5 * (1 - gPhase)})`;
+          ctx.fillRect(heroX + 7 + Math.cos(a) * 12, heroY + 12 + Math.sin(a) * 12, 2, 2);
+        }
+      } else {
+        // Release attack
+        const rPhase = (cycle - 1.0) / 1.0;
+        drawHero(heroX, heroY, 1, t * 2, 1.2, 0.4);
+        if (rPhase < 0.5) {
+          // Energy release wave
+          const waveR = rPhase * 40;
+          ctx.strokeStyle = `rgba(34,255,136,${0.8 * (1 - rPhase * 2)})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(heroX + 14, heroY + 10, waveR, -0.5, 0.5);
+          ctx.stroke();
+          // Release text
+          ctx.fillStyle = `rgba(34,255,136,${1 - rPhase * 2})`;
+          ctx.font = "bold 8px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("RELEASE!", heroX + 7, heroY - 8);
+        }
+      }
+
+    } else if (key === "style_intro" || key === "style_try") {
+      // Style switching demo: cycle through 4 styles
+      const styleCycle = (t * 0.02) % 4;
+      const styleIdx = Math.floor(styleCycle);
+      const styleColors = ["#ff6644", "#ffcc22", "#22aaff", "#22ff88"];
+      const styleNames = ["SWORD", "TRICK", "GUN", "GUARD"];
+      const currentColor = styleColors[styleIdx];
+      drawHero(heroX, heroY, 1, t * 0.8, 1.2);
+      // Style aura
+      const pulse = Math.sin(t * 0.15) * 0.2 + 0.5;
+      ctx.fillStyle = currentColor;
+      ctx.globalAlpha = pulse * 0.3;
+      ctx.beginPath();
+      ctx.arc(heroX + 7, heroY + 12, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Style name
+      ctx.fillStyle = currentColor;
+      ctx.font = "bold 8px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(styleNames[styleIdx], heroX + 7, heroY - 6);
+      // Style dots
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = i === styleIdx ? styleColors[i] : "rgba(255,255,255,0.2)";
+        ctx.beginPath();
+        ctx.arc(heroX - 8 + i * 10, heroY + 30, i === styleIdx ? 3 : 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (key === "rank_intro" || key === "rank_tiers") {
+      // Rank demo: rising rank with visual effects
+      const rankColors = ["#6688ff", "#44dddd", "#44ff44", "#ffaa22", "#ff6622", "#ff4488", "#ffd700"];
+      const rankNames = ["D", "B", "A", "S", "SS", "SSS", "EX"];
+      const rankCycle = (t * 0.012) % 7;
+      const rankIdx = Math.min(6, Math.floor(rankCycle));
+      drawHero(heroX, heroY, 1, t * (1 + rankIdx * 0.3), 1.2, rankIdx > 3 ? 0.2 : 0);
+      // Rank aura (grows with rank)
+      const auraSize = 6 + rankIdx * 3;
+      ctx.fillStyle = rankColors[rankIdx];
+      ctx.globalAlpha = 0.2 + rankIdx * 0.05;
+      ctx.beginPath();
+      ctx.arc(heroX + 7, heroY + 12, auraSize, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Rank badge
+      ctx.fillStyle = rankColors[rankIdx];
+      ctx.font = "bold 10px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(rankNames[rankIdx], heroX + 7, heroY - 6);
+      // Sparks at high ranks
+      if (rankIdx >= 4) {
+        for (let i = 0; i < rankIdx - 2; i++) {
+          const angle = t * 0.1 + i * 1.3;
+          const r = auraSize + 2;
+          ctx.fillStyle = `rgba(255,255,200,${0.5 + Math.sin(t * 0.2 + i) * 0.3})`;
+          ctx.fillRect(heroX + 7 + Math.cos(angle) * r, heroY + 12 + Math.sin(angle) * r, 2, 1);
+        }
+      }
+
+    } else if (key === "blackflash") {
+      // Black Flash demo
+      const cycle = (t * 0.025) % 1.5;
+      drawHero(heroX, heroY, 1, t * 1.5, 1.2, cycle > 0.3 && cycle < 0.5 ? 0.4 : 0);
+      if (cycle > 0.3 && cycle < 0.8) {
+        const bfPhase = (cycle - 0.3) / 0.5;
+        // Dark flash
+        ctx.fillStyle = `rgba(0,0,0,${0.6 * (1 - bfPhase)})`;
+        ctx.fillRect(demoX - 50, demoY - 10, 100, 50);
+        // Black lightning
+        ctx.strokeStyle = `rgba(80,0,120,${0.8 * (1 - bfPhase)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(heroX + 14, heroY + 4);
+        ctx.lineTo(heroX + 22 + bfPhase * 8, heroY + 2 - bfPhase * 4);
+        ctx.lineTo(heroX + 18 + bfPhase * 12, heroY + 8);
+        ctx.lineTo(heroX + 28 + bfPhase * 10, heroY + 4 - bfPhase * 2);
+        ctx.stroke();
+        // Impact flash
+        ctx.fillStyle = `rgba(120,0,200,${0.5 * (1 - bfPhase)})`;
+        ctx.beginPath();
+        ctx.arc(heroX + 20, heroY + 8, 6 + bfPhase * 10, 0, Math.PI * 2);
+        ctx.fill();
+        // "BLACK FLASH" text
+        if (bfPhase < 0.5) {
+          ctx.fillStyle = `rgba(180,120,255,${1 - bfPhase * 2})`;
+          ctx.font = "bold 8px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("BLACK FLASH!", heroX + 7, heroY - 8 - bfPhase * 6);
+        }
+      }
+
+    } else if (key === "burst_intro" || key === "burst_types") {
+      // Burst/DT demo
+      const cycle = (t * 0.018) % 2;
+      if (cycle < 1) {
+        // DT activation
+        const dtPhase = cycle;
+        drawHero(heroX, heroY, 1, t * 1.5, 1.2);
+        // Power aura
+        const auraAlpha = Math.min(1, dtPhase * 2) * 0.4;
+        const auraSize = 8 + dtPhase * 14;
+        const dtColor = key === "burst_types" ? "rgba(255,100,68," : "rgba(200,120,255,";
+        ctx.fillStyle = dtColor + auraAlpha + ")";
+        ctx.beginPath();
+        ctx.arc(heroX + 7, heroY + 12, auraSize, 0, Math.PI * 2);
+        ctx.fill();
+        // Rising particles
+        for (let i = 0; i < 5; i++) {
+          const py2 = heroY + 24 - (dtPhase * 30 + i * 6) % 30;
+          const px2 = heroX + 2 + (i * 3) + Math.sin(t * 0.1 + i) * 3;
+          ctx.fillStyle = key === "burst_types" ? `rgba(255,150,80,${0.6})` : `rgba(200,150,255,${0.6})`;
+          ctx.fillRect(px2, py2, 1, 2);
+        }
+        // DT text
+        if (dtPhase > 0.3 && dtPhase < 0.7) {
+          ctx.fillStyle = key === "burst_types" ? "#ff6644" : "#cc88ff";
+          ctx.font = "bold 8px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("DEVIL TRIGGER!", heroX + 7, heroY - 8);
+        }
+      } else {
+        // Burst laser
+        const laserPhase = cycle - 1;
+        drawHero(heroX, heroY - 4, 1, t * 0.5, 1.2);
+        if (laserPhase > 0.2 && laserPhase < 0.8) {
+          const lp = (laserPhase - 0.2) / 0.6;
+          // Laser beam
+          const beamW = 4 + Math.sin(t * 0.3) * 2;
+          ctx.fillStyle = `rgba(255,220,100,${0.7 * (1 - Math.abs(lp - 0.5) * 2)})`;
+          ctx.fillRect(heroX + 7 - beamW / 2, heroY - 4 - 30, beamW, 30);
+          ctx.fillStyle = `rgba(255,255,200,${0.5 * (1 - Math.abs(lp - 0.5) * 2)})`;
+          ctx.fillRect(heroX + 7 - 1, heroY - 4 - 30, 2, 30);
+          // Laser text
+          ctx.fillStyle = "#ffdd44";
+          ctx.font = "bold 7px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("BURST!", heroX + 7, heroY - 36);
+        }
+      }
+
+    } else if (key === "emergency") {
+      // Emergency dodge + bike demo
+      const cycle = (t * 0.015) % 2;
+      if (cycle < 1) {
+        // Emergency dodge
+        const phase = cycle;
+        if (phase < 0.3) {
+          drawHero(heroX, heroY, 1, t * 0.5, 1.2);
+          // Danger flash
+          ctx.fillStyle = `rgba(255,0,0,${0.3 * Math.sin(t * 0.3)})`;
+          ctx.fillRect(demoX - 50, demoY - 10, 100, 50);
+          ctx.fillStyle = "#ff4444";
+          ctx.font = "bold 8px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("DANGER!", heroX + 7, heroY - 8);
+        } else if (phase < 0.6) {
+          // Slow-mo dodge
+          const dp = (phase - 0.3) / 0.3;
+          ctx.globalAlpha = 0.3;
+          drawHero(heroX, heroY, 1, t * 0.1, 1.2);
+          ctx.globalAlpha = 1;
+          drawHero(heroX + dp * 30, heroY, 1, t * 0.1, 1.2);
+          // Time slow effect
+          ctx.fillStyle = `rgba(0,100,200,${0.2 * (1 - dp)})`;
+          ctx.fillRect(demoX - 50, demoY - 10, 100, 50);
+        } else {
+          // Counter attack
+          const cp = (phase - 0.6) / 0.4;
+          drawHero(heroX + 30, heroY, -1, t * 2, 1.2, cp < 0.5 ? cp : 0);
+          if (cp < 0.4) {
+            ctx.fillStyle = `rgba(0,255,255,${0.6 * (1 - cp * 2.5)})`;
+            ctx.font = "bold 7px monospace";
+            ctx.textAlign = "center";
+            ctx.fillText("COUNTER x2.0!", heroX + 37, heroY - 6);
+          }
+        }
+      } else {
+        // Bike invincibility
+        const bPhase = cycle - 1;
+        const bikeX = heroX - 15 + Math.sin(bPhase * Math.PI * 2) * 5;
+        // Simple bike representation
+        ctx.fillStyle = "#ff6688";
+        ctx.fillRect(bikeX, heroY + 14, 18, 8);
+        ctx.fillStyle = "#cc4466";
+        ctx.fillRect(bikeX + 14, heroY + 12, 6, 6);
+        // Wheels
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.arc(bikeX + 3, heroY + 24, 3, 0, Math.PI * 2);
+        ctx.arc(bikeX + 15, heroY + 24, 3, 0, Math.PI * 2);
+        ctx.fill();
+        // Rider
+        drawHero(bikeX + 2, heroY + 2, 1, t * 2, 1.0);
+        // Rainbow trail
+        const trailColors = ["#ff0000", "#ff8800", "#ffff00", "#00ff00", "#0088ff", "#8800ff"];
+        for (let i = 0; i < 6; i++) {
+          ctx.fillStyle = trailColors[i];
+          ctx.globalAlpha = 0.4;
+          ctx.fillRect(bikeX - 4 - i * 3, heroY + 16 + i, 3, 2);
+        }
+        ctx.globalAlpha = 1;
+        // Invincible text
+        ctx.fillStyle = "#ffd700";
+        ctx.font = "bold 7px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("INVINCIBLE!", heroX + 7, heroY - 4);
+      }
+
+    } else if (key === "ready") {
+      // Already handled by autoAdvance section
+    }
+
+    ctx.restore();
+  }
+
   function drawTutorial() {
     // Draw the game background for visual context
     const savedCamera = cameraX;
@@ -11592,6 +12126,12 @@
         ctx.textAlign = "center";
       }
 
+      // Demo animation for info steps
+      const demoYInfo = step.subInfo ? (descStartY + descLines.length * lineH + 6 + step.subInfo.length * 12 + 14) : (descStartY + descLines.length * lineH + 10);
+      if (demoYInfo + 30 < H - 18) {
+        drawTutorialDemo(step, tutorialTimer, W / 2, demoYInfo);
+      }
+
       // "Press any key to continue" prompt
       const promptBlink = Math.floor(tutorialTimer / 20) % 2 === 0;
       if (promptBlink) {
@@ -11677,9 +12217,8 @@
         ctx.fillText(keyHints[step.key] || "", W / 2, hintY);
       }
 
-      // Draw hero for interactive steps
-      const heroBob = Math.sin(tutorialTimer * 0.12) * 1.2;
-      drawHero(W / 2 - 10, 122 + heroBob, 1, tutorialTimer * 1.08, 1.4);
+      // Demo animation for interactive steps
+      drawTutorialDemo(step, tutorialTimer, W / 2, 118);
     }
 
     // Skip hint (always visible)
