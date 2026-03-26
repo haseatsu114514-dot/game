@@ -103,10 +103,11 @@ body {
 
 .cluster-right {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-areas:
-    "special1 special2"
-    "jump attack";
+    "special1 special2 skip"
+    "jump attack shoot"
+    "style dash dash";
   gap: 8px;
   width: 334px;
 }
@@ -130,6 +131,60 @@ body {
 
 .cluster-right #btn-attack {
   grid-area: attack;
+}
+
+.cluster-right #btn-shoot {
+  grid-area: shoot;
+}
+
+.cluster-right #btn-dash {
+  grid-area: dash;
+}
+
+.cluster-right #btn-style {
+  grid-area: style;
+}
+
+.cluster-right #btn-skip {
+  grid-area: skip;
+}
+
+.ctrl.shoot {
+  background: linear-gradient(180deg, #2a5a8b, #1a3a5b);
+  border-color: #6ca0d4;
+}
+
+.ctrl.shoot:active,
+.ctrl.shoot.is-down {
+  background: linear-gradient(180deg, #3a7abb, #2a5a8b);
+}
+
+.ctrl.dash {
+  background: linear-gradient(180deg, #4a6a2a, #2a4a1a);
+  border-color: #8cc050;
+}
+
+.ctrl.dash:active,
+.ctrl.dash.is-down {
+  background: linear-gradient(180deg, #6a8a4a, #4a6a2a);
+}
+
+.ctrl.dpad-down {
+  min-width: 0;
+}
+
+.ctrl.skip-btn {
+  background: linear-gradient(180deg, #555, #333);
+  border-color: #888;
+  font-size: 0.8rem;
+  min-height: 40px;
+  opacity: 0.7;
+}
+
+.ctrl.skip-btn:active,
+.ctrl.skip-btn.is-down {
+  background: linear-gradient(180deg, #777, #555);
+  opacity: 1;
 }
 
 .ctrl {
@@ -367,7 +422,7 @@ body {
 
 @media (max-width: 720px) {
   body {
-    padding: 8px 8px calc(212px + env(safe-area-inset-bottom));
+    padding: 8px 8px calc(280px + env(safe-area-inset-bottom));
   }
 
   .controls {
@@ -395,17 +450,23 @@ body {
   .cluster-left {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-rows: auto auto;
+    gap: 8px;
     align-self: end;
+  }
+
+  .cluster-left #btn-down {
+    grid-column: 1 / -1;
   }
 
   .cluster-right {
     width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-areas:
-      "special1 special2"
-      "jump attack";
-    gap: 12px;
+      "special1 special2 skip"
+      "jump attack shoot"
+      "style dash dash";
+    gap: 8px;
   }
 
   .cluster-right #btn-special {
@@ -422,6 +483,22 @@ body {
 
   .cluster-right #btn-attack {
     grid-area: attack;
+  }
+
+  .cluster-right #btn-shoot {
+    grid-area: shoot;
+  }
+
+  .cluster-right #btn-dash {
+    grid-area: dash;
+  }
+
+  .cluster-right #btn-style {
+    grid-area: style;
+  }
+
+  .cluster-right #btn-skip {
+    grid-area: skip;
   }
 
   .title-bar p {
@@ -476,22 +553,27 @@ body {
 
   .cluster-left,
   .cluster-right {
-    gap: 8px;
+    gap: 6px;
   }
 
   .ctrl {
-    min-height: 58px;
+    min-height: 48px;
     border-radius: 12px;
-    font-size: 1rem;
-  }
-
-  .ctrl.action {
-    min-height: 54px;
     font-size: 0.9rem;
   }
 
+  .ctrl.action {
+    min-height: 44px;
+    font-size: 0.8rem;
+  }
+
   .ctrl.special {
-    min-height: 50px;
+    min-height: 42px;
+  }
+
+  .ctrl.skip-btn {
+    min-height: 36px;
+    font-size: 0.7rem;
   }
 }
 

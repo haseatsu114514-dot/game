@@ -26,18 +26,22 @@
       </div>
     </section>
 
-    <!-- touch controls hidden (PC keyboard game) but kept for JS references -->
+    <!-- touch controls: auto-shown on touch devices via JS -->
     <section class="controls" aria-label="touch controls" style="display:none;">
       <div class="cluster cluster-left">
-        <button id="btn-left" class="ctrl">◀</button>
-        <button id="btn-right" class="ctrl">▶</button>
+        <button id="btn-left" class="ctrl dpad">◀</button>
+        <button id="btn-right" class="ctrl dpad">▶</button>
+        <button id="btn-down" class="ctrl dpad dpad-down">▼</button>
       </div>
       <div class="cluster cluster-right">
         <button id="btn-jump" class="ctrl action">JUMP</button>
         <button id="btn-attack" class="ctrl action attack">攻撃</button>
+        <button id="btn-shoot" class="ctrl action shoot">SHOOT</button>
+        <button id="btn-dash" class="ctrl action dash">DASH</button>
         <button id="btn-style" class="ctrl action special">STYLE</button>
         <button id="btn-special" class="ctrl action special">BURST</button>
         <button id="btn-special2" class="ctrl action special" style="display:none;">burst2</button>
+        <button id="btn-skip" class="ctrl action skip-btn">SKIP</button>
       </div>
     </section>
 
