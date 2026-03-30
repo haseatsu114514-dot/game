@@ -6,11 +6,71 @@
   if (!ctx) return;
 
   ctx.imageSmoothingEnabled = false;
+  const screenWrap = canvas.closest(".screen-wrap");
 
   const W = canvas.width;
   const H = canvas.height;
   const GRAVITY = 0.26;
   const MAX_FALL = 6.0;
+  const VISUAL_MODE_KEY = "rrr_visual_mode";
+  const VISUAL_MODES = {
+    RETRO: "retro",
+    CINEMATIC: "cinematic",
+  };
+
+  function loadVisualMode() {
+    try {
+      const saved = window.localStorage.getItem(VISUAL_MODE_KEY);
+      if (saved === VISUAL_MODES.RETRO || saved === VISUAL_MODES.CINEMATIC) {
+        return saved;
+      }
+    } catch (_e) {
+      // localStorage can be blocked in private browsing or file:// contexts.
+    }
+    return VISUAL_MODES.CINEMATIC;
+  }
+
+  let visualMode = loadVisualMode();
+
+  function isCinematicMode() {
+    return visualMode === VISUAL_MODES.CINEMATIC;
+  }
+
+  function applyVisualMode() {
+    const mode = isCinematicMode() ? VISUAL_MODES.CINEMATIC : VISUAL_MODES.RETRO;
+    if (document.body) {
+      document.body.dataset.visualMode = mode;
+    }
+    canvas.dataset.visualMode = mode;
+    if (screenWrap) {
+      screenWrap.dataset.visualMode = mode;
+    }
+  }
+
+  function setVisualMode(mode, announce = false) {
+    visualMode = mode === VISUAL_MODES.RETRO ? VISUAL_MODES.RETRO : VISUAL_MODES.CINEMATIC;
+    applyVisualMode();
+    try {
+      window.localStorage.setItem(VISUAL_MODE_KEY, visualMode);
+    } catch (_e) {
+      // Ignore persistence failures and keep the in-memory mode.
+    }
+    if (announce) {
+      hudMessage = visualMode === VISUAL_MODES.CINEMATIC
+        ? "GRAPHICS: CINEMATIC"
+        : "GRAPHICS: RETRO";
+      hudTimer = Math.max(hudTimer, 72);
+    }
+  }
+
+  function toggleVisualMode() {
+    setVisualMode(
+      isCinematicMode() ? VISUAL_MODES.RETRO : VISUAL_MODES.CINEMATIC,
+      true
+    );
+  }
+
+  applyVisualMode();
 
   const STATE = {
     TITLE: "title",
@@ -8128,6 +8188,35 @@
     battleRankGainByStyle("twosome_time", 1.0);
   }
 
+  function performBulletStorm() {
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.45;
+    const rankIdx = battleRankIndex;
+    const speed = 7.0 + rankIdx * 1.2;
+    const spreadPower = 0.5 + rankIdx * 0.04;
+    const sPow = dtShotPowerMul();
+
+    stage.playerWaves.push(
+      { kind: "bullet", x: px, y: py - 4, w: 5, h: 5, vx: (Math.random() - 0.5) * 0.3, vy: -speed, ttl: 50, power: spreadPower * sPow },
+      { kind: "bullet", x: px - 4, y: py, w: 5, h: 5, vx: -speed, vy: (Math.random() - 0.5) * 0.3, ttl: 50, power: spreadPower * sPow },
+      { kind: "bullet", x: px + 4, y: py, w: 5, h: 5, vx: speed, vy: (Math.random() - 0.5) * 0.3, ttl: 50, power: spreadPower * sPow }
+    );
+
+    if (devilTriggerTimer > 0 && devilTriggerStyle === "gunslinger") {
+      stage.playerWaves.push(
+        { kind: "bullet", x: px - 2, y: py - 2, w: 5, h: 5, vx: -speed * 0.76, vy: -speed * 0.54, ttl: 46, power: spreadPower * 0.8 * sPow },
+        { kind: "bullet", x: px + 2, y: py - 2, w: 5, h: 5, vx: speed * 0.76, vy: -speed * 0.54, ttl: 46, power: spreadPower * 0.8 * sPow }
+      );
+      devilTriggerHitCount++;
+    }
+
+    if (seHandgun) playSound(seHandgun, 0.5, 1.1);
+    triggerImpact(0.8, px, py, 2.0);
+    battleRankGainByStyle("twosome_time", 0.9);
+    hudMessage = "BULLET STORM!";
+    hudTimer = 15;
+  }
+
   function performAirSlash(stage_) {
     const dir = player.facing;
     const rankIdx = battleRankIndex;
@@ -8597,30 +8686,42 @@
     if (bulletRainCooldown > 0) {
       bulletRainCooldown -= dt;
     }
+    const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
+    const rankIdx = battleRankIndex;
+    const isGunslinger = playerStyle === "gunslinger";
+
+    // Bullet Rain visual state needs to clear even on frames where K is no longer firing.
+    if (player.onGround && bulletRainTimer > 0) {
+      bulletRainCooldown = 30 + (6 - rankIdx) * 4;
+      bulletRainTimer = 0;
+      bulletRainRotation = false;
+      hudMessage = "RAIN END";
+      hudTimer = 15;
+    } else if ((!isGunslinger || !playable || deathAnimActive) && bulletRainRotation) {
+      bulletRainTimer = 0;
+      bulletRainRotation = false;
+    }
+
     // Fire on press OR hold (auto-fire when holding K)
     const wantShoot = input.shoot && dedicatedGunCooldown <= 0;
     if (!wantShoot) return;
-
-    const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
     if (!playable) return;
     if (deathAnimActive) return;
 
     const dir = player.facing;
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.45;
-    const rankIdx = battleRankIndex;
 
     // Rank-scaled fire rate: faster at higher ranks (Gunslinger gets bonus)
-    const gunslingerBonus = playerStyle === "gunslinger" ? 0.7 : 1.0;
+    const gunslingerBonus = isGunslinger ? 0.7 : 1.0;
     const rankReload = Math.max(3, (DEDICATED_GUN_RELOAD - rankIdx * 1.2) * gunslingerBonus);
 
-    // Air + Down/S + K = Bullet Rain (真下に弾を打ち込む)
+    // Gunslinger only: Air + Down/S + K = Bullet Rain (真下に弾を打ち込む)
     // Continues until player lands — no duration limit
-    if (!player.onGround && input.down && bulletRainCooldown <= 0) {
+    if (isGunslinger && !player.onGround && input.down && bulletRainCooldown <= 0) {
       bulletRainTimer = 1; // Mark as active
       bulletRainRotation = true; // Flip character upside-down
       player.vy = Math.min(player.vy + 0.08, 1.5); // Slow descent (eventually lands)
-      const isGunslinger = playerStyle === "gunslinger";
       const bulletCount = 1 + Math.floor(rankIdx * 0.5) + (isGunslinger ? 1 : 0);
       const hSpread = 0.6 + rankIdx * 0.15 + (isGunslinger ? 0.3 : 0);
       // Cap fire rate minimum to 6 frames to reduce lag
@@ -8641,42 +8742,16 @@
       hudTimer = 8;
       return;
     }
-    // End bullet rain on landing
-    if (player.onGround && bulletRainTimer > 0) {
-      bulletRainCooldown = 30 + (6 - rankIdx) * 4;
-      bulletRainTimer = 0;
-      bulletRainRotation = false;
-      hudMessage = "RAIN END";
-      hudTimer = 15;
-    }
-    if (!input.down || player.onGround) {
+    if (!isGunslinger || !input.down || player.onGround) {
       bulletRainTimer = 0;
       bulletRainRotation = false;
     }
 
-    // Gunslinger: ↓+K (ground) = Twosome Time (fire both directions)
-    if (playerStyle === "gunslinger" && input.down && player.onGround) {
-      performTwosomeTime();
+    // Gunslinger: ↓+K (ground) = Bullet Storm (multi-direction shot)
+    if (isGunslinger && input.down && player.onGround) {
+      performBulletStorm();
       dedicatedGunCooldown = rankReload;
       if (!player.onGround) player.vy = Math.min(player.vy, -0.2);
-      return;
-    }
-
-    // Non-gunslinger: Ground + Down + K = 3-direction spread shot
-    if (playerStyle !== "gunslinger" && player.onGround && input.down) {
-      const speed = 7.0 + rankIdx * 1.2;
-      const spreadPower = 0.5 + rankIdx * 0.04;
-      stage.playerWaves.push(
-        { kind: "bullet", x: px, y: py - 4, w: 5, h: 5, vx: (Math.random() - 0.5) * 0.3, vy: -speed, ttl: 50, power: spreadPower },
-        { kind: "bullet", x: px - 4, y: py, w: 5, h: 5, vx: -speed, vy: (Math.random() - 0.5) * 0.3, ttl: 50, power: spreadPower },
-        { kind: "bullet", x: px + 4, y: py, w: 5, h: 5, vx: speed, vy: (Math.random() - 0.5) * 0.3, ttl: 50, power: spreadPower }
-      );
-      if (seHandgun) playSound(seHandgun, 0.5, 1.1);
-      dedicatedGunCooldown = rankReload;
-      triggerImpact(0.8, px, py, 2.0);
-      battleRankGainByStyle("spread_shot", 0.9);
-      hudMessage = "SPREAD SHOT!";
-      hudTimer = 15;
       return;
     }
 
@@ -12923,6 +12998,161 @@
     }
   }
 
+  function drawCinematicBackdropFX(godBossRoom = false) {
+    if (!isCinematicMode()) return;
+
+    const stageId = stage && Number.isFinite(stage.id) ? stage.id : 1;
+    const deluxeCity = stage && stage.theme === "city_deluxe";
+    const stage2City = deluxeCity && stageId === 2;
+    const stage3City = deluxeCity && stageId >= 3;
+
+    const topTint = godBossRoom
+      ? "rgba(255,226,196,0.11)"
+      : stage3City
+        ? "rgba(232,150,255,0.13)"
+        : stage2City
+          ? "rgba(106,255,232,0.13)"
+          : "rgba(255,116,188,0.11)";
+    const horizonTint = godBossRoom
+      ? "rgba(255,188,126,0.14)"
+      : stage3City
+        ? "rgba(130,196,255,0.16)"
+        : stage2City
+          ? "rgba(116,234,255,0.16)"
+          : "rgba(114,216,255,0.13)";
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+
+    const colorWash = ctx.createLinearGradient(0, 0, 0, H);
+    colorWash.addColorStop(0, topTint);
+    colorWash.addColorStop(0.5, "rgba(255,255,255,0)");
+    colorWash.addColorStop(1, horizonTint);
+    ctx.fillStyle = colorWash;
+    ctx.fillRect(0, 0, W, H);
+
+    const beamColors = godBossRoom
+      ? [
+        "rgba(255,248,228,0.16)",
+        "rgba(255,214,164,0.13)",
+        "rgba(255,174,132,0.1)",
+      ]
+      : stage3City
+        ? [
+          "rgba(255,170,240,0.16)",
+          "rgba(160,210,255,0.13)",
+          "rgba(180,128,255,0.1)",
+        ]
+        : stage2City
+          ? [
+            "rgba(164,255,240,0.16)",
+            "rgba(112,228,255,0.13)",
+            "rgba(255,214,150,0.1)",
+          ]
+          : [
+            "rgba(255,166,212,0.14)",
+            "rgba(122,228,255,0.12)",
+            "rgba(255,214,154,0.09)",
+          ];
+    const beamBase = godBossRoom ? 26 : 18;
+    for (let i = 0; i < 3; i += 1) {
+      const beamX = (
+        i * 104 +
+        Math.floor(cameraX * (0.12 + i * 0.04)) +
+        Math.floor(player.anim * (1.1 + i * 0.4))
+      ) % (W + 88) - 44;
+      const beamW = beamBase + i * 12 + (stage3City ? 6 : 0);
+      ctx.save();
+      ctx.translate(beamX + beamW * 0.5, godBossRoom ? 8 : -10);
+      ctx.rotate((godBossRoom ? -0.08 : -0.14) + i * 0.08);
+      const beam = ctx.createLinearGradient(-beamW * 0.5, 0, beamW * 0.5, 0);
+      beam.addColorStop(0, "rgba(255,255,255,0)");
+      beam.addColorStop(0.5, beamColors[i]);
+      beam.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = beam;
+      ctx.fillRect(-beamW * 0.5, 0, beamW, H * 1.24);
+      ctx.restore();
+    }
+
+    const bokehCount = godBossRoom ? 8 : stage3City ? 12 : 10;
+    for (let i = 0; i < bokehCount; i += 1) {
+      const bx = (
+        i * 31 +
+        Math.floor(cameraX * (0.18 + (i % 3) * 0.04)) +
+        Math.floor(player.anim * 0.8)
+      ) % (W + 24) - 12;
+      const by = (godBossRoom ? 18 : 24) + ((i * (godBossRoom ? 17 : 19)) % (godBossRoom ? 72 : 96));
+      const radius = i % 3 === 0 ? 5 : 3;
+      const alpha = 0.04 + (i % 4) * 0.01;
+      ctx.fillStyle = godBossRoom
+        ? `rgba(255, 223, 185, ${alpha})`
+        : stage3City
+          ? `rgba(236, 194, 255, ${alpha})`
+          : stage2City
+            ? `rgba(176, 255, 236, ${alpha})`
+            : `rgba(188, 228, 255, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(bx, by, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    const floorGlow = ctx.createLinearGradient(0, stage.groundY - 18, 0, H);
+    floorGlow.addColorStop(0, "rgba(255,255,255,0)");
+    floorGlow.addColorStop(
+      1,
+      godBossRoom
+        ? "rgba(255,186,126,0.08)"
+        : stage3City
+          ? "rgba(142,116,255,0.1)"
+          : stage2City
+            ? "rgba(108,234,255,0.09)"
+            : "rgba(108,208,255,0.08)"
+    );
+    ctx.fillStyle = floorGlow;
+    ctx.fillRect(0, stage.groundY - 18, W, H - (stage.groundY - 18));
+  }
+
+  function drawCinematicForegroundFX(godBossRoom = false) {
+    if (!isCinematicMode()) return;
+
+    const floorMist = ctx.createLinearGradient(0, stage.groundY - 12, 0, H);
+    floorMist.addColorStop(0, "rgba(255,255,255,0)");
+    floorMist.addColorStop(
+      1,
+      godBossRoom ? "rgba(255,228,210,0.09)" : "rgba(198, 240, 255, 0.08)"
+    );
+    ctx.fillStyle = floorMist;
+    ctx.fillRect(0, stage.groundY - 12, W, H - (stage.groundY - 12));
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const sweepX = ((Math.floor(player.anim * 0.9) + Math.floor(cameraX * 0.32)) % (W + 72)) - 36;
+    const sweep = ctx.createLinearGradient(sweepX, 0, sweepX + 40, H);
+    sweep.addColorStop(0, "rgba(255,255,255,0)");
+    sweep.addColorStop(0.5, godBossRoom ? "rgba(255,241,214,0.07)" : "rgba(255,255,255,0.06)");
+    sweep.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = sweep;
+    ctx.fillRect(sweepX, 18, 40, H - 18);
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = godBossRoom ? "rgba(46, 32, 24, 0.34)" : "rgba(16, 24, 36, 0.38)";
+    ctx.lineWidth = 1;
+    const cableShift = -Math.floor(cameraX * 0.92) % 140;
+    for (let i = 0; i < 3; i += 1) {
+      const startX = -24 + cableShift + i * 18;
+      const y = 18 + i * 18;
+      ctx.beginPath();
+      ctx.moveTo(startX, y);
+      ctx.quadraticCurveTo(W * 0.34, y + 8 + i * 3, W * 0.72, y - 4 + i * 2);
+      ctx.lineTo(W + 24, y + 8);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawMansionInteriorBackdrop() {
     const wall = ctx.createLinearGradient(0, 0, 0, H);
     wall.addColorStop(0, "#191320");
@@ -13018,7 +13248,427 @@
     }
   }
 
+  function roundedRectPath(x, y, w, h, r) {
+    const rr = Math.max(0, Math.min(r, Math.min(w, h) * 0.5));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
+  }
+
+  function fillRoundedRect(x, y, w, h, r, fillStyle) {
+    if (fillStyle != null) ctx.fillStyle = fillStyle;
+    roundedRectPath(x, y, w, h, r);
+    ctx.fill();
+  }
+
+  function strokeRoundedRect(x, y, w, h, r, strokeStyle, lineWidth = 1) {
+    if (strokeStyle != null) ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    roundedRectPath(x, y, w, h, r);
+    ctx.stroke();
+  }
+
+  function fillEllipse(x, y, rx, ry, fillStyle) {
+    if (fillStyle != null) ctx.fillStyle = fillStyle;
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawSolidCinematic(s) {
+    const ox = Math.floor(s.x - cameraX);
+    const oy = Math.floor(s.y);
+    const radius = s.isWall ? 2 : 3;
+    const topH = Math.min(6, Math.max(3, Math.floor(s.h * 0.16)));
+
+    let topA = "#5fb8ff";
+    let topB = "#f59fda";
+    let bodyA = "#1d2f48";
+    let bodyB = "#0d1727";
+    let line = "rgba(222, 238, 255, 0.22)";
+    if (s.kind === "crumble") {
+      topA = "#ffb38a";
+      topB = "#ffd7bf";
+      bodyA = "#4c3a44";
+      bodyB = "#1f1821";
+      line = "rgba(255, 228, 204, 0.18)";
+    }
+    if (s.isWall) {
+      topA = "#c48ca2";
+      topB = "#f1bfcb";
+      bodyA = "#43313a";
+      bodyB = "#201820";
+      line = "rgba(255, 223, 232, 0.16)";
+    }
+
+    const body = ctx.createLinearGradient(0, oy, 0, oy + s.h);
+    body.addColorStop(0, bodyA);
+    body.addColorStop(1, bodyB);
+    fillRoundedRect(ox, oy, s.w, s.h, radius, body);
+
+    const top = ctx.createLinearGradient(0, oy, 0, oy + topH);
+    top.addColorStop(0, topB);
+    top.addColorStop(1, topA);
+    fillRoundedRect(ox, oy, s.w, topH, radius, top);
+
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(ox + 2, oy + 1, Math.max(1, s.w - 4), 1);
+    ctx.fillStyle = line;
+    for (let x = 4; x < s.w - 2; x += 10) {
+      ctx.fillRect(ox + x, oy + topH + 3, 1, Math.max(1, s.h - topH - 8));
+    }
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(ox + 1, oy + s.h - 2, Math.max(1, s.w - 2), 1);
+    strokeRoundedRect(ox + 0.5, oy + 0.5, s.w - 1, s.h - 1, radius, "rgba(8, 14, 24, 0.55)");
+  }
+
+  function drawHeroCinematic(x, y, facing, animFrame, scale = 1, kickPose = 0) {
+    const px = Math.floor(x);
+    const py = Math.floor(y);
+    const s = clamp(scale, 1, 1.9);
+    const drawY = py + 25 - 25 * s;
+    const step = Math.sin(animFrame * 0.28);
+    const armSwing = step * 1.1;
+    const legSwing = step * 1.4;
+    const kick = clamp(kickPose, 0, 1);
+
+    ctx.save();
+    ctx.translate(px, drawY);
+    ctx.scale(s, s);
+    if (facing < 0) {
+      ctx.translate(14, 0);
+      ctx.scale(-1, 1);
+    }
+
+    ctx.globalAlpha = 0.18;
+    fillEllipse(7, 13, 5.5, 8.4, "#89c8ff");
+    ctx.globalAlpha = 1;
+
+    const jacket = ctx.createLinearGradient(0, 12, 0, 22);
+    jacket.addColorStop(0, "#30435e");
+    jacket.addColorStop(1, "#121925");
+    const jeans = ctx.createLinearGradient(0, 18, 0, 25);
+    jeans.addColorStop(0, "#31466b");
+    jeans.addColorStop(1, "#131924");
+
+    fillEllipse(7.2, 6.3, 3.2, 3.6, "#f5d9cf");
+    fillEllipse(7.2, 7.2, 3.1, 3.1, "#f2ddd6");
+
+    ctx.fillStyle = "#0c1220";
+    ctx.beginPath();
+    ctx.moveTo(2.6, 5.5);
+    ctx.quadraticCurveTo(4.0, 0.4, 8.0, 1.0);
+    ctx.quadraticCurveTo(12.7, 1.4, 12.1, 6.2);
+    ctx.quadraticCurveTo(11.4, 8.6, 9.6, 9.5);
+    ctx.quadraticCurveTo(8.8, 8.1, 7.3, 8.0);
+    ctx.quadraticCurveTo(6.0, 8.0, 4.6, 9.2);
+    ctx.quadraticCurveTo(2.8, 8.0, 2.6, 5.5);
+    ctx.closePath();
+    ctx.fill();
+    fillEllipse(7.8, 3.3, 1.8, 0.7, "rgba(142, 186, 255, 0.42)");
+
+    fillRoundedRect(5.5, 9.0, 3.2, 1.2, 0.5, "#1d2332");
+    fillEllipse(5.7, 6.1, 0.45, 0.6, "#34262a");
+    fillEllipse(8.8, 6.1, 0.45, 0.6, "#34262a");
+    fillEllipse(5.6, 5.8, 0.18, 0.18, "#ffffff");
+    fillEllipse(8.7, 5.8, 0.18, 0.18, "#ffffff");
+    fillRoundedRect(6.2, 7.5, 1.7, 0.42, 0.2, "#c58a83");
+
+    ctx.save();
+    ctx.translate(4.2, 12.6 + armSwing * 0.35);
+    ctx.rotate(-0.18 + armSwing * 0.04 + kick * 0.06);
+    fillRoundedRect(-0.7, 0, 1.7, 6.5, 0.7, "#1e2838");
+    fillEllipse(0.1, 6.8, 0.9, 0.9, "#f1d5ca");
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(10.7, 12.5 - armSwing * 0.3 - kick * 0.7);
+    ctx.rotate(0.14 - armSwing * 0.04 - kick * 0.18);
+    fillRoundedRect(-0.8, 0, 1.8, 6.6, 0.7, "#1b2434");
+    fillEllipse(0.1, 6.9, 0.9, 0.9, "#f1d5ca");
+    ctx.restore();
+
+    fillRoundedRect(3.0, 11.4, 8.2, 7.8, 1.8, jacket);
+    fillRoundedRect(5.2, 12.0, 3.1, 5.8, 1.1, "#f3f1ee");
+    fillRoundedRect(6.6, 11.8, 0.4, 6.2, 0.2, "#9eb6d4");
+    fillRoundedRect(4.0, 11.8, 1.8, 1.1, 0.4, "#43587a");
+    fillRoundedRect(8.2, 11.8, 1.8, 1.1, 0.4, "#43587a");
+    fillRoundedRect(5.0, 18.6, 4.4, 2.2, 0.9, "#8b4f38");
+
+    ctx.save();
+    ctx.translate(5.0, 18.8);
+    ctx.rotate(-0.08 + legSwing * 0.03 - kick * 0.06);
+    fillRoundedRect(0, 0, 2.2, 5.8, 0.9, jeans);
+    fillRoundedRect(-0.2, 5.2, 2.7, 1.4, 0.6, "#1b1f28");
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(8.4 + kick * 2.8, 18.8 - kick * 2.0);
+    ctx.rotate(0.08 - legSwing * 0.03 + kick * 0.26);
+    fillRoundedRect(0, 0, 2.2, 5.8 + kick * 1.0, 0.9, jeans);
+    fillRoundedRect(-0.2, 5.2 + kick * 0.6, 2.9 + kick * 0.7, 1.4, 0.6, "#1b1f28");
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.beginPath();
+    ctx.moveTo(10.9, 12.4);
+    ctx.quadraticCurveTo(12.9, 14.0, 13.1, 17.8);
+    ctx.strokeStyle = "rgba(176, 220, 255, 0.32)";
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawBoyfriendCinematic(x, y) {
+    const px = Math.floor(x - cameraX);
+    const py = Math.floor(y);
+    const bob = Math.sin(player.anim * 0.14 + x * 0.02) * 0.5;
+
+    ctx.save();
+    ctx.translate(px, py + bob);
+    fillEllipse(7, 13, 4.8, 7.2, "rgba(124, 204, 255, 0.14)");
+    fillEllipse(7, 6.2, 3.0, 3.5, "#f0d5c4");
+    ctx.fillStyle = "#d94747";
+    ctx.beginPath();
+    ctx.moveTo(3.0, 4.4);
+    ctx.quadraticCurveTo(4.8, 0.5, 9.8, 1.0);
+    ctx.quadraticCurveTo(12.2, 1.5, 12.4, 4.2);
+    ctx.lineTo(11.4, 5.2);
+    ctx.lineTo(4.1, 5.2);
+    ctx.closePath();
+    ctx.fill();
+    fillRoundedRect(4.1, 5.0, 7.8, 1.3, 0.5, "#8e2f2f");
+    fillRoundedRect(3.1, 11.0, 8.0, 7.6, 1.7, "#2f5e92");
+    fillRoundedRect(5.3, 11.6, 2.0, 5.1, 0.8, "#eff3f8");
+    fillRoundedRect(2.0, 12.0, 1.7, 5.8, 0.7, "#1f3046");
+    fillRoundedRect(10.3, 12.0, 1.7, 5.8, 0.7, "#1f3046");
+    fillRoundedRect(4.4, 18.0, 2.0, 5.5, 0.8, "#2c3f57");
+    fillRoundedRect(8.0, 18.0, 2.0, 5.5, 0.8, "#2c3f57");
+    fillRoundedRect(4.0, 23.0, 2.7, 1.2, 0.5, "#191c24");
+    fillRoundedRect(7.8, 23.0, 2.7, 1.2, 0.5, "#191c24");
+    fillEllipse(5.9, 6.1, 0.4, 0.55, "#2f262a");
+    fillEllipse(8.4, 6.1, 0.4, 0.55, "#2f262a");
+    ctx.restore();
+  }
+
+  function drawPartygoonCinematic(enemy) {
+    const x = Math.floor(enemy.x - cameraX);
+    const y = Math.floor(enemy.y);
+    ctx.save();
+    ctx.translate(x, y);
+    fillEllipse(6.5, 15.5, 5.0, 2.0, "rgba(0,0,0,0.16)");
+    fillEllipse(6.5, 5.6, 2.8, 3.1, "#f0cbb8");
+    fillRoundedRect(2.4, 8.8, 8.3, 7.1, 1.6, enemy.kicked ? "#694d58" : "#7c4f60");
+    fillRoundedRect(1.6, 10.0, 1.5, 5.1, 0.6, "#322533");
+    fillRoundedRect(9.9, 10.0, 1.5, 5.1, 0.6, "#322533");
+    fillRoundedRect(4.0, 15.0, 2.0, 3.2, 0.7, "#2a2d3b");
+    fillRoundedRect(7.0, 15.0, 2.0, 3.2, 0.7, "#2a2d3b");
+    fillEllipse(5.7, 5.7, 0.4, 0.5, "#231b1e");
+    fillEllipse(8.2, 5.7, 0.4, 0.5, "#231b1e");
+    if (Math.floor((player.anim + enemy.x) * 0.12) % 2 === 0) {
+      fillEllipse(enemy.dir > 0 ? 13.1 : -0.1, 6.8, 1.0, 0.55, "rgba(176, 240, 255, 0.68)");
+    }
+    ctx.restore();
+  }
+
+  function drawPeacockCinematic(enemy) {
+    const x = Math.floor(enemy.x - cameraX);
+    const y = Math.floor(enemy.y);
+    const dir = enemy.dir >= 0 ? 1 : -1;
+    const bodyMain = enemy.kicked ? "#3b6e82" : enemy.mode === "charge" ? "#2f93cf" : "#39a2d0";
+    const tailMain = enemy.mode === "charge" ? "#39b48a" : "#43c28f";
+    const tailEye = enemy.mode === "windup" ? "#f7f3a4" : "#9ff3dc";
+    ctx.save();
+    ctx.translate(x, y);
+    if (dir < 0) {
+      ctx.translate(16, 0);
+      ctx.scale(-1, 1);
+    }
+    fillEllipse(8, 17.0, 5.2, 1.8, "rgba(0,0,0,0.16)");
+    for (let i = 0; i < 4; i += 1) {
+      fillEllipse(1.6 + i * 1.15, 9.2 + i * 0.5, 1.8, 4.6 - i * 0.7, `rgba(76, 214, 178, ${0.16 + i * 0.03})`);
+    }
+    fillEllipse(8.4, 10.4, 3.7, 4.5, bodyMain);
+    fillEllipse(9.8, 6.3, 2.0, 2.2, "#17374b");
+    fillEllipse(10.4, 6.1, 0.44, 0.55, "#ffffff");
+    fillEllipse(8.8, 11.0, 2.2, 2.0, "#82e7d4");
+    fillRoundedRect(4.2, 7.0, 2.8, 6.8, 1.1, tailMain);
+    fillEllipse(5.7, 10.2, 0.8, 1.6, tailEye);
+    fillRoundedRect(8.0, 14.2, 1.1, 3.1, 0.4, "#453126");
+    fillRoundedRect(10.0, 14.2, 1.1, 3.1, 0.4, "#453126");
+    fillRoundedRect(11.1, 6.6, 2.6, 1.1, 0.4, "#e3c56d");
+    ctx.restore();
+  }
+
+  function drawBruiserCinematic(enemy) {
+    const x = Math.floor(enemy.x - cameraX);
+    const y = Math.floor(enemy.y);
+    const armor = enemy.kicked ? "#53657c" : "#617897";
+    const armorHi = enemy.kicked ? "#7f97b4" : "#93accc";
+    ctx.save();
+    ctx.translate(x, y);
+    fillEllipse(8, 17.8, 6.0, 1.8, "rgba(0,0,0,0.18)");
+    fillEllipse(8, 5.6, 3.0, 3.1, "#efccb8");
+    fillRoundedRect(1.8, 8.2, 12.2, 7.6, 1.8, armor);
+    fillRoundedRect(3.0, 9.0, 9.8, 2.1, 1.0, armorHi);
+    fillRoundedRect(0.4, 9.5, 2.2, 5.4, 0.8, "#334053");
+    fillRoundedRect(13.4, 9.5, 2.2, 5.4, 0.8, "#334053");
+    fillRoundedRect(4.0, 15.0, 3.0, 3.5, 0.8, "#243042");
+    fillRoundedRect(9.0, 15.0, 3.0, 3.5, 0.8, "#243042");
+    fillRoundedRect(5.0, 5.0, 6.0, 1.4, 0.5, "#294057");
+    fillEllipse(6.3, 5.8, 0.55, 0.5, "#d6ecff");
+    fillEllipse(9.7, 5.8, 0.55, 0.5, "#d6ecff");
+    if (enemy.flash > 0) {
+      fillEllipse(enemy.dir > 0 ? 16.2 : -0.2, 8.6, 1.2, 0.7, "rgba(255, 235, 168, 0.78)");
+    }
+    ctx.restore();
+  }
+
+  function drawDefaultEnemyCinematic(enemy) {
+    const x = Math.floor(enemy.x - cameraX);
+    const y = Math.floor(enemy.y);
+    const coat = enemy.kicked ? "#69495b" : "#513547";
+    ctx.save();
+    ctx.translate(x, y);
+    fillEllipse(7, 16.8, 5.0, 1.6, "rgba(0,0,0,0.16)");
+    fillEllipse(7, 5.7, 2.8, 3.0, "#efc5ab");
+    fillRoundedRect(2.2, 8.6, 8.8, 7.1, 1.6, coat);
+    fillRoundedRect(1.3, 10.0, 1.7, 4.8, 0.7, "#222a38");
+    fillRoundedRect(10.0, 10.0, 1.7, 4.8, 0.7, "#222a38");
+    fillRoundedRect(3.7, 14.8, 2.2, 3.2, 0.7, "#242d3c");
+    fillRoundedRect(7.4, 14.8, 2.2, 3.2, 0.7, "#242d3c");
+    fillEllipse(5.8, 5.8, 0.38, 0.45, "#2c2228");
+    fillEllipse(8.2, 5.8, 0.38, 0.45, "#2c2228");
+    if (enemy.flash > 0) {
+      fillEllipse(enemy.dir > 0 ? 13.3 : -0.3, 7.0, 1.0, 0.55, "rgba(255, 230, 164, 0.78)");
+    }
+    ctx.restore();
+  }
+
+  function drawEnemyCinematic(enemy) {
+    if (enemy.kind === "partygoon") {
+      drawPartygoonCinematic(enemy);
+      drawEnemyHpPips(enemy, Math.floor(enemy.x - cameraX), Math.floor(enemy.y));
+      return;
+    }
+    if (enemy.kind === "peacock") {
+      drawPeacockCinematic(enemy);
+      drawEnemyHpPips(enemy, Math.floor(enemy.x - cameraX), Math.floor(enemy.y));
+      return;
+    }
+    if (enemy.kind === "bruiser") {
+      drawBruiserCinematic(enemy);
+      drawEnemyHpPips(enemy, Math.floor(enemy.x - cameraX), Math.floor(enemy.y));
+      return;
+    }
+    drawDefaultEnemyCinematic(enemy);
+    drawEnemyHpPips(enemy, Math.floor(enemy.x - cameraX), Math.floor(enemy.y));
+  }
+
+  function drawPeacockBossCinematic(b) {
+    const x = Math.floor(b.x - cameraX);
+    const y = Math.floor(b.y);
+    const dir = b.dir >= 0 ? 1 : -1;
+    const rage = b.hp <= Math.ceil(b.maxHp * 0.4);
+    ctx.save();
+    ctx.translate(x + b.w * 0.5, y + 2);
+    if (dir < 0) ctx.scale(-1, 1);
+    for (let i = 0; i < 5; i += 1) {
+      fillEllipse(-12 + i * 3.6, 16 - i * 1.2, 5.8 - i * 0.4, 12 - i, `rgba(${rage ? "96, 240, 210" : "90, 225, 200"}, ${0.12 + i * 0.025})`);
+    }
+    fillEllipse(0, 20, 10, 2.4, "rgba(0,0,0,0.18)");
+    fillEllipse(0, 12, 8.6, 10.6, rage ? "#3290d8" : "#36a3dc");
+    fillEllipse(2.2, 2.6, 4.3, 4.6, "#173b4f");
+    fillRoundedRect(4.2, 1.9, 5.1, 1.7, 0.6, "#e6c86f");
+    fillEllipse(3.4, 2.4, 0.8, 0.9, "#ffffff");
+    fillEllipse(6.2, 2.4, 0.8, 0.9, "#ffffff");
+    fillEllipse(1.2, 11.6, 5.8, 4.2, rage ? "#7ae9d7" : "#8af1df");
+    fillRoundedRect(-2.6, 18.0, 3.0, 10.2, 1.2, "#31425d");
+    fillRoundedRect(2.8, 18.0, 3.0, 10.2, 1.2, "#31425d");
+    if (b.mode === "windup" || b.mode === "dash" || b.mode === "shoot") {
+      strokeRoundedRect(-13.0, -3.0, 27.0, 36.0, 4, rage ? "rgba(255, 182, 116, 0.88)" : "rgba(174, 255, 206, 0.78)");
+    }
+    ctx.restore();
+  }
+
+  function drawPeacockHumanBossCinematic(b) {
+    const x = Math.floor(b.x - cameraX);
+    const y = Math.floor(b.y);
+    const rage = b.hp <= Math.ceil(b.maxHp * 0.56);
+    ctx.save();
+    ctx.translate(x, y);
+    fillEllipse(12, 36, 11.5, 2.2, "rgba(0,0,0,0.2)");
+    fillEllipse(12, 8.0, 5.2, 5.4, "#eed5c4");
+    fillRoundedRect(7.0, 1.2, 10.0, 2.0, 0.8, rage ? "#3a7bb0" : "#31658f");
+    fillRoundedRect(4.4, 13.0, 15.2, 11.5, 2.5, rage ? "#30476f" : "#293b60");
+    fillRoundedRect(2.0, 16.0, 3.0, 13.0, 1.3, rage ? "#2a7887" : "#236777");
+    fillRoundedRect(19.0, 16.0, 3.0, 13.0, 1.3, rage ? "#2a7887" : "#236777");
+    fillRoundedRect(7.0, 24.0, 4.0, 12.0, 1.3, "#2b3853");
+    fillRoundedRect(13.0, 24.0, 4.0, 12.0, 1.3, "#2b3853");
+    fillRoundedRect(9.2, 13.8, 5.0, 8.0, 1.2, "#f2f5fb");
+    fillEllipse(10.0, 8.1, 0.65, 0.75, "#27303d");
+    fillEllipse(14.0, 8.1, 0.65, 0.75, "#27303d");
+    if (b.mode === "shoot" || b.mode === "ring" || b.mode === "leap_prep" || b.mode === "dash") {
+      strokeRoundedRect(1.0, 0.0, 22.0, 38.0, 4, rage ? "rgba(255, 176, 116, 0.9)" : "rgba(124, 244, 255, 0.82)");
+    }
+    ctx.restore();
+  }
+
+  function drawGodBossCinematic(b) {
+    const x = Math.floor(b.x - cameraX);
+    const y = Math.floor(b.y);
+    const phase2 = (b.phase || 1) >= 2;
+    const rage = b.hp <= Math.ceil(b.maxHp * (phase2 ? 0.45 : 0.35));
+    ctx.save();
+    ctx.translate(x, y);
+    fillEllipse(12, 36, 12.5, 2.3, "rgba(0,0,0,0.22)");
+    fillEllipse(12, 18, 14.0, 18.0, phase2 ? "rgba(162, 150, 255, 0.18)" : "rgba(255, 196, 128, 0.16)");
+    fillRoundedRect(6.0, 0.0, 12.0, 11.0, 4.5, phase2 ? "#d8d6e8" : "#e7d4bd");
+    fillRoundedRect(7.2, 10.0, 9.6, 9.0, 2.0, phase2 ? "#f0dfd4" : "#e4d0bd");
+    fillRoundedRect(2.2, 15.0, 19.6, 16.0, 3.2, phase2 ? "#352c4e" : "#3a2f3a");
+    fillRoundedRect(0.6, 16.0, 3.0, 12.0, 1.4, "#aab2c6");
+    fillRoundedRect(20.4, 16.0, 3.0, 12.0, 1.4, "#aab2c6");
+    fillRoundedRect(6.2, 29.0, 4.4, 8.0, 1.2, "#2f3951");
+    fillRoundedRect(13.4, 29.0, 4.4, 8.0, 1.2, "#2f3951");
+    fillEllipse(9.1, 13.5, 0.8, 0.55, rage ? "#ff7788" : "#9fd8ff");
+    fillEllipse(14.9, 13.5, 0.8, 0.55, rage ? "#ff7788" : "#9fd8ff");
+    if (b.mode === "windup" || b.mode === "dash" || b.mode === "phase_shift" || b.mode === "shoot") {
+      strokeRoundedRect(-1.0, -2.0, 26.0, 40.0, 5, rage ? "rgba(255, 152, 122, 0.88)" : "rgba(170, 210, 255, 0.82)");
+    }
+    ctx.restore();
+  }
+
+  function drawBossCinematic() {
+    if (!stage.boss.active) return;
+    const b = stage.boss;
+    if (b.kind === "peacock") {
+      for (const pb of getBossEntities(true).filter((boss) => boss.kind === "peacock")) {
+        if (pb.hp <= 0) continue;
+        drawPeacockBossCinematic(pb);
+      }
+      return;
+    }
+    if (b.kind === "peacockman") {
+      drawPeacockHumanBossCinematic(b);
+      return;
+    }
+    drawGodBossCinematic(b);
+  }
+
   function drawSolid(s) {
+    if (isCinematicMode()) {
+      drawSolidCinematic(s);
+      return;
+    }
     let body = "#434956";
     let top = "#6c7484";
 
@@ -13081,6 +13731,28 @@
       ctx.closePath();
       ctx.fill();
     }
+  }
+
+  function drawContactShadowScreen(x, y, width, alpha = 0.2, stretch = 1) {
+    if (!isCinematicMode()) return;
+    const centerX = Math.floor(x + width * 0.5);
+    const radius = Math.max(6, width * 0.65 * stretch);
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    ctx.translate(centerX, Math.floor(y));
+    ctx.scale(1, 0.42);
+    const shadow = ctx.createRadialGradient(0, 0, 1, 0, 0, radius);
+    shadow.addColorStop(0, `rgba(0,0,0,${alpha})`);
+    shadow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawContactShadowWorld(worldX, y, width, alpha = 0.2, stretch = 1) {
+    drawContactShadowScreen(worldX - cameraX, y, width, alpha, stretch);
   }
 
   function drawHero(x, y, facing, animFrame, scale = 1, kickPose = 0) {
@@ -15681,6 +16353,7 @@
       drawSkyGradient();
       drawParallax();
     }
+    drawCinematicBackdropFX(godBossRoom);
     ctx.fillStyle = godBossRoom ? "rgba(6,8,12,0.09)" : "rgba(8,10,16,0.07)";
     ctx.fillRect(0, 0, W, H - 18);
     const polishGlow = ctx.createLinearGradient(0, 44, 0, 150);
@@ -15738,6 +16411,13 @@
 
     for (const e of stage.enemies) {
       if (!e.alive) continue;
+      drawContactShadowWorld(
+        e.x,
+        e.y + e.h + 1,
+        e.w,
+        e.kind === "bruiser" ? 0.24 : 0.18,
+        e.kind === "peacock" ? 1.15 : 1.0
+      );
       drawEnemy(e);
     }
 
@@ -15882,12 +16562,22 @@
     drawWaveBursts();
     drawHitSparks();
     drawInvincibleBonusPops();
+    if (stage && stage.boss && stage.boss.active) {
+      drawContactShadowWorld(stage.boss.x, stage.boss.y + stage.boss.h + 1, stage.boss.w, 0.28, 1.45);
+    }
     drawBoss();
     drawGoal();
     drawRushAura();
     const hurtBlink = damageInvulnTimer > 0 && !swordStingerActive && !millionStabActive && Math.floor(damageInvulnTimer / 3) % 2 === 0;
     if (!hurtBlink) {
       drawHeroAfterimageTrail();
+      drawContactShadowWorld(
+        player.x,
+        player.y + player.h + 1,
+        player.w,
+        invincibleTimer > 0 ? 0.32 : 0.24,
+        invincibleTimer > 0 ? 1.8 : 1.35 + clamp(Math.abs(player.vx) / 5, 0, 0.5)
+      );
       if (invincibleTimer > 0) {
         drawInvincibleBikeRide();
       } else if (bulletRainRotation) {
@@ -15904,6 +16594,8 @@
       }
       drawAutoWeaponEffects();
     }
+
+    drawCinematicForegroundFX(godBossRoom);
 
     ctx.restore();
   }
@@ -16020,8 +16712,17 @@
     ctx.fillStyle = "#ff6f8c";
     ctx.font = "10px monospace";
     ctx.fillText("Rila Riders Rescue", 112, 58);
+    ctx.fillStyle = isCinematicMode() ? "#9cf6ff" : "#ffe7b0";
+    ctx.font = "7px monospace";
+    ctx.fillText(
+      isCinematicMode() ? "CINEMATIC MODE / G TOGGLE" : "RETRO MODE / G TOGGLE",
+      84,
+      68
+    );
 
     const heroBob = Math.sin(t * 0.12) * 1.2;
+    drawContactShadowScreen(66, 133 + heroBob, 24, 0.24, 1.6);
+    drawContactShadowScreen(222, 131 + heroBob * 0.4, 18, 0.17, 1.2);
     drawHero(68, 108 + heroBob, 1, t * 1.08, 1.4);
     drawBoyfriend(228, 104 + heroBob * 0.4);
 
@@ -17498,6 +18199,11 @@
   }
 
   function drawPs1Overlay() {
+    if (isCinematicMode()) {
+      drawCinematicCompositeOverlay();
+      return;
+    }
+
     const filmTick = Math.floor((player.anim + titleTimer) * 0.8);
 
     ctx.fillStyle = "rgba(10,12,18,0.06)";
@@ -17555,6 +18261,53 @@
     ctx.fillRect(0, 0, 2, H);
     ctx.fillStyle = "rgba(255, 174, 150, 0.022)";
     ctx.fillRect(W - 2, 0, 2, H);
+  }
+
+  function drawCinematicCompositeOverlay() {
+    const filmTick = Math.floor((player.anim + titleTimer) * 0.45);
+    const grade = ctx.createLinearGradient(0, 0, 0, H);
+    grade.addColorStop(0, "rgba(112, 214, 255, 0.07)");
+    grade.addColorStop(0.44, "rgba(255,255,255,0)");
+    grade.addColorStop(1, "rgba(255, 126, 188, 0.05)");
+    ctx.fillStyle = grade;
+    ctx.fillRect(0, 0, W, H);
+
+    for (let y = 0; y < H; y += 6) {
+      const alpha = y % 12 === 0 ? 0.024 : 0.014;
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.fillRect(0, y, W, 1);
+    }
+
+    const vignette = ctx.createRadialGradient(
+      W * 0.5,
+      H * 0.56,
+      72,
+      W * 0.5,
+      H * 0.56,
+      214
+    );
+    vignette.addColorStop(0, "rgba(0,0,0,0)");
+    vignette.addColorStop(1, "rgba(0,0,0,0.12)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    const edgeGlow = ctx.createLinearGradient(0, 0, W, 0);
+    edgeGlow.addColorStop(0, "rgba(112, 214, 255, 0.08)");
+    edgeGlow.addColorStop(0.1, "rgba(112, 214, 255, 0)");
+    edgeGlow.addColorStop(0.9, "rgba(255, 126, 188, 0)");
+    edgeGlow.addColorStop(1, "rgba(255, 126, 188, 0.08)");
+    ctx.fillStyle = edgeGlow;
+    ctx.fillRect(0, 0, W, H);
+
+    for (let i = 0; i < 18; i += 1) {
+      const x = ((i * 19 + filmTick * 3) % (W + 10)) - 5;
+      const y = 24 + ((i * 29 + filmTick * 2) % Math.max(1, H - 32));
+      const alpha = 0.025 + (i % 3) * 0.01;
+      ctx.fillStyle = i % 2 === 0
+        ? `rgba(255, 238, 214, ${alpha})`
+        : `rgba(178, 236, 255, ${alpha})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
   }
 
   function drawBattleRankStyleOverlay() {
@@ -18345,6 +19098,13 @@
 
   window.addEventListener("keydown", (e) => {
     unlockAudio();
+    if (e.code === "KeyG") {
+      if (!e.repeat) {
+        toggleVisualMode();
+      }
+      e.preventDefault();
+      return;
+    }
     const mapped = keyToInput[e.code];
     if (!mapped) return;
 
