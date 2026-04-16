@@ -118,6 +118,7 @@
     shot: false,
     shoot: false,
     dash: false,
+    down: false,
     weaponSwitch: false,
     burst: false,
     styleChange: false,
@@ -214,6 +215,7 @@
         "近接攻撃の達人！剣技のダメージが最強",
         tKey("攻撃長押し→離す: 回転斬り SPIN ATTACK", "攻撃長押し→離す: 回転斬り"),
         tKey("方向+J: 突進斬り / W+J: 打ち上げ", "方向+攻撃: 突進斬り"),
+        tKey("↓↓+J: リアルインパクト (壁破壊)", "↓↓+攻撃: リアルインパクト"),
         "DT発動時: ダメージ1.5倍・リーチ1.25倍",
       ],
       color: "#ff6644",
@@ -225,6 +227,7 @@
       descJa: [
         "超高速回避の使い手！スピード特化",
         tKey("L キーでテレポート回避（距離60）", "DASHでテレポート回避"),
+        tKey("L→L→J: ドッペルゲンガー召喚", "DASH→DASH→攻撃: 分身召喚"),
         "回避成功でランクボーナス＆攻撃力UP",
         "DT発動時: 移動速度1.5倍・回避CD大幅短縮",
       ],
@@ -237,6 +240,7 @@
       descJa: [
         "銃火器のスペシャリスト！射撃ダメージ特化",
         tKey("K長押しでチャージ: マシンガン→ショットガン→バズーカ", "SHOOT長押しでチャージ射撃"),
+        tKey("→+K長押し: ガンスティンガー (突進乱射)", "→+SHOOT長押し: ガンスティンガー"),
         "弾数制限あり（15発）・自動リロード",
         "DT発動時: 射撃ダメージ3倍・弾が貫通",
       ],
@@ -250,6 +254,7 @@
         "鉄壁の防御！ガード＆カウンター特化",
         "敵の攻撃をタイミングよくガードしよう",
         "ジャストガード(6F以内)で高エネルギー獲得",
+        tKey("↓+J: ドレッドノート (左右衝撃波)", "↓+攻撃: ドレッドノート"),
         "DT発動時: オートガード・エネルギー全回復",
       ],
       color: "#22ff88",
@@ -630,6 +635,49 @@
   let bulletRainTimer = 0;     // Remaining duration (frames)
   let bulletRainCooldown = 0;  // Cooldown after use
   let bulletRainRotation = false; // Upside-down rotation during bullet rain
+
+  // --- Real Impact (Swordmaster ↓↓+J): charge & thrust ---
+  let realImpactChargeActive = false;
+  let realImpactChargeTimer = 0;
+  let realImpactActive = false;
+  let realImpactTimer = 0;
+  let realImpactDir = 1;
+  const REAL_IMPACT_CHARGE_TIME = 50;   // ~0.83s charge
+  const REAL_IMPACT_DURATION = 18;      // thrust duration
+  const REAL_IMPACT_SPEED = 12.0;       // thrust speed
+
+  // --- Double-tap detectors (for ↓↓ and L→L) ---
+  let downTapWindowTimer = 0;           // frames until second down tap is allowed
+  let doubleDownPrimedTimer = 0;        // frames the double-down state is active
+  let dashTapWindowTimer = 0;           // frames until second L tap is allowed
+  let doubleDashPrimedTimer = 0;        // frames the double-dash state is active
+  const DOUBLE_TAP_WINDOW = 14;         // max gap between two taps
+  const DOUBLE_TAP_PRIMED_WINDOW = 24;  // window after the double-tap to press the finisher
+
+  // --- GunStinger (Gunslinger →+K long press) ---
+  let gunStingerCharging = false;
+  let gunStingerChargeTimer = 0;
+  let gunStingerReadyPlayed = false;
+  let gunStingerActive = false;
+  let gunStingerTimer = 0;
+  let gunStingerFireTimer = 0;
+  let gunStingerDir = 1;
+  const GUN_STINGER_MIN_CHARGE = 22;    // min frames to charge (~0.37s)
+  const GUN_STINGER_MAX_CHARGE = 42;    // auto-fire at max
+  const GUN_STINGER_DURATION = 32;
+  const GUN_STINGER_SPEED = 9.5;
+  const GUN_STINGER_FIRE_INTERVAL = 3;
+
+  // --- Doppelganger (Trickster L→L→J) ---
+  let doppelgangers = [];
+  const DOPPELGANGER_DURATION = 240;    // ~4 seconds
+  const DOPPELGANGER_ATTACK_INTERVAL = 22;
+  let doppelgangerCooldown = 0;
+  const DOPPELGANGER_COOLDOWN = 60;
+
+  // --- Dreadnought (Royal Guard ↓+J) ---
+  let dreadnoughtCooldown = 0;
+  const DREADNOUGHT_COOLDOWN = 36;
 
   let hyakuretsuTimer = 0;
   let hyakuretsuHitTimer = 0;
@@ -7468,8 +7516,14 @@
       directionHoldTimer = 0;
     }
 
+    // Real Impact charge/thrust progression — runs before attack block
+    if (updateRealImpact(dt)) return;
+
     // Block attacks during stinger rush / million stab (handled in physics loop)
     if (swordStingerActive || millionStabActive) return;
+
+    // Cooldown decay
+    if (dreadnoughtCooldown > 0) dreadnoughtCooldown -= dt;
 
     // Cooldown
     if (swordAttackCooldown > 0) {
@@ -7481,6 +7535,22 @@
     // W/↑/Space = up direction (shared with jump key)
     // A/D = left/right direction (shared with movement keys)
     if (actions.attackPressed) {
+      // Doppelganger: L→L→J (Trickster) — spawn afterimage that auto-attacks
+      if (playerStyle === "trickster" && doubleDashPrimedTimer > 0 && doppelgangerCooldown <= 0) {
+        performDoppelganger();
+        doubleDashPrimedTimer = 0;
+        attackChargeTimer = 0;
+        attackChargeReadyPlayed = false;
+        return;
+      }
+      // Real Impact: ↓↓+J (Swordmaster, on ground) — charge then burst thrust
+      if (playerStyle === "swordmaster" && player.onGround && doubleDownPrimedTimer > 0) {
+        startRealImpactCharge();
+        doubleDownPrimedTimer = 0;
+        attackChargeTimer = 0;
+        attackChargeReadyPlayed = false;
+        return;
+      }
       // Stinger: direction+attack (generous 12 frame window)
       const fwd = movingFwd && directionHoldTimer < 12;
       const hasDirection = fwd || input.jump || input.down;
@@ -7530,10 +7600,14 @@
         } else if (fwd) {
           performSwordStinger(); // D/A + J = Stinger (突進斬り)
         } else if (input.down) {
-          // Start Drive charge
-          driveChargeActive = true;
-          driveChargeTimer = 0;
-          performDrive();       // Down + J = instant Drive (衝撃波)
+          if (playerStyle === "royalguard" && dreadnoughtCooldown <= 0) {
+            performDreadnought(); // Royal Guard: ↓+J = Dreadnought (radial slam)
+          } else {
+            // Start Drive charge
+            driveChargeActive = true;
+            driveChargeTimer = 0;
+            performDrive();       // Down + J = instant Drive (衝撃波)
+          }
         }
         attackChargeTimer = 0;
         attackChargeReadyPlayed = false;
@@ -7841,6 +7915,294 @@
     hudMessage = dtActive ? "DT DRIVE!" : "DRIVE!";
     hudTimer = 40;
     battleRankGainByStyle("drive", 1.5);
+  }
+
+  // --- Real Impact: ↓↓+J swordmaster charged thrust ---
+  function startRealImpactCharge() {
+    realImpactChargeActive = true;
+    realImpactChargeTimer = 0;
+    realImpactDir = player.facing;
+    player.vx = 0;
+    hudMessage = "REAL IMPACT...";
+    hudTimer = 30;
+    if (seWhipSwing) playSound(seWhipSwing, 0.5, 0.5);
+  }
+
+  function updateRealImpact(dt) {
+    if (realImpactActive) {
+      realImpactTimer -= dt;
+      player.vx = realImpactDir * REAL_IMPACT_SPEED;
+      damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+      const reach = 44 + battleRankIndex * 4;
+      const hitBox = {
+        x: realImpactDir > 0 ? player.x + player.w : player.x - reach,
+        y: player.y - 2,
+        w: reach,
+        h: player.h + 4,
+      };
+      // Break walls/gimmicks
+      hitBreakableGimmicks(hitBox, 4 + battleRankIndex);
+      // Damage enemies/boss (single big hit then launch away)
+      const dtActive = isDevilTriggerActive();
+      const power = (6.5 + battleRankIndex * 0.5) * dtPowerMul() * (dtActive ? 1.3 : 1);
+      swordHitEnemies(hitBox, realImpactDir, power, 2.6 * dtKnockMul());
+      swordHitBoss(hitBox, realImpactDir, power * 1.2);
+      // Heavy spark trail
+      spawnSwordSlash(realImpactDir, 4 + dtSparkCount());
+      if (realImpactTimer <= 0) {
+        realImpactActive = false;
+        triggerImpact(5.0, player.x + realImpactDir * 20, player.y + player.h * 0.5, 5);
+        if (seStrongHit) playSound(seStrongHit, 1.0, 0.55);
+        swordAttackCooldown = 24;
+        attackEffectTimer = 18;
+        attackEffectMode = "sword";
+        battleRankGainByStyle("real_impact", 4.0);
+      }
+      return true;
+    }
+    if (!realImpactChargeActive) return false;
+    realImpactChargeTimer += dt;
+    player.vx *= 0.6; // lock in place
+    if (realImpactChargeTimer >= REAL_IMPACT_CHARGE_TIME * 0.8 && !attackChargeReadyPlayed) {
+      attackChargeReadyPlayed = true;
+      playChargeReadySfx();
+    }
+    // Spark aura while charging
+    if (realImpactChargeTimer % 4 < 1) {
+      const px = player.x + player.w * 0.5;
+      const py = player.y + player.h * 0.5;
+      hitSparks.push({
+        x: px + (Math.random() - 0.5) * 20,
+        y: py + (Math.random() - 0.5) * 24,
+        vx: realImpactDir * (0.5 + Math.random()),
+        vy: (Math.random() - 0.5) * 1.5,
+        life: 14, maxLife: 14,
+        color: "#ff3322",
+      });
+    }
+    if (realImpactChargeTimer >= REAL_IMPACT_CHARGE_TIME) {
+      // Release → thrust
+      realImpactChargeActive = false;
+      realImpactChargeTimer = 0;
+      attackChargeReadyPlayed = false;
+      realImpactActive = true;
+      realImpactTimer = REAL_IMPACT_DURATION;
+      triggerImpact(3.0, player.x + player.w * 0.5, player.y + player.h * 0.5, 4);
+      if (seStrongHit) playSound(seStrongHit, 0.95, 0.7);
+      hudMessage = isDevilTriggerActive() ? "DT REAL IMPACT!" : "REAL IMPACT!";
+      hudTimer = 50;
+    }
+    return true;
+  }
+
+  // --- Dreadnought: Royal Guard ↓+J radial ground slam ---
+  function performDreadnought() {
+    const rankIdx = battleRankIndex;
+    const dtActive = isDevilTriggerActive();
+    const power = (3.0 + rankIdx * 0.2) * dtPowerMul();
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.4;
+    const reach = Math.floor((48 + rankIdx * 4) * dtReachMul());
+
+    // Radial hitbox — both left and right
+    const hitBox = {
+      x: player.x + player.w * 0.5 - reach,
+      y: player.y - 4,
+      w: reach * 2,
+      h: player.h + 10,
+    };
+    swordHitEnemies(hitBox, 1, power, 2.0 * dtKnockMul());
+    swordHitBoss(hitBox, 1, power);
+    hitBreakableGimmicks(hitBox, 2 + rankIdx * 0.4);
+
+    // Twin shockwaves (one each direction)
+    const waveSpeed = (3.2 + rankIdx * 0.3) * (dtActive ? 1.3 : 1);
+    const ttl = dtActive ? 34 : 26;
+    for (const dir of [-1, 1]) {
+      stage.playerWaves.push({
+        kind: "swordwave",
+        x: px + dir * 6,
+        y: py,
+        w: 26,
+        h: 18,
+        vx: dir * waveSpeed,
+        vy: 0,
+        ttl,
+        phase: 0,
+        spin: 0,
+        power: power * 0.7,
+      });
+    }
+
+    // Visuals
+    triggerImpact(dtActive ? 4.5 : 3.2, px, py + 4, 4.5);
+    spawnWaveBurst(px, py + 6, 1.4);
+    for (let i = 0; i < 14; i++) {
+      const angle = (i / 14) * Math.PI;
+      const speed = 2.5 + Math.random() * 2;
+      hitSparks.push({
+        x: px, y: py + 8,
+        vx: Math.cos(angle) * speed * (Math.random() < 0.5 ? -1 : 1),
+        vy: -Math.sin(angle) * speed * 0.6,
+        life: 16, maxLife: 16,
+        color: "#22ff88",
+      });
+    }
+    if (seBazooka) playSound(seBazooka, 0.7, 0.7);
+    if (seStrongHit) playSound(seStrongHit, 0.85, 0.65);
+
+    player.vy = Math.max(player.vy, 0);
+    swordAttackCooldown = 14;
+    dreadnoughtCooldown = DREADNOUGHT_COOLDOWN;
+    attackEffectTimer = 14;
+    attackEffectMode = "sword";
+    hudMessage = dtActive ? "DT DREADNOUGHT!" : "DREADNOUGHT!";
+    hudTimer = 40;
+    battleRankGainByStyle("dreadnought", 2.2);
+  }
+
+  // --- Doppelganger: Trickster L→L→J afterimage ally ---
+  function performDoppelganger() {
+    const dtActive = isDevilTriggerActive();
+    const lifeExtend = dtActive ? 120 : 0;
+    const dir = player.facing;
+    const offset = 42;
+    // Spawn slightly behind/beside the player
+    const dop = {
+      x: player.x - dir * offset,
+      y: player.y,
+      w: player.w,
+      h: player.h,
+      facing: dir,
+      ttl: DOPPELGANGER_DURATION + lifeExtend,
+      attackTimer: 8,
+      anim: 0,
+      flash: 14,
+    };
+    dop.x = clamp(dop.x, 0, stage.width - dop.w);
+    doppelgangers.push(dop);
+    doppelgangerCooldown = DOPPELGANGER_COOLDOWN;
+
+    // Spawn spark ring
+    const px = player.x + player.w * 0.5;
+    const py = player.y + player.h * 0.5;
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2;
+      hitSparks.push({
+        x: px, y: py,
+        vx: Math.cos(ang) * 2.5,
+        vy: Math.sin(ang) * 2.5,
+        life: 16, maxLife: 16,
+        color: dtActive ? "#ff66aa" : "#66ccff",
+      });
+    }
+    triggerImpact(2.0, px, py, 3.0);
+    if (seWhipSwing) playSound(seWhipSwing, 0.7, 1.25);
+    hudMessage = dtActive ? "DT DOPPELGANGER!" : "DOPPELGANGER!";
+    hudTimer = 40;
+    battleRankGainByStyle("doppelganger", 2.5);
+  }
+
+  function updateDoppelgangers(dt) {
+    if (doppelgangerCooldown > 0) doppelgangerCooldown -= dt;
+    if (doppelgangers.length === 0) return;
+    for (const d of doppelgangers) {
+      d.ttl -= dt;
+      d.anim += dt;
+      if (d.flash > 0) d.flash -= dt;
+      if (d.ttl <= 0) continue;
+      // Follow the player at a distance
+      const pcx = player.x + player.w * 0.5;
+      const dcx = d.x + d.w * 0.5;
+      const followDir = pcx > dcx ? 1 : -1;
+      const followDist = Math.abs(pcx - dcx);
+      const maxDist = 120;
+      if (followDist > maxDist) {
+        d.x += followDir * Math.min(3.0, followDist - maxDist) * dt;
+      }
+      // Aim at nearest enemy in a generous radius
+      let target = null;
+      let best = 160;
+      for (const e of stage.enemies) {
+        if (!e.alive || e.kicked) continue;
+        const ex = e.x + e.w * 0.5;
+        const ey = e.y + e.h * 0.5;
+        const dd = Math.hypot(ex - (d.x + d.w * 0.5), ey - (d.y + d.h * 0.5));
+        if (dd < best) { best = dd; target = e; }
+      }
+      if (!target && stage.boss && stage.boss.active) {
+        for (const boss of getBossEntities()) {
+          if (boss.hp <= 0) continue;
+          const bx = boss.x + boss.w * 0.5;
+          const by = boss.y + boss.h * 0.5;
+          const dd = Math.hypot(bx - (d.x + d.w * 0.5), by - (d.y + d.h * 0.5));
+          if (dd < best) { best = dd; target = boss; }
+        }
+      }
+      if (target) {
+        const tx = target.x + target.w * 0.5;
+        d.facing = tx > (d.x + d.w * 0.5) ? 1 : -1;
+        // Inch toward target if far
+        if (Math.abs(tx - (d.x + d.w * 0.5)) > 40) {
+          d.x += d.facing * 2.2 * dt;
+        }
+        // Vertical match
+        d.y += ((target.y) - d.y) * 0.08 * dt;
+      }
+      d.attackTimer -= dt;
+      if (d.attackTimer <= 0 && target) {
+        d.attackTimer = DOPPELGANGER_ATTACK_INTERVAL;
+        const reach = 30;
+        const power = 1.4 + battleRankIndex * 0.12;
+        const hitBox = {
+          x: d.facing > 0 ? d.x + d.w - 4 : d.x - reach + 4,
+          y: d.y + 2,
+          w: reach,
+          h: 18,
+        };
+        swordHitEnemies(hitBox, d.facing, power, 0.8);
+        swordHitBoss(hitBox, d.facing, power);
+        const px = d.x + d.w * 0.5 + d.facing * 12;
+        const py = d.y + d.h * 0.4;
+        spawnWaveBurst(px, py, 0.5);
+        for (let i = 0; i < 3; i++) {
+          hitSparks.push({
+            x: px, y: py,
+            vx: d.facing * (1 + Math.random() * 2),
+            vy: (Math.random() - 0.5) * 1.5,
+            life: 10, maxLife: 10,
+            color: "#66ccff",
+          });
+        }
+        if (seWhipSwing) playSound(seWhipSwing, 0.25, 1.3);
+      }
+      // Clamp to stage bounds
+      d.x = clamp(d.x, 0, stage.width - d.w);
+    }
+    doppelgangers = doppelgangers.filter((d) => d.ttl > 0);
+  }
+
+  function drawDoppelgangers() {
+    if (doppelgangers.length === 0) return;
+    for (const d of doppelgangers) {
+      const fade = clamp(d.ttl / 40, 0.25, 1);
+      const sx = Math.floor(d.x - cameraX);
+      const sy = Math.floor(d.y);
+      ctx.save();
+      ctx.globalAlpha = 0.55 * fade + 0.15 * Math.sin(d.anim * 0.35);
+      // Ghost body
+      ctx.fillStyle = "#66ccff";
+      ctx.fillRect(sx + 2, sy + 2, d.w - 4, d.h - 4);
+      ctx.globalAlpha = 0.9 * fade;
+      ctx.strokeStyle = "#aadfff";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx + 0.5, sy + 0.5, d.w - 1, d.h - 1);
+      // Sword hint
+      ctx.fillStyle = "#eaffff";
+      const swX = d.facing > 0 ? sx + d.w - 2 : sx - 6;
+      ctx.fillRect(swX, sy + 6, 8, 2);
+      ctx.restore();
+    }
   }
 
   // --- Round Trip: throw sword that boomerangs back ---
@@ -8547,6 +8909,23 @@
     tauntBonusTimer = 0;
     tauntFlashTimer = 0;
     airComboStage = 0;
+    realImpactActive = false;
+    realImpactChargeActive = false;
+    realImpactTimer = 0;
+    realImpactChargeTimer = 0;
+    dreadnoughtCooldown = 0;
+    gunStingerCharging = false;
+    gunStingerChargeTimer = 0;
+    gunStingerActive = false;
+    gunStingerTimer = 0;
+    gunStingerFireTimer = 0;
+    gunStingerReadyPlayed = false;
+    doppelgangers = [];
+    doppelgangerCooldown = 0;
+    downTapWindowTimer = 0;
+    doubleDownPrimedTimer = 0;
+    dashTapWindowTimer = 0;
+    doubleDashPrimedTimer = 0;
   }
 
   // ========== COMBAT DASH / DODGE / ROYAL GUARD SYSTEM ==========
@@ -8708,6 +9087,80 @@
     battleRankGainByStyle("royal_release", 3.0 + energy * 0.03);
   }
 
+  // --- GunStinger: Gunslinger rushing barrage ---
+  function startGunStinger(dir) {
+    gunStingerActive = true;
+    gunStingerTimer = GUN_STINGER_DURATION;
+    gunStingerFireTimer = 0;
+    gunStingerDir = dir;
+    gunStingerCharging = false;
+    gunStingerChargeTimer = 0;
+    gunStingerReadyPlayed = false;
+    damageInvulnTimer = Math.max(damageInvulnTimer, GUN_STINGER_DURATION + 4);
+    triggerImpact(2.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 3);
+    if (seStrongHit) playSound(seStrongHit, 0.7, 1.0);
+    hudMessage = isDevilTriggerActive() ? "DT GUNSTINGER!" : "GUNSTINGER!";
+    hudTimer = 40;
+    battleRankGainByStyle("gun_stinger", 2.0);
+  }
+
+  function updateGunStinger(dt, actions) {
+    if (!gunStingerActive) return;
+    gunStingerTimer -= dt;
+    gunStingerFireTimer -= dt;
+    const dtActive = isDevilTriggerActive();
+    const dir = gunStingerDir;
+    player.facing = dir;
+    player.vx = dir * GUN_STINGER_SPEED * (dtActive ? 1.2 : 1);
+    damageInvulnTimer = Math.max(damageInvulnTimer, 2);
+    // Melee bayonet hit as we rush
+    const meleeBox = {
+      x: dir > 0 ? player.x + player.w : player.x - 20,
+      y: player.y + 2,
+      w: 20, h: player.h - 4,
+    };
+    swordHitEnemies(meleeBox, dir, 1.2 + battleRankIndex * 0.1, 0.6);
+    swordHitBoss(meleeBox, dir, 1.0 + battleRankIndex * 0.1);
+
+    // Spray bullets
+    if (gunStingerFireTimer <= 0) {
+      gunStingerFireTimer = GUN_STINGER_FIRE_INTERVAL;
+      const px = player.x + player.w * 0.5 + dir * 8;
+      const py = player.y + player.h * 0.45;
+      const rankIdx = battleRankIndex;
+      const speed = 6.5 + rankIdx * 0.8;
+      for (let i = 0; i < (dtActive ? 2 : 1); i++) {
+        const spread = (Math.random() - 0.5) * 0.6;
+        stage.playerWaves.push({
+          kind: "bullet",
+          x: px, y: py + spread * 4,
+          w: 8, h: 4,
+          vx: dir * speed, vy: spread * 0.8,
+          ttl: 40,
+          power: 0.8 * dtShotPowerMul() * (dtActive ? 1.4 : 1),
+        });
+      }
+      if (seHandgun) playSound(seHandgun, 0.35, 1.2 + Math.random() * 0.2);
+      // Muzzle sparks
+      for (let i = 0; i < 2; i++) {
+        hitSparks.push({
+          x: px, y: py,
+          vx: dir * (1.5 + Math.random() * 2),
+          vy: (Math.random() - 0.5) * 1.5,
+          life: 8, maxLife: 8,
+          color: "#ffdd66",
+        });
+      }
+    }
+
+    if (gunStingerTimer <= 0) {
+      gunStingerActive = false;
+      dedicatedGunCooldown = 8;
+      player.vx *= 0.5;
+      triggerImpact(1.5, player.x + player.w * 0.5, player.y + player.h * 0.5, 2);
+    }
+  }
+
   // ========== DEDICATED GUN (K KEY - always available) ==========
   function updateDedicatedGun(dt, actions) {
     if (dedicatedGunCooldown > 0) {
@@ -8719,6 +9172,57 @@
     const playable = gameState === STATE.PLAY || gameState === STATE.BOSS;
     const rankIdx = battleRankIndex;
     const isGunslinger = playerStyle === "gunslinger";
+
+    // GunStinger charge: Gunslinger + forward direction + K held on ground
+    // First 8 frames let normal fire work, then charging kicks in and blocks fire
+    const GUN_STINGER_GRACE = 8;
+    if (isGunslinger && playable && !deathAnimActive && !gunStingerActive) {
+      const facingDir = player.facing;
+      const forwardHeld = (facingDir > 0 && input.right) || (facingDir < 0 && input.left);
+      if (input.shoot && forwardHeld && player.onGround && !input.down) {
+        if (!gunStingerCharging) {
+          gunStingerCharging = true;
+          gunStingerChargeTimer = 0;
+          gunStingerReadyPlayed = false;
+        }
+        gunStingerChargeTimer += dt;
+        if (gunStingerChargeTimer > GUN_STINGER_GRACE) {
+          player.vx *= 0.6; // Brace for the rush
+          if (!gunStingerReadyPlayed && gunStingerChargeTimer >= GUN_STINGER_MIN_CHARGE) {
+            gunStingerReadyPlayed = true;
+            playChargeReadySfx();
+            hudMessage = "GUNSTINGER READY!";
+            hudTimer = 20;
+          }
+          // Charge aura
+          if (gunStingerChargeTimer % 3 < 1) {
+            const px = player.x + player.w * 0.5 + facingDir * 6;
+            const py = player.y + player.h * 0.5;
+            hitSparks.push({
+              x: px + (Math.random() - 0.5) * 10,
+              y: py + (Math.random() - 0.5) * 12,
+              vx: facingDir * (1 + Math.random()),
+              vy: (Math.random() - 0.5) * 1.2,
+              life: 10, maxLife: 10,
+              color: "#22aaff",
+            });
+          }
+          if (gunStingerChargeTimer >= GUN_STINGER_MAX_CHARGE) {
+            startGunStinger(facingDir);
+          }
+          return; // Block normal fire during charge
+        }
+        // Within grace period — fall through to normal fire logic
+      } else if (gunStingerCharging) {
+        // Released
+        if (gunStingerChargeTimer >= GUN_STINGER_MIN_CHARGE) {
+          startGunStinger(facingDir);
+        }
+        gunStingerCharging = false;
+        gunStingerChargeTimer = 0;
+        gunStingerReadyPlayed = false;
+      }
+    }
 
     // Bullet Rain visual state needs to clear even on frames where K is no longer firing.
     if (player.onGround && bulletRainTimer > 0) {
@@ -10918,6 +11422,8 @@
   function sampleActions() {
     // Secondary attack is retired from gameplay.
     input.attack2 = false;
+    const downPressed = input.down && !prevInput.down;
+    const dashPressedNow = input.dash && !prevInput.dash;
     const actions = {
       jumpPressed: input.jump && !prevInput.jump,
       attackPressed: input.attack && !prevInput.attack,
@@ -10925,7 +11431,9 @@
       attack2Pressed: false,
       attack2Released: false,
       shootPressed: input.shoot && !prevInput.shoot,
-      dashPressed: input.dash && !prevInput.dash,
+      shootReleased: !input.shoot && prevInput.shoot,
+      dashPressed: dashPressedNow,
+      downPressed: downPressed,
       weaponSwitchPressed: input.weaponSwitch && !prevInput.weaponSwitch,
       specialPressed: input.special && !prevInput.special,
       special2Pressed: input.special2 && !prevInput.special2,
@@ -10935,9 +11443,32 @@
       tauntPressed: input.taunt && !prevInput.taunt,
     };
 
+    // Double-tap trackers (decay each frame, armed on a second press within the window)
+    if (downTapWindowTimer > 0) downTapWindowTimer -= 1;
+    if (doubleDownPrimedTimer > 0) doubleDownPrimedTimer -= 1;
+    if (dashTapWindowTimer > 0) dashTapWindowTimer -= 1;
+    if (doubleDashPrimedTimer > 0) doubleDashPrimedTimer -= 1;
+    if (downPressed) {
+      if (downTapWindowTimer > 0) {
+        doubleDownPrimedTimer = DOUBLE_TAP_PRIMED_WINDOW;
+        downTapWindowTimer = 0;
+      } else {
+        downTapWindowTimer = DOUBLE_TAP_WINDOW;
+      }
+    }
+    if (dashPressedNow) {
+      if (dashTapWindowTimer > 0) {
+        doubleDashPrimedTimer = DOUBLE_TAP_PRIMED_WINDOW;
+        dashTapWindowTimer = 0;
+      } else {
+        dashTapWindowTimer = DOUBLE_TAP_WINDOW;
+      }
+    }
+
     prevInput.jump = input.jump;
     prevInput.left = input.left;
     prevInput.right = input.right;
+    prevInput.down = input.down;
     prevInput.attack = input.attack;
     prevInput.attack2 = false;
     prevInput.shoot = input.shoot;
@@ -11242,6 +11773,8 @@
     }
     updatePlayerWaves(dt, solidsAfter);
     updateHammerShards(worldDt, solidsAfter);
+    updateDoppelgangers(worldDt);
+    updateGunStinger(dt, actions);
     resolveEnemyContactDamage();
     resolveBreakWalls(worldDt);
     resolveHazards();
@@ -11467,6 +12000,8 @@
     if (gameState !== STATE.BOSS) return;
     updateHammerShards(worldDt, solids);
     if (gameState !== STATE.BOSS) return;
+    updateDoppelgangers(worldDt);
+    updateGunStinger(dt, actions);
     resolveEnemyContactDamage();
     resolveBossContactDamage();
     resolveBreakWalls(worldDt);
@@ -16818,6 +17353,8 @@
       );
       drawEnemy(e);
     }
+
+    drawDoppelgangers();
 
     for (const bs of stage.bossShots) {
       if (bs.dead) continue;
