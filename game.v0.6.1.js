@@ -149,6 +149,7 @@
   let tutorialTimer = 0;
   let tutorialCompleted = false;
   let tutorialSkipHold = 0;
+  let tutorialSuccessPulse = 0; // flashes hero when player performs correct action
   const TUTORIAL_SKIP_HOLD_TIME = 40;
 
   // Tutorial page navigation
@@ -2986,9 +2987,10 @@
   }
 
   function spawnHitSparks(x, y, colorA = "#ffeaa8", colorB = "#ff975b") {
-    for (let i = 0; i < 12; i += 1) {
-      const ang = (Math.PI * 2 * i) / 12 + Math.random() * 0.35;
-      const spd = 1.0 + Math.random() * 2.1;
+    // Core burst: omnidirectional micro-sparks
+    for (let i = 0; i < 14; i += 1) {
+      const ang = (Math.PI * 2 * i) / 14 + Math.random() * 0.35;
+      const spd = 1.0 + Math.random() * 2.2;
       hitSparks.push({
         x,
         y,
@@ -2999,6 +3001,34 @@
         color: i % 2 === 0 ? colorA : colorB,
       });
     }
+    // Streaks: fast, elongated sparks that read as punch direction
+    for (let i = 0; i < 5; i += 1) {
+      const ang = (Math.PI * 2 * Math.random());
+      const spd = 2.4 + Math.random() * 1.8;
+      hitSparks.push({
+        kind: "streak",
+        x,
+        y,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 0.6,
+        life: 10 + Math.random() * 4,
+        maxLife: 14,
+        color: "#fff4c8",
+        gravity: 0.06,
+        drag: 0.9,
+      });
+    }
+    // Radial shockwave ring
+    waveBursts.push({
+      x,
+      y,
+      life: 10,
+      maxLife: 10,
+      radius: 6,
+      phase: Math.random() * Math.PI * 2,
+      power: 0.9,
+      kind: "shock",
+    });
   }
 
   function spawnEnemyBlood(x, y, power = 1) {
@@ -11490,6 +11520,7 @@
     cameraX = 0;
     tutorialTimer += dt;
     player.anim += dt * 0.45;
+    tutorialSuccessPulse = Math.max(0, tutorialSuccessPulse - dt);
 
     // Skip: hold start (Enter) or long-press
     if (input.start) {
@@ -11539,11 +11570,13 @@
     if (step.check(actions)) {
       if (step.requiredCount) {
         tutorialStepCount++;
+        tutorialSuccessPulse = 14;
         if (tutorialStepCount >= step.requiredCount) {
           advanceTutorialStep();
         }
       } else if (step.requiredFrames) {
         tutorialStepProgress += dt;
+        tutorialSuccessPulse = Math.max(tutorialSuccessPulse, 6);
         if (tutorialStepProgress >= step.requiredFrames) {
           advanceTutorialStep();
         }
@@ -11559,6 +11592,7 @@
     tutorialStepCount = 0;
     tutorialAutoTimer = 0;
     tutorialPage = 0;
+    tutorialSuccessPulse = 24;
   }
 
   // Get phase label and color
@@ -11571,6 +11605,299 @@
       case "READY": return { label: "出陣", color: "#ffd700" };
       default: return { label: "TUTORIAL", color: "#ff6f8c" };
     }
+  }
+
+  // Larger, cinematic demo stage drawn at the bottom of the tutorial.
+  // Shows the hero at a bigger scale with a proper ground line, shadow, aura,
+  // and action-specific choreography for each interactive step.
+  function drawTutorialStage(step, t, centerX, groundY) {
+    ctx.save();
+
+    // Stage strip: horizon line + grid floor hint
+    const stripTop = groundY - 30;
+    ctx.fillStyle = "rgba(10, 14, 26, 0.55)";
+    ctx.fillRect(0, stripTop, W, groundY - stripTop + 6);
+    // Neon horizon stroke
+    ctx.fillStyle = "rgba(255, 111, 140, 0.55)";
+    ctx.fillRect(0, stripTop, W, 1);
+    ctx.fillStyle = "rgba(168, 220, 255, 0.25)";
+    ctx.fillRect(0, stripTop + 1, W, 1);
+    // Floor lines (perspective hint)
+    for (let i = 0; i < 5; i++) {
+      const ly = stripTop + 6 + i * 5;
+      const alpha = 0.05 + i * 0.04;
+      ctx.fillStyle = `rgba(255, 223, 200, ${alpha})`;
+      ctx.fillRect(0, ly, W, 1);
+    }
+    // Vertical cue ticks scrolling leftward (motion feel)
+    const scroll = (t * 0.6) % 18;
+    for (let x = -scroll; x < W; x += 18) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.fillRect(Math.floor(x), groundY, 6, 1);
+    }
+
+    const heroScale = 1.7;
+    // drawHero positions feet at y + 25 regardless of scale; visual top is at y + 25 - 25 * scale
+    const HERO_BASE_H = 25;
+    const spriteH = HERO_BASE_H * heroScale; // visual height on screen
+    const heroY = groundY - HERO_BASE_H; // pass to drawHero so feet land on groundY
+    const heroTop = groundY - spriteH; // visual top of scaled sprite
+    const heroMid = heroTop + spriteH * 0.5; // visual vertical center
+    const facingBase = 1;
+
+    // Optional success pulse: white flash halo behind hero
+    if (tutorialSuccessPulse > 0) {
+      const p = tutorialSuccessPulse / 24;
+      ctx.fillStyle = `rgba(255, 240, 180, ${0.3 * p})`;
+      ctx.beginPath();
+      ctx.arc(centerX, heroMid, 26 + p * 12, 0, Math.PI * 2);
+      ctx.fill();
+      // radiating tick marks
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.PI * 2 * i) / 8 + t * 0.04;
+        const rx = centerX + Math.cos(a) * (22 + p * 18);
+        const ry = heroMid + Math.sin(a) * (16 + p * 12);
+        ctx.fillStyle = `rgba(255, 255, 200, ${0.6 * p})`;
+        ctx.fillRect(Math.floor(rx), Math.floor(ry), 2, 2);
+      }
+    }
+
+    const key = step.key;
+
+    // --- Per-step choreography ---
+    if (key === "move") {
+      // Hero walks back and forth across the stage, leaving dust
+      const cycle = (t * 0.012) % 2;
+      const dir = cycle < 1 ? 1 : -1;
+      const phase = cycle < 1 ? cycle : (cycle - 1);
+      const swing = Math.sin(phase * Math.PI);
+      const offset = dir * (swing * 52 - 26 * (1 - swing));
+      const heroX = centerX - 7 + offset;
+      // Shadow
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(heroX + 7, groundY + 1, 10, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Dust puffs trailing
+      for (let i = 0; i < 4; i++) {
+        const dp = ((t * 0.05 + i * 0.25) % 1);
+        const dx = heroX + 7 - dir * (4 + dp * 18);
+        const dy = groundY - dp * 4;
+        ctx.fillStyle = `rgba(200, 220, 255, ${0.35 * (1 - dp)})`;
+        ctx.fillRect(Math.floor(dx), Math.floor(dy), 2, 2);
+      }
+      drawHero(heroX, heroY, dir, t * 1.6, heroScale);
+      // Speed lines when moving fast
+      if (swing > 0.4) {
+        for (let i = 0; i < 3; i++) {
+          const lx = heroX + 7 - dir * (12 + i * 6);
+          const ly = heroY + 8 + i * 6;
+          ctx.fillStyle = `rgba(180, 220, 255, ${0.5 - i * 0.15})`;
+          ctx.fillRect(lx, ly, dir * -6, 1);
+        }
+      }
+
+    } else if (key === "jump") {
+      // Hero bounces: jump, peak, double jump, land
+      const cycle = (t * 0.02) % 1;
+      const jumpH = Math.sin(cycle * Math.PI) * 30;
+      const doubleJump = cycle > 0.55 ? Math.sin((cycle - 0.55) * Math.PI / 0.45) * 14 : 0;
+      const heroX = centerX - 7;
+      const hy = heroY - jumpH - doubleJump;
+      // Shadow shrinks with altitude
+      const shadowR = Math.max(4, 11 - (jumpH + doubleJump) * 0.28);
+      ctx.fillStyle = `rgba(0,0,0,${0.38 - (jumpH + doubleJump) * 0.007})`;
+      ctx.beginPath();
+      ctx.ellipse(heroX + 7, groundY + 1, shadowR, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Double-jump burst ring
+      if (cycle > 0.54 && cycle < 0.62) {
+        const bp = (cycle - 0.54) / 0.08;
+        ctx.strokeStyle = `rgba(255, 220, 120, ${1 - bp})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(heroX + 7, hy + HERO_BASE_H, 8 + bp * 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+      // Jump dust on takeoff
+      if (cycle < 0.08) {
+        const dp = cycle / 0.08;
+        ctx.fillStyle = `rgba(220, 230, 255, ${0.7 * (1 - dp)})`;
+        for (let i = -3; i <= 3; i++) {
+          ctx.fillRect(heroX + 7 + i * 3, groundY - dp * 2, 2, 1);
+        }
+      }
+      drawHero(heroX, hy, facingBase, t * 0.8, heroScale);
+
+    } else if (key === "attack") {
+      // Hero swings 3-hit combo with expanding arcs + sparks
+      const cycle = (t * 0.018) % 3;
+      const idx = Math.floor(cycle);
+      const phase = cycle - idx;
+      const heroX = centerX - 7;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(heroX + 7, groundY + 1, 10, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawHero(heroX, heroY, facingBase, t * 1.8, heroScale, phase > 0.15 && phase < 0.55 ? 0.6 : 0);
+      // Slash arc
+      const slashCx = heroX + 16;
+      const slashCy = heroMid + 2;
+      if (phase > 0.05 && phase < 0.55) {
+        const alpha = 1 - (phase - 0.05) / 0.5;
+        const r = 20 + idx * 5;
+        const angStart = -Math.PI * 0.5 + phase * Math.PI * 1.4;
+        ctx.strokeStyle = `rgba(255,${220 - idx * 30},${160 - idx * 40},${alpha * 0.9})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(slashCx, slashCy, r, angStart - 0.8, angStart + 0.8);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        // White inner arc
+        ctx.strokeStyle = `rgba(255,255,240,${alpha * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(slashCx, slashCy, r - 2, angStart - 0.4, angStart + 0.4);
+        ctx.stroke();
+      }
+      // Sparks at impact
+      if (phase > 0.18 && phase < 0.32) {
+        for (let i = 0; i < 6; i++) {
+          const sa = Math.random() * Math.PI * 2;
+          const sd = 18 + Math.random() * 14;
+          const sx = slashCx + Math.cos(sa) * sd;
+          const sy = slashCy + Math.sin(sa) * sd * 0.8;
+          ctx.fillStyle = `rgba(255,${200 + Math.random() * 55},120,0.9)`;
+          ctx.fillRect(Math.floor(sx), Math.floor(sy), 2, 2);
+        }
+      }
+
+    } else if (key === "shoot") {
+      // Hero holds a stance while bullets stream forward
+      const heroX = centerX - 18;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(heroX + 7, groundY + 1, 10, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawHero(heroX, heroY, facingBase, t * 0.3, heroScale);
+      // Muzzle flash pulse
+      const gunY = heroMid + 4;
+      const muzzlePulse = (t * 0.18) % 1;
+      if (muzzlePulse < 0.2) {
+        const mp = muzzlePulse / 0.2;
+        ctx.fillStyle = `rgba(255, 240, 150, ${0.9 - mp * 0.9})`;
+        ctx.beginPath();
+        ctx.arc(heroX + 20, gunY, 5 - mp * 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.7 - mp * 0.7})`;
+        ctx.fillRect(heroX + 18, gunY - 1, 6, 2);
+      }
+      // Stream of bullets
+      for (let i = 0; i < 5; i++) {
+        const bp = ((t * 0.06 + i * 0.2) % 1);
+        const bx = heroX + 22 + bp * 90;
+        const by = gunY + (i % 2) * 1;
+        ctx.fillStyle = `rgba(255, 220, 80, ${1 - bp})`;
+        ctx.fillRect(Math.floor(bx), Math.floor(by), 5, 2);
+        ctx.fillStyle = `rgba(255, 255, 220, ${0.6 * (1 - bp)})`;
+        ctx.fillRect(Math.floor(bx + 3), Math.floor(by), 3, 1);
+      }
+
+    } else if (key === "dash") {
+      // Hero dashes across, leaving a blue streak and afterimages
+      const cycle = (t * 0.018) % 1;
+      if (cycle < 0.35) {
+        const heroX = centerX - 34;
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.ellipse(heroX + 7, groundY + 1, 10, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        drawHero(heroX, heroY, facingBase, t * 0.5, heroScale);
+      } else if (cycle < 0.6) {
+        const dp = (cycle - 0.35) / 0.25;
+        const startX = centerX - 34;
+        const endX = centerX + 30;
+        const hx = startX + (endX - startX) * dp;
+        // Streak
+        ctx.fillStyle = `rgba(130, 220, 255, ${0.55 * (1 - dp)})`;
+        ctx.fillRect(startX, heroTop + spriteH * 0.3, hx - startX + 14, spriteH * 0.55);
+        ctx.fillStyle = `rgba(220, 240, 255, ${0.45 * (1 - dp)})`;
+        ctx.fillRect(startX, heroMid, hx - startX + 14, 2);
+        // Afterimages
+        for (let i = 0; i < 4; i++) {
+          ctx.globalAlpha = 0.18 - i * 0.035;
+          drawHero(hx - 7 - (i + 1) * 10, heroY, facingBase, t * 0.5, heroScale);
+        }
+        ctx.globalAlpha = 1;
+        drawHero(hx - 7, heroY, facingBase, t * 0.5, heroScale);
+      } else {
+        const heroX = centerX + 24;
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.ellipse(heroX + 7, groundY + 1, 10, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        drawHero(heroX, heroY, facingBase, t * 0.5, heroScale);
+        // Landing flash
+        const lp = (cycle - 0.6) / 0.4;
+        ctx.strokeStyle = `rgba(130, 220, 255, ${0.6 * (1 - lp)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(heroX + 7, groundY, 6 + lp * 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+
+    } else if (key === "style_try") {
+      // Hero rotates through 4 style auras
+      const heroX = centerX - 7;
+      const styleColors = ["#ff6644", "#ffcc22", "#22aaff", "#22ff88"];
+      const styleNames = ["SWORD", "TRICK", "GUN", "GUARD"];
+      const cycle = (t * 0.015) % 4;
+      const idx = Math.floor(cycle);
+      const phase = cycle - idx;
+      const color = styleColors[idx];
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(heroX + 7, groundY + 1, 10, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Color ring swirl
+      const ringR = 18 + Math.sin(t * 0.1) * 2;
+      for (let i = 0; i < 12; i++) {
+        const a = (Math.PI * 2 * i) / 12 + t * 0.06;
+        const rx = heroX + 7 + Math.cos(a) * ringR;
+        const ry = heroMid + Math.sin(a) * ringR * 0.7;
+        const alpha = 0.3 + Math.sin(a * 2 + t * 0.1) * 0.3;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = alpha;
+        ctx.fillRect(Math.floor(rx), Math.floor(ry), 2, 2);
+      }
+      ctx.globalAlpha = 1;
+      // Switch flash
+      if (phase < 0.18) {
+        const fp = phase / 0.18;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.5 * (1 - fp);
+        ctx.fillRect(heroX - 14, heroTop + 4, 42, spriteH - 8);
+        ctx.globalAlpha = 1;
+      }
+      drawHero(heroX, heroY, facingBase, t * 1.2, heroScale);
+      // Style label
+      ctx.fillStyle = color;
+      ctx.font = "bold 10px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(styleNames[idx], centerX, heroTop - 3);
+
+    } else {
+      // Fallback: idle hero
+      const heroX = centerX - 7;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(heroX + 7, groundY + 1, 10, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawHero(heroX, heroY, facingBase, t * 0.8, heroScale);
+    }
+
+    ctx.restore();
   }
 
   function drawTutorialDemo(step, t, demoX, demoY) {
@@ -12115,8 +12442,12 @@
     drawParallax();
     cameraX = savedCamera;
 
-    // Dark overlay
-    ctx.fillStyle = "rgba(6, 8, 14, 0.78)";
+    // Softer overlay so stage remains visible behind the character
+    const overlayGrad = ctx.createLinearGradient(0, 0, 0, H);
+    overlayGrad.addColorStop(0, "rgba(6, 8, 14, 0.72)");
+    overlayGrad.addColorStop(0.55, "rgba(12, 14, 28, 0.52)");
+    overlayGrad.addColorStop(1, "rgba(20, 10, 34, 0.78)");
+    ctx.fillStyle = overlayGrad;
     ctx.fillRect(0, 0, W, H);
 
     const step = TUTORIAL_STEPS[tutorialStep];
@@ -12124,8 +12455,12 @@
 
     const phaseInfo = getTutorialPhaseInfo(step.phase);
 
-    // Phase label (top left)
+    // Phase label (top left) with a soft glow bar
     ctx.textAlign = "left";
+    ctx.fillStyle = phaseInfo.color;
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(4, 4, 60, 12);
+    ctx.globalAlpha = 1;
     ctx.fillStyle = phaseInfo.color;
     ctx.font = "bold 8px monospace";
     ctx.fillText(phaseInfo.label, 8, 12);
@@ -12142,6 +12477,9 @@
     ctx.fillRect(0, 0, W, 2);
     ctx.fillStyle = phaseInfo.color;
     ctx.fillRect(0, 0, W * progressRatio, 2);
+    // Subtle scanline shimmer above progress bar
+    ctx.fillStyle = `rgba(255,255,255,${0.18 + Math.sin(tutorialTimer * 0.2) * 0.08})`;
+    ctx.fillRect(Math.max(0, W * progressRatio - 2), 0, 2, 2);
 
     // Content area - different layouts for info vs interactive steps
     ctx.textAlign = "center";
@@ -12238,17 +12576,17 @@
       // Title
       ctx.fillStyle = "#ffe7b0";
       ctx.font = "bold 14px monospace";
-      ctx.fillText(step.titleJa, W / 2, 32);
+      ctx.fillText(step.titleJa, W / 2, 28);
 
       // Description lines
       const descLines = step.descJa;
       ctx.font = "9px monospace";
       for (let i = 0; i < descLines.length; i++) {
         ctx.fillStyle = i === 0 ? "#f0ebd9" : "#c8c0b0";
-        ctx.fillText(descLines[i], W / 2, 48 + i * 12);
+        ctx.fillText(descLines[i], W / 2, 42 + i * 11);
       }
 
-      const interactY = 48 + descLines.length * 12 + 8;
+      const interactY = 42 + descLines.length * 11 + 4;
 
       // Progress bar (for hold-type steps)
       if (step.requiredFrames && tutorialStepProgress > 0) {
@@ -12265,17 +12603,23 @@
         ctx.strokeRect(barX, barY, barW, barH);
       }
 
-      // Count indicator (for multi-press steps)
+      // Count indicator (for multi-press steps) - bigger, centered
       if (step.requiredCount) {
-        ctx.fillStyle = "#aaddff";
-        ctx.font = "10px monospace";
-        ctx.fillText(`${tutorialStepCount} / ${step.requiredCount}`, W / 2, interactY + 6);
+        const countPulse = tutorialSuccessPulse > 0 ? 1 + tutorialSuccessPulse / 28 : 1;
+        ctx.save();
+        ctx.translate(W / 2, interactY + 4);
+        ctx.scale(countPulse, countPulse);
+        ctx.fillStyle = tutorialSuccessPulse > 0 ? "#fff0a0" : "#aaddff";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText(`${tutorialStepCount} / ${step.requiredCount}`, 0, 0);
+        ctx.restore();
       }
 
-      // Key hint
-      const hintY = 110 + Math.sin(tutorialTimer * 0.15) * 2;
+      // Key hint (bobs slightly) - placed above the stage area
+      const hintBaseY = interactY + (step.requiredCount ? 14 : 14);
+      const hintY = hintBaseY + Math.sin(tutorialTimer * 0.15) * 1.5;
       if (isTouchDevice) {
-        ctx.fillStyle = "rgba(255,224,207,0.7)";
+        ctx.fillStyle = "rgba(255,224,207,0.78)";
         ctx.font = "9px monospace";
         ctx.fillText("画面下のボタンで操作", W / 2, hintY);
       } else {
@@ -12292,8 +12636,8 @@
         ctx.fillText(keyHints[step.key] || "", W / 2, hintY);
       }
 
-      // Demo animation for interactive steps
-      drawTutorialDemo(step, tutorialTimer, W / 2, 118);
+      // Dedicated demo stage area at the bottom
+      drawTutorialStage(step, tutorialTimer, W / 2, H - 24);
     }
 
     // Skip hint (always visible)
@@ -14911,9 +15255,38 @@
         ctx.globalAlpha = 1;
         continue;
       }
+      if (spark.kind === "streak") {
+        // Elongated trail aligned to velocity direction
+        const len = Math.max(3, Math.round(4 + Math.hypot(spark.vx, spark.vy) * 1.6));
+        const dirX = spark.vx >= 0 ? 1 : -1;
+        const isHorizontal = Math.abs(spark.vx) >= Math.abs(spark.vy);
+        const a = 0.6 + lifeRatio * 0.4;
+        ctx.globalAlpha = a;
+        if (isHorizontal) {
+          const ox = dirX > 0 ? -len : 0;
+          ctx.fillStyle = spark.color;
+          ctx.fillRect(sx + ox, sy, len, 1);
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(sx + ox + Math.floor(len * 0.35), sy, Math.max(1, Math.floor(len * 0.35)), 1);
+        } else {
+          const dirY = spark.vy >= 0 ? 1 : -1;
+          const oy = dirY > 0 ? -len : 0;
+          ctx.fillStyle = spark.color;
+          ctx.fillRect(sx, sy + oy, 1, len);
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(sx, sy + oy + Math.floor(len * 0.35), 1, Math.max(1, Math.floor(len * 0.35)));
+        }
+        ctx.globalAlpha = 1;
+        continue;
+      }
       const size = lifeRatio > 0.6 ? 2 : 1;
       ctx.fillStyle = spark.color;
       ctx.fillRect(sx, sy, size, size);
+      // White-hot core while the spark is fresh
+      if (lifeRatio > 0.75) {
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.fillRect(sx, sy, 1, 1);
+      }
     }
   }
 
@@ -15313,11 +15686,36 @@
   function drawWaveBursts() {
     for (const burst of waveBursts) {
       const ratio = clamp(burst.life / burst.maxLife, 0, 1);
-      const r = Math.max(2, burst.radius * (1 - (1 - ratio) * 0.22));
       const cx = Math.floor(burst.x - cameraX);
       const cy = Math.floor(burst.y);
 
+      if (burst.kind === "shock") {
+        // Rapid expanding shockwave ring used by hit impacts
+        const expand = 1 - ratio;
+        const r = Math.max(3, burst.radius + expand * 18);
+        ctx.strokeStyle = `rgba(255, 244, 200, ${0.85 * ratio})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(255, 188, 120, ${0.45 * ratio})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 2, 0, Math.PI * 2);
+        ctx.stroke();
+        // Cross gleam
+        const gleam = 0.6 * ratio;
+        ctx.fillStyle = `rgba(255, 255, 255, ${gleam})`;
+        ctx.fillRect(cx - r - 3, cy, 3, 1);
+        ctx.fillRect(cx + r, cy, 3, 1);
+        ctx.fillRect(cx, cy - r - 3, 1, 3);
+        ctx.fillRect(cx, cy + r, 1, 3);
+        continue;
+      }
+
+      const r = Math.max(2, burst.radius * (1 - (1 - ratio) * 0.22));
       ctx.strokeStyle = `rgba(140, 240, 255, ${0.35 * ratio})`;
+      ctx.lineWidth = 1;
       ctx.strokeRect(Math.floor(cx - r), Math.floor(cy - r * 0.6), Math.floor(r * 2), Math.floor(r * 1.2));
       ctx.strokeStyle = `rgba(255, 232, 170, ${0.24 * ratio})`;
       ctx.strokeRect(Math.floor(cx - r * 0.7), Math.floor(cy - r * 0.4), Math.floor(r * 1.4), Math.floor(r * 0.8));
