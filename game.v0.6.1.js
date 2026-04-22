@@ -240,7 +240,7 @@
       descJa: [
         "銃火器のスペシャリスト！射撃ダメージ特化",
         tKey("K長押しでチャージ: マシンガン→ショットガン→バズーカ", "SHOOT長押しでチャージ射撃"),
-        tKey("J+K 同時押し: ガンスティンガー (即発動・突進乱射)", "攻撃+SHOOT 同時: ガンスティンガー"),
+        tKey("停止中にJ+K 同時押し: ガンスティンガー (突進乱射)", "停止中に攻撃+SHOOT 同時"),
         "弾数制限あり（15発）・自動リロード",
         "DT発動時: 射撃ダメージ3倍・弾が貫通",
       ],
@@ -254,7 +254,7 @@
         "鉄壁の防御！ガード＆カウンター特化",
         "敵の攻撃をタイミングよくガードしよう",
         "ジャストガード(6F以内)で高エネルギー獲得",
-        tKey("↓+J: ドレッドノート (大地叩き・金緑の衝撃波)", "↓+攻撃: ドレッドノート"),
+        tKey("↓(またはS)+J: ドレッドノート (大地叩き・金緑の衝撃波)", "↓+攻撃: ドレッドノート"),
         "DT発動時: オートガード・エネルギー全回復",
       ],
       color: "#22ff88",
@@ -7540,6 +7540,9 @@
     // Direction-based attack on press (DMC style)
     // W/↑/Space = up direction (shared with jump key)
     // A/D = left/right direction (shared with movement keys)
+    // If GunStinger was started this frame by updateDedicatedGun, block the sword-combo path
+    if (gunStingerActive) return;
+
     if (actions.attackPressed) {
       // Doppelganger: J+L simultaneous (Trickster) — spawn afterimage that auto-attacks
       if (playerStyle === "trickster" && actions.simulJL && doppelgangerCooldown <= 0) {
@@ -7555,8 +7558,10 @@
         attackChargeReadyPlayed = false;
         return;
       }
-      // GunStinger: J+K simultaneous (Gunslinger, on ground) — instant rush & fire
-      if (playerStyle === "gunslinger" && player.onGround && actions.simulJK && !gunStingerActive) {
+      // GunStinger: J+K simultaneous (Gunslinger, on ground, stationary)
+      const stationaryGS = !input.left && !input.right && Math.abs(player.vx) < 0.8;
+      if (playerStyle === "gunslinger" && player.onGround && actions.simulJK
+          && stationaryGS && !gunStingerActive) {
         startGunStinger(player.facing);
         attackChargeTimer = 0;
         attackChargeReadyPlayed = false;
@@ -7958,14 +7963,16 @@
       const power = (6.5 + battleRankIndex * 0.5) * dtPowerMul() * (dtActive ? 1.3 : 1);
       swordHitEnemies(hitBox, realImpactDir, power, 2.6 * dtKnockMul());
       swordHitBoss(hitBox, realImpactDir, power * 1.2);
-      // Heavy spark trail
-      spawnSwordSlash(realImpactDir, 4 + dtSparkCount());
+      // Light slash trail (every 4 frames) — toned down from every-frame
+      if (Math.floor(realImpactTimer) % 4 === 0) {
+        spawnSwordSlash(realImpactDir, 1);
+      }
       if (realImpactTimer <= 0) {
         realImpactActive = false;
-        triggerImpact(5.0, player.x + realImpactDir * 20, player.y + player.h * 0.5, 5);
-        if (seStrongHit) playSound(seStrongHit, 1.0, 0.55);
+        triggerImpact(2.2, player.x + realImpactDir * 20, player.y + player.h * 0.5, 2.5);
+        if (seStrongHit) playSound(seStrongHit, 0.75, 0.6);
         swordAttackCooldown = 24;
-        attackEffectTimer = 18;
+        attackEffectTimer = 10;
         attackEffectMode = "sword";
         battleRankGainByStyle("real_impact", 4.0);
       }
@@ -7978,17 +7985,17 @@
       attackChargeReadyPlayed = true;
       playChargeReadySfx();
     }
-    // Spark aura while charging
-    if (realImpactChargeTimer % 4 < 1) {
+    // Subtle spark aura while charging (every 10 frames, one spark)
+    if (realImpactChargeTimer % 10 < 1) {
       const px = player.x + player.w * 0.5;
       const py = player.y + player.h * 0.5;
       hitSparks.push({
-        x: px + (Math.random() - 0.5) * 20,
-        y: py + (Math.random() - 0.5) * 24,
-        vx: realImpactDir * (0.5 + Math.random()),
-        vy: (Math.random() - 0.5) * 1.5,
-        life: 14, maxLife: 14,
-        color: "#ff3322",
+        x: px + (Math.random() - 0.5) * 10,
+        y: py + (Math.random() - 0.5) * 14,
+        vx: realImpactDir * (0.3 + Math.random() * 0.5),
+        vy: (Math.random() - 0.5) * 0.8,
+        life: 10, maxLife: 10,
+        color: "#ff5533",
       });
     }
     if (realImpactChargeTimer >= REAL_IMPACT_CHARGE_TIME) {
@@ -7998,10 +8005,10 @@
       attackChargeReadyPlayed = false;
       realImpactActive = true;
       realImpactTimer = REAL_IMPACT_DURATION;
-      triggerImpact(3.0, player.x + player.w * 0.5, player.y + player.h * 0.5, 4);
-      if (seStrongHit) playSound(seStrongHit, 0.95, 0.7);
+      triggerImpact(1.8, player.x + player.w * 0.5, player.y + player.h * 0.5, 2.0);
+      if (seStrongHit) playSound(seStrongHit, 0.7, 0.75);
       hudMessage = isDevilTriggerActive() ? "DT REAL IMPACT!" : "REAL IMPACT!";
-      hudTimer = 50;
+      hudTimer = 40;
     }
     return true;
   }
@@ -9251,17 +9258,20 @@
     const rankIdx = battleRankIndex;
     const isGunslinger = playerStyle === "gunslinger";
 
-    // GunStinger: Gunslinger J+K simultaneous press (instant — no walk-while-holding trigger)
+    // GunStinger: Gunslinger J+K simultaneous press on ground, WHILE STATIONARY
+    // (walking + K = normal shot to avoid accidental trigger)
+    const stationary = !input.left && !input.right && Math.abs(player.vx) < 0.8;
     if (isGunslinger && playable && !deathAnimActive && !gunStingerActive
-        && actions && actions.shootPressed && actions.simulJK && player.onGround) {
+        && actions && actions.shootPressed && actions.simulJK
+        && player.onGround && stationary) {
       startGunStinger(player.facing);
       return;
     }
     // Block K during Real Impact / GunStinger to avoid stray fire
     if (realImpactChargeActive || realImpactActive || gunStingerActive) return;
-    // Suppress first K-press shot when it's part of a J+K combo (swordmaster=RealImpact, gunslinger=GunStinger)
+    // Suppress first K-press shot when it's part of a J+K combo that triggered a style move
     if (actions && actions.shootPressed && actions.simulJK && player.onGround
-        && (playerStyle === "swordmaster" || playerStyle === "gunslinger")) {
+        && ((playerStyle === "swordmaster") || (playerStyle === "gunslinger" && stationary))) {
       return;
     }
 
