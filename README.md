@@ -54,3 +54,27 @@ python3 -m http.server 8000
   - ジャンプ: `Space`
   - キック: `J` または `F`
   - ムービースキップ: `Enter`
+
+## スタイル別 固有アクション
+
+スタイルチェンジは `V` キー（スマホは STYLE ボタン）。方向キー+V でダイレクト選択も可能。
+
+| スタイル | コマンド | 技 | 効果 |
+| --- | --- | --- | --- |
+| SWORDMASTER | `方向+J` | STINGER | 突進斬り |
+| SWORDMASTER | `W+J` / `↑+J` | HIGH TIME | 打ち上げ |
+| SWORDMASTER | `↓+J` | DRIVE / OVERDRIVE | 衝撃波（長押しでオーバードライブ） |
+| SWORDMASTER | `J` 長押し→離す | SPIN / ROUND TRIP | 回転斬り / 剣投げ |
+| SWORDMASTER | **`J+K` 同時押し** | **REAL IMPACT** | 約1秒チャージ→壁破壊可の一点突き |
+| TRICKSTER | `L` | TELEPORT DODGE | テレポート回避 |
+| TRICKSTER | 空中 `L` | AIR TRICK | 敵上にワープ |
+| TRICKSTER | **`J+L` 同時押し** | **DOPPELGANGER** | 4秒間敵を自動で斬る分身召喚 |
+| GUNSLINGER | `K` 長押し | MACHINEGUN / SHOTGUN / BAZOOKA | チャージ射撃 |
+| GUNSLINGER | 空中 `↓+K` | BULLET RAIN | 真下弾幕 |
+| GUNSLINGER | 地上 `↓+K` | BULLET STORM | 多方向射撃 |
+| GUNSLINGER | **`J+K` 同時押し** | **GUNSTINGER** | 即発動：突進しながら乱射 |
+| ROYAL GUARD | `L` | GUARD | 発動窓6F以内でジャストガード |
+| ROYAL GUARD | `L+J` | ROYAL RELEASE | 貯めたエネルギー解放 |
+| ROYAL GUARD | **`↓+J`** | **DREADNOUGHT** | 金緑の衝撃波＆シールドリングを放つ重撃 |
+
+> 同時押し判定は 5 フレーム以内。どちらを先に押しても成立します。
