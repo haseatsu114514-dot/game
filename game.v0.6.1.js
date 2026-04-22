@@ -215,7 +215,7 @@
         "近接攻撃の達人！剣技のダメージが最強",
         tKey("攻撃長押し→離す: 回転斬り SPIN ATTACK", "攻撃長押し→離す: 回転斬り"),
         tKey("方向+J: 突進斬り / W+J: 打ち上げ", "方向+攻撃: 突進斬り"),
-        tKey("↓↓+J: リアルインパクト (壁破壊)", "↓↓+攻撃: リアルインパクト"),
+        tKey("J+K 同時押し: リアルインパクト (溜め→壁破壊突き)", "攻撃+SHOOT 同時: リアルインパクト"),
         "DT発動時: ダメージ1.5倍・リーチ1.25倍",
       ],
       color: "#ff6644",
@@ -227,7 +227,7 @@
       descJa: [
         "超高速回避の使い手！スピード特化",
         tKey("L キーでテレポート回避（距離60）", "DASHでテレポート回避"),
-        tKey("L→L→J: ドッペルゲンガー召喚", "DASH→DASH→攻撃: 分身召喚"),
+        tKey("J+L 同時押し: ドッペルゲンガー召喚", "攻撃+DASH 同時: 分身召喚"),
         "回避成功でランクボーナス＆攻撃力UP",
         "DT発動時: 移動速度1.5倍・回避CD大幅短縮",
       ],
@@ -240,7 +240,7 @@
       descJa: [
         "銃火器のスペシャリスト！射撃ダメージ特化",
         tKey("K長押しでチャージ: マシンガン→ショットガン→バズーカ", "SHOOT長押しでチャージ射撃"),
-        tKey("→+K長押し: ガンスティンガー (突進乱射)", "→+SHOOT長押し: ガンスティンガー"),
+        tKey("J+K 同時押し: ガンスティンガー (即発動・突進乱射)", "攻撃+SHOOT 同時: ガンスティンガー"),
         "弾数制限あり（15発）・自動リロード",
         "DT発動時: 射撃ダメージ3倍・弾が貫通",
       ],
@@ -254,7 +254,7 @@
         "鉄壁の防御！ガード＆カウンター特化",
         "敵の攻撃をタイミングよくガードしよう",
         "ジャストガード(6F以内)で高エネルギー獲得",
-        tKey("↓+J: ドレッドノート (左右衝撃波)", "↓+攻撃: ドレッドノート"),
+        tKey("↓+J: ドレッドノート (大地叩き・金緑の衝撃波)", "↓+攻撃: ドレッドノート"),
         "DT発動時: オートガード・エネルギー全回復",
       ],
       color: "#22ff88",
@@ -653,6 +653,12 @@
   let doubleDashPrimedTimer = 0;        // frames the double-dash state is active
   const DOUBLE_TAP_WINDOW = 14;         // max gap between two taps
   const DOUBLE_TAP_PRIMED_WINDOW = 24;  // window after the double-tap to press the finisher
+
+  // --- Simultaneous press detectors (J+K, J+L) ---
+  let attackPressRecent = 0;
+  let shootPressRecent = 0;
+  let dashPressRecent = 0;
+  const SIMUL_PRESS_WINDOW = 5;         // frames within which two keys count as simultaneous
 
   // --- GunStinger (Gunslinger →+K long press) ---
   let gunStingerCharging = false;
@@ -7535,18 +7541,23 @@
     // W/↑/Space = up direction (shared with jump key)
     // A/D = left/right direction (shared with movement keys)
     if (actions.attackPressed) {
-      // Doppelganger: L→L→J (Trickster) — spawn afterimage that auto-attacks
-      if (playerStyle === "trickster" && doubleDashPrimedTimer > 0 && doppelgangerCooldown <= 0) {
+      // Doppelganger: J+L simultaneous (Trickster) — spawn afterimage that auto-attacks
+      if (playerStyle === "trickster" && actions.simulJL && doppelgangerCooldown <= 0) {
         performDoppelganger();
-        doubleDashPrimedTimer = 0;
         attackChargeTimer = 0;
         attackChargeReadyPlayed = false;
         return;
       }
-      // Real Impact: ↓↓+J (Swordmaster, on ground) — charge then burst thrust
-      if (playerStyle === "swordmaster" && player.onGround && doubleDownPrimedTimer > 0) {
+      // Real Impact: J+K simultaneous (Swordmaster, on ground) — charge then burst thrust
+      if (playerStyle === "swordmaster" && player.onGround && actions.simulJK) {
         startRealImpactCharge();
-        doubleDownPrimedTimer = 0;
+        attackChargeTimer = 0;
+        attackChargeReadyPlayed = false;
+        return;
+      }
+      // GunStinger: J+K simultaneous (Gunslinger, on ground) — instant rush & fire
+      if (playerStyle === "gunslinger" && player.onGround && actions.simulJK && !gunStingerActive) {
+        startGunStinger(player.facing);
         attackChargeTimer = 0;
         attackChargeReadyPlayed = false;
         return;
@@ -7995,70 +8006,137 @@
     return true;
   }
 
-  // --- Dreadnought: Royal Guard ↓+J radial ground slam ---
+  // --- Dreadnought: Royal Guard ↓+J heavy ground pound with shield aura ---
   function performDreadnought() {
     const rankIdx = battleRankIndex;
     const dtActive = isDevilTriggerActive();
-    const power = (3.0 + rankIdx * 0.2) * dtPowerMul();
+    const power = (3.4 + rankIdx * 0.25) * dtPowerMul();
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.4;
-    const reach = Math.floor((48 + rankIdx * 4) * dtReachMul());
+    const groundY = player.y + player.h;
+    const reach = Math.floor((56 + rankIdx * 5) * dtReachMul());
 
     // Radial hitbox — both left and right
     const hitBox = {
       x: player.x + player.w * 0.5 - reach,
-      y: player.y - 4,
+      y: player.y - 6,
       w: reach * 2,
-      h: player.h + 10,
+      h: player.h + 14,
     };
-    swordHitEnemies(hitBox, 1, power, 2.0 * dtKnockMul());
+    swordHitEnemies(hitBox, 1, power, 2.4 * dtKnockMul());
     swordHitBoss(hitBox, 1, power);
     hitBreakableGimmicks(hitBox, 2 + rankIdx * 0.4);
 
-    // Twin shockwaves (one each direction)
+    // Twin ground shockwaves (custom "dreadnought" kind with distinctive look)
     const waveSpeed = (3.2 + rankIdx * 0.3) * (dtActive ? 1.3 : 1);
-    const ttl = dtActive ? 34 : 26;
+    const ttl = dtActive ? 44 : 34;
     for (const dir of [-1, 1]) {
       stage.playerWaves.push({
-        kind: "swordwave",
-        x: px + dir * 6,
-        y: py,
-        w: 26,
-        h: 18,
+        kind: "dreadnought",
+        x: px + dir * 4 - 14,
+        y: groundY - 18,
+        w: 28,
+        h: 20,
         vx: dir * waveSpeed,
         vy: 0,
         ttl,
         phase: 0,
         spin: 0,
-        power: power * 0.7,
+        power: power * 0.8,
       });
     }
 
-    // Visuals
-    triggerImpact(dtActive ? 4.5 : 3.2, px, py + 4, 4.5);
-    spawnWaveBurst(px, py + 6, 1.4);
-    for (let i = 0; i < 14; i++) {
-      const angle = (i / 14) * Math.PI;
-      const speed = 2.5 + Math.random() * 2;
-      hitSparks.push({
-        x: px, y: py + 8,
-        vx: Math.cos(angle) * speed * (Math.random() < 0.5 ? -1 : 1),
-        vy: -Math.sin(angle) * speed * 0.6,
-        life: 16, maxLife: 16,
-        color: "#22ff88",
+    // Expanding shield ring — two staggered rings for a pulse effect
+    for (let r = 0; r < 2; r++) {
+      stage.playerWaves.push({
+        kind: "dreadnought_ring",
+        x: px - 8,
+        y: groundY - 18,
+        w: 16,
+        h: 16,
+        vx: 0,
+        vy: 0,
+        ttl: 28 + r * 10,
+        phase: r * 6,
+        spin: 0,
+        power: power * 0.5,
       });
     }
-    if (seBazooka) playSound(seBazooka, 0.7, 0.7);
-    if (seStrongHit) playSound(seStrongHit, 0.85, 0.65);
+
+    // Big screen shake + tint
+    triggerImpact(dtActive ? 6.0 : 4.5, px, groundY - 8, 6.0);
+    waveFlashTimer = Math.max(waveFlashTimer, 14);
+    waveFlashPower = 1.2;
+    waveFlashX = px;
+    waveFlashY = groundY - 10;
+    spawnWaveBurst(px, groundY - 6, 1.8);
+
+    // Vertical pillar of light
+    for (let i = 0; i < 14; i++) {
+      hitSparks.push({
+        x: px + (Math.random() - 0.5) * 6,
+        y: groundY - i * 3 - Math.random() * 6,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: -1.5 - Math.random() * 2,
+        life: 18 + Math.random() * 10,
+        maxLife: 28,
+        color: i % 2 === 0 ? "#eaffc4" : "#22ff88",
+      });
+    }
+    // Ground crack streaks (long horizontal tendrils)
+    for (let dir = -1; dir <= 1; dir += 2) {
+      for (let i = 0; i < 6; i++) {
+        hitSparks.push({
+          x: px + dir * (4 + i * 6),
+          y: groundY - 2 + (Math.random() - 0.5) * 2,
+          vx: dir * (2 + Math.random() * 1.5),
+          vy: -0.2 - Math.random() * 0.6,
+          life: 18 + i,
+          maxLife: 24,
+          color: "#ffdd55",
+        });
+      }
+    }
+    // Shield shard arc (gold diamond shards flung radially)
+    for (let i = 0; i < 12; i++) {
+      const ang = Math.PI + (i / 12) * Math.PI; // only upper hemisphere
+      const speed = 2.8 + Math.random() * 2.2;
+      hitSparks.push({
+        x: px, y: groundY - 8,
+        vx: -Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed * -1 - 1.2,
+        life: 22, maxLife: 22,
+        color: i % 3 === 0 ? "#ffdd55" : "#88ffaa",
+      });
+    }
+    // Dust burst at feet
+    for (let i = 0; i < 10; i++) {
+      hitSparks.push({
+        x: px + (Math.random() - 0.5) * 30,
+        y: groundY - Math.random() * 4,
+        vx: (Math.random() - 0.5) * 5,
+        vy: -Math.random() * 1.5,
+        life: 16, maxLife: 16,
+        color: "#c8e7d0",
+      });
+    }
+
+    if (seBazooka) playSound(seBazooka, 0.9, 0.55);
+    if (seStrongHit) playSound(seStrongHit, 1.0, 0.5);
+    if (seWhipSwing) playSound(seWhipSwing, 0.7, 0.6);
+
+    // Damage bonus for Royal Guard — stores a bit of energy on Dreadnought
+    royalGuardEnergy = Math.min(ROYAL_GUARD_MAX_ENERGY, royalGuardEnergy + 8);
 
     player.vy = Math.max(player.vy, 0);
-    swordAttackCooldown = 14;
+    player.vx *= 0.4; // anchor
+    swordAttackCooldown = 16;
     dreadnoughtCooldown = DREADNOUGHT_COOLDOWN;
-    attackEffectTimer = 14;
+    attackEffectTimer = 16;
     attackEffectMode = "sword";
     hudMessage = dtActive ? "DT DREADNOUGHT!" : "DREADNOUGHT!";
-    hudTimer = 40;
-    battleRankGainByStyle("dreadnought", 2.2);
+    hudTimer = 45;
+    battleRankGainByStyle("dreadnought", 2.8);
   }
 
   // --- Doppelganger: Trickster L→L→J afterimage ally ---
@@ -9173,55 +9251,18 @@
     const rankIdx = battleRankIndex;
     const isGunslinger = playerStyle === "gunslinger";
 
-    // GunStinger charge: Gunslinger + forward direction + K held on ground
-    // First 8 frames let normal fire work, then charging kicks in and blocks fire
-    const GUN_STINGER_GRACE = 8;
-    if (isGunslinger && playable && !deathAnimActive && !gunStingerActive) {
-      const facingDir = player.facing;
-      const forwardHeld = (facingDir > 0 && input.right) || (facingDir < 0 && input.left);
-      if (input.shoot && forwardHeld && player.onGround && !input.down) {
-        if (!gunStingerCharging) {
-          gunStingerCharging = true;
-          gunStingerChargeTimer = 0;
-          gunStingerReadyPlayed = false;
-        }
-        gunStingerChargeTimer += dt;
-        if (gunStingerChargeTimer > GUN_STINGER_GRACE) {
-          player.vx *= 0.6; // Brace for the rush
-          if (!gunStingerReadyPlayed && gunStingerChargeTimer >= GUN_STINGER_MIN_CHARGE) {
-            gunStingerReadyPlayed = true;
-            playChargeReadySfx();
-            hudMessage = "GUNSTINGER READY!";
-            hudTimer = 20;
-          }
-          // Charge aura
-          if (gunStingerChargeTimer % 3 < 1) {
-            const px = player.x + player.w * 0.5 + facingDir * 6;
-            const py = player.y + player.h * 0.5;
-            hitSparks.push({
-              x: px + (Math.random() - 0.5) * 10,
-              y: py + (Math.random() - 0.5) * 12,
-              vx: facingDir * (1 + Math.random()),
-              vy: (Math.random() - 0.5) * 1.2,
-              life: 10, maxLife: 10,
-              color: "#22aaff",
-            });
-          }
-          if (gunStingerChargeTimer >= GUN_STINGER_MAX_CHARGE) {
-            startGunStinger(facingDir);
-          }
-          return; // Block normal fire during charge
-        }
-        // Within grace period — fall through to normal fire logic
-      } else if (gunStingerCharging) {
-        // Released
-        if (gunStingerChargeTimer >= GUN_STINGER_MIN_CHARGE) {
-          startGunStinger(facingDir);
-        }
-        gunStingerCharging = false;
-        gunStingerChargeTimer = 0;
-        gunStingerReadyPlayed = false;
-      }
+    // GunStinger: Gunslinger J+K simultaneous press (instant — no walk-while-holding trigger)
+    if (isGunslinger && playable && !deathAnimActive && !gunStingerActive
+        && actions && actions.shootPressed && actions.simulJK && player.onGround) {
+      startGunStinger(player.facing);
+      return;
+    }
+    // Block K during Real Impact / GunStinger to avoid stray fire
+    if (realImpactChargeActive || realImpactActive || gunStingerActive) return;
+    // Suppress first K-press shot when it's part of a J+K combo (swordmaster=RealImpact, gunslinger=GunStinger)
+    if (actions && actions.shootPressed && actions.simulJK && player.onGround
+        && (playerStyle === "swordmaster" || playerStyle === "gunslinger")) {
+      return;
     }
 
     // Bullet Rain visual state needs to clear even on frames where K is no longer firing.
@@ -9468,6 +9509,20 @@
         wave.phase += dt;
         wave.x += wave.vx * dt;
         wave.w += dt * 2.5; // Expand hitbox
+      } else if (wave.kind === "dreadnought") {
+        // Dreadnought ground shockwave - travels along the ground, grows taller
+        wave.phase += dt;
+        wave.x += wave.vx * dt;
+        wave.h += dt * 0.6;
+        wave.w += dt * 1.2;
+      } else if (wave.kind === "dreadnought_ring") {
+        // Expanding pulse ring — purely visual, still has damage on overlap
+        wave.phase += dt;
+        const grow = dt * 3.6;
+        wave.x -= grow;
+        wave.y -= grow * 0.55;
+        wave.w += grow * 2;
+        wave.h += grow * 1.1;
       } else if (wave.kind === "drive") {
         // Drive shockwave - flies forward
         wave.phase += dt;
@@ -11463,6 +11518,26 @@
       } else {
         dashTapWindowTimer = DOUBLE_TAP_WINDOW;
       }
+    }
+
+    // Simultaneous-press detection (J+K, J+L within SIMUL_PRESS_WINDOW)
+    if (attackPressRecent > 0) attackPressRecent -= 1;
+    if (shootPressRecent > 0) shootPressRecent -= 1;
+    if (dashPressRecent > 0) dashPressRecent -= 1;
+    actions.simulJK = false;
+    actions.simulJL = false;
+    if (actions.attackPressed) {
+      if (shootPressRecent > 0) { actions.simulJK = true; shootPressRecent = 0; }
+      if (dashPressRecent > 0) { actions.simulJL = true; dashPressRecent = 0; }
+      attackPressRecent = SIMUL_PRESS_WINDOW;
+    }
+    if (actions.shootPressed) {
+      if (attackPressRecent > 0) { actions.simulJK = true; attackPressRecent = 0; }
+      shootPressRecent = SIMUL_PRESS_WINDOW;
+    }
+    if (dashPressedNow) {
+      if (attackPressRecent > 0) { actions.simulJL = true; attackPressRecent = 0; }
+      dashPressRecent = SIMUL_PRESS_WINDOW;
     }
 
     prevInput.jump = input.jump;
@@ -16157,6 +16232,59 @@
         ? `rgba(255, 200, 100, ${0.7 * alpha})`
         : `rgba(255, 255, 255, ${0.6 * alpha})`;
       ctx.fillRect(x + 1, y + Math.floor(wave.h * 0.4), wave.w - 2, 2);
+      return;
+    }
+
+    if (wave.kind === "dreadnought") {
+      const alpha = clamp(wave.ttl / 30, 0, 1);
+      const dir = wave.vx >= 0 ? 1 : -1;
+      // Green-gold shield wave — outer green glow, inner gold bar
+      ctx.fillStyle = `rgba(34, 255, 136, ${0.28 * alpha})`;
+      ctx.fillRect(x - 4, y - 4, wave.w + 8, wave.h + 8);
+      ctx.fillStyle = `rgba(110, 255, 170, ${0.55 * alpha})`;
+      ctx.fillRect(x, y, wave.w, wave.h);
+      // Gold spear center
+      ctx.fillStyle = `rgba(255, 221, 85, ${0.9 * alpha})`;
+      ctx.fillRect(x + 1, y + Math.floor(wave.h * 0.45), wave.w - 2, 3);
+      // Leading edge flare
+      const flareX = dir > 0 ? x + wave.w - 4 : x + 1;
+      ctx.fillStyle = `rgba(255, 255, 220, ${0.9 * alpha})`;
+      ctx.fillRect(flareX, y + 2, 3, wave.h - 4);
+      // Trailing chevrons (armor shards pattern)
+      for (let i = 0; i < 3; i++) {
+        const cx = dir > 0 ? x + (i * 5) : x + wave.w - (i * 5) - 3;
+        ctx.fillStyle = `rgba(34, 180, 110, ${(0.4 - i * 0.1) * alpha})`;
+        ctx.fillRect(cx, y + 2 + i, 3, 2);
+        ctx.fillRect(cx, y + wave.h - 4 - i, 3, 2);
+      }
+      return;
+    }
+
+    if (wave.kind === "dreadnought_ring") {
+      const alpha = clamp(wave.ttl / 28, 0, 1);
+      const pulse = 0.6 + 0.4 * Math.sin(wave.phase * 0.6);
+      // Hollow ring — draw rectangle outline only, growing
+      const w = wave.w;
+      const h = wave.h;
+      const thick = Math.max(2, Math.floor(4 * pulse));
+      ctx.fillStyle = `rgba(255, 221, 85, ${0.55 * alpha * pulse})`;
+      // top band
+      ctx.fillRect(x, y, w, thick);
+      // bottom band
+      ctx.fillRect(x, y + h - thick, w, thick);
+      // left band
+      ctx.fillRect(x, y, thick, h);
+      // right band
+      ctx.fillRect(x + w - thick, y, thick, h);
+      // Inner softer green
+      ctx.fillStyle = `rgba(34, 255, 136, ${0.28 * alpha})`;
+      ctx.fillRect(x + thick, y + thick, Math.max(0, w - thick * 2), Math.max(0, h - thick * 2));
+      // Corner shield studs
+      ctx.fillStyle = `rgba(255, 255, 210, ${0.8 * alpha})`;
+      ctx.fillRect(x, y, 3, 3);
+      ctx.fillRect(x + w - 3, y, 3, 3);
+      ctx.fillRect(x, y + h - 3, 3, 3);
+      ctx.fillRect(x + w - 3, y + h - 3, 3, 3);
       return;
     }
 
